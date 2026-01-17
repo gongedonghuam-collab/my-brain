@@ -5,7 +5,7 @@ const { chatLogs, isAiThinking, deleteChatLog } = useChatList();
 </script>
 
 <template>
-  <div class="space-y-8 px-2">
+  <div class="space-y-8 px-2 pb-4">
     <div
       v-if="chatLogs.length === 0 && !isAiThinking"
       class="text-center py-20 opacity-30"
@@ -34,22 +34,12 @@ const { chatLogs, isAiThinking, deleteChatLog } = useChatList();
           {{ log.answer }}
         </div>
 
-        <div
-          v-if="
-            log.mermaidCode &&
-            (log.mermaidCode.startsWith('graph') ||
-              log.mermaidCode.startsWith('mindmap') ||
-              log.mermaidCode.startsWith('flowchart'))
-          "
-          class="mermaid bg-slate-900 p-4 rounded-xl overflow-x-auto text-center mt-2 w-full border border-slate-700"
-        >
-          {{ log.mermaidCode }}
-        </div>
-        <div
-          v-else-if="log.mermaidCode"
-          class="text-[10px] text-slate-500 mt-1 pl-2"
-        >
-          (図解の生成に失敗しました)
+        <div v-if="log.mermaidCode" class="mermaid-container w-full mt-2">
+          <div
+            :id="'mermaid-' + log.id"
+            class="mermaid bg-slate-900 p-4 rounded-xl overflow-x-auto text-center border border-slate-700 hidden"
+            :data-code="log.mermaidCode"
+          ></div>
         </div>
 
         <a

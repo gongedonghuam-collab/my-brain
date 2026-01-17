@@ -18,46 +18,46 @@ const chatContainerRef = ref<HTMLElement | null>(null);
 
 onMounted(() => {
   initAuth();
-  // エラー時に爆弾を表示しない設定
+  // Mermaidの初期設定（エラー抑制）
   mermaid.initialize({
     startOnLoad: false,
     theme: "dark",
     securityLevel: "loose",
-    suppressErrorRendering: true, // ★重要: これで爆弾が出なくなります
+    suppressErrorRendering: true,
   });
 });
 
+// ■ 強制スクロール関数
 const scrollToBottom = async () => {
-  await nextTick();
-  if (chatContainerRef.value) {
-    chatContainerRef.value.scrollTo({
-      top: chatContainerRef.value.scrollHeight,
-      behavior: "smooth",
-    });
-  }
+  if (inputMode.value !== "chat") return;
+
+  await nextTick(); // DOM更新待ち
+  // 念のため少し待ってからスクロール（画像の読み込みなどを考慮）
+  setTimeout(() => {
+    if (chatContainerRef.value) {
+      chatContainerRef.value.scrollTo({
+        top: chatContainerRef.value.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, 100);
 };
 
-// チャットログが増えたらスクロール（チャットモード時のみ）
-watch(
-  chatLogs,
-  () => {
-    if (inputMode.value === "chat") {
-      scrollToBottom();
-    }
-  },
-  { deep: true },
-);
+// 1. チャットログが増えたらスクロール
+watch(chatLogs, scrollToBottom, { deep: true });
 
-// AI思考開始/終了時もスクロール
-watch(isAiThinking, () => {
-  if (inputMode.value === "chat") {
-    scrollToBottom();
-  }
-});
+// 2. AI思考開始/終了時もスクロール
+watch(isAiThinking, scrollToBottom);
 
-// モード切替時もチャットなら最下部へ
+// 3. モード切替時もチャットならスクロール
 watch(inputMode, (newMode) => {
   if (newMode === "chat") {
+    // 切り替え直後は描画が追いつかないことがあるので、即時と遅延の2回実行
+    nextTick(() => {
+      if (chatContainerRef.value) {
+        chatContainerRef.value.scrollTop = chatContainerRef.value.scrollHeight;
+      }
+    });
     scrollToBottom();
   }
 });
