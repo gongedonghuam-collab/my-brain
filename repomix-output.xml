@@ -1,0 +1,4209 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.firebase/
+  hosting.ZGlzdA.cache
+functions/
+  lib/
+    index.js
+  .gitignore
+  index.js
+  index.ts
+  package.json
+  tsconfig.json
+public/
+  apple-touch-icon.png
+  firebase-messaging-sw.js
+  logo.png
+  presentation.html
+  pwa-192x192.png
+  pwa-512x512.png
+src/
+  components/
+    NotificationBell/
+      NotificationBell.vue
+  composables/
+    useMyBrain.ts
+    useNotifications.ts
+  router/
+    index.ts
+  types/
+    index.ts
+  uiParts/
+    BaseButton/
+      BaseButton.vue
+    BaseCard/
+      BaseCard.vue
+    BaseInput/
+      BaseInput.vue
+    BaseModal/
+      BaseModal.vue
+  views/
+    HomeView/
+      HomeView.ts
+      HomeView.vue
+    LoginView/
+      LoginView.ts
+      LoginView.vue
+    VerifyEmailView/
+      VerifyEmailView.vue
+  App.vue
+  env.d.ts
+  firebase.ts
+  main.ts
+  style.css
+.firebaserc
+.gitignore
+firebase.json
+firestore.indexes.json
+firestore.rules
+index.html
+package.json
+postcss.config.js
+tailwind.config.js
+tsconfig.json
+vite.config.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="src/composables/useMyBrain.ts">
+import { ref, computed } from "vue";
+import { db, auth } from "@/firebase";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  limit,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  updateDoc,
+  setDoc,
+  orderBy,
+  serverTimestamp,
+  where,
+} from "firebase/firestore";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+// import { dot } from "mathjs"; // 軽量化のため手動計算します
+
+// --- 型定義 ---
+export interface Memory {
+  id: string;
+  userId: string;
+  text: string;
+  aiSummary?: string;
+  tags?: string[];
+  createdAt: any;
+  hasImage?: boolean;
+  fileType?: string;
+  embedding?: number[]; // ★追加: ベクトルデータ
+  sourceUrl?: string; // ★追加: 引用元URL
+}
+
+export interface ChatLog {
+  id: string;
+  userId: string;
+  question: string;
+  answer: string;
+  createdAt: any;
+  mermaidCode?: string; // ★追加: マインドマップコード
+  action?: {
+    // ★追加: アクション（カレンダーなど）
+    title: string;
+    date?: string;
+    url: string;
+  };
+}
+
+export interface User {
+  uid: string;
+  email: string;
+  displayName?: string;
+  photoURL?: string | null;
+}
+
+// --- グローバルステート ---
+const currentUser = ref<User | null>(null);
+const memories = ref<Memory[]>([]);
+const chatLogs = ref<ChatLog[]>([]);
+const loading = ref(false);
+const isAiThinking = ref(false);
+const activeTag = ref<string | null>(null);
+
+// --- ヘルパー関数 ---
+
+// 画像Base64変換
+const fileToGenerativePart = async (file: File) => {
+  return new Promise<{ inlineData: { data: string; mimeType: string } }>(
+    (resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = (reader.result as string).split(",")[1];
+        resolve({ inlineData: { data: base64String, mimeType: file.type } });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    },
+  );
+};
+
+// コサイン類似度計算 (ベクトル検索用)
+const cosineSimilarity = (vecA: number[], vecB: number[]) => {
+  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+};
+
+export function useMyBrain() {
+  // Embeddingモデル取得
+  const getEmbeddingModel = (apiKey: string) => {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    return genAI.getGenerativeModel({ model: "text-embedding-004" });
+  };
+
+  // 生成モデル名取得
+  const getSmartModelName = async (apiKey: string): Promise<string> => {
+    try {
+      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+      const listResponse = await fetch(listUrl);
+      if (!listResponse.ok) return "gemini-1.5-flash";
+      const listData = await listResponse.json();
+      const generationModels = (listData.models || []).filter((m: any) =>
+        m.supportedGenerationMethods?.includes("generateContent"),
+      );
+      const flash = generationModels.find((m: any) =>
+        m.name.includes("gemini-1.5-flash"),
+      );
+      const targetModelObj = flash || generationModels[0];
+      return targetModelObj?.name.replace("models/", "") || "gemini-1.5-flash";
+    } catch (e) {
+      return "gemini-1.5-flash";
+    }
+  };
+
+  // 1. 認証 & 初期ロード
+  const initAuth = () => {
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          currentUser.value = {
+            uid: user.uid,
+            email: user.email || "",
+            displayName: data.displayName,
+            photoURL: user.photoURL || undefined,
+          };
+        } else {
+          const newUser = {
+            uid: user.uid,
+            email: user.email || "",
+            createdAt: serverTimestamp(),
+          };
+          await setDoc(doc(db, "users", user.uid), newUser);
+          currentUser.value = newUser;
+        }
+        await Promise.all([fetchMemories(), fetchChatLogs()]);
+      } else {
+        currentUser.value = null;
+        memories.value = [];
+        chatLogs.value = [];
+      }
+    });
+  };
+
+  const logout = async () => {
+    await signOut(auth);
+    window.location.reload();
+  };
+
+  // 2. データ取得 (全件取得してクライアント側でベクトル検索するため、limitを緩和)
+  // ※本来はVector DBを使うべきですが、個人用なら数千件まではこれで十分高速です
+  const fetchMemories = async () => {
+    if (!currentUser.value) return;
+    loading.value = true;
+    try {
+      let q = query(
+        collection(db, "memories"),
+        where("userId", "==", currentUser.value.uid),
+        orderBy("createdAt", "desc"),
+        limit(500), // 直近500件を取得（ベクトル検索の母数）
+      );
+      const snap = await getDocs(q);
+      memories.value = snap.docs.map(
+        (d) =>
+          ({
+            id: d.id,
+            ...d.data(),
+          }) as Memory,
+      );
+    } catch (e) {
+      console.error("Fetch memories error:", e);
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const fetchChatLogs = async () => {
+    if (!currentUser.value) return;
+    try {
+      const q = query(
+        collection(db, "chat_logs"),
+        where("userId", "==", currentUser.value.uid),
+        orderBy("createdAt", "desc"),
+        limit(50),
+      );
+      const snap = await getDocs(q);
+      chatLogs.value = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as ChatLog,
+      );
+    } catch (e) {
+      console.error("Fetch chat logs error:", e);
+    }
+  };
+
+  const selectTag = async (tag: string | null) => {
+    activeTag.value = tag;
+    // クライアントサイドフィルタリング (データ再取得はしない)
+  };
+
+  const filteredMemories = computed(() => {
+    if (!activeTag.value) return memories.value;
+    return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
+  });
+
+  // 3. メモ追加 (Text / Image / File)
+  const addMemory = async (text: string, file?: File | null) => {
+    if (!currentUser.value) return;
+    isAiThinking.value = true;
+
+    try {
+      const isImage = file?.type.startsWith("image/");
+      const isPdf = file?.type === "application/pdf";
+      const fileTypeLabel = isImage ? "画像" : isPdf ? "PDF" : "ファイル";
+      const initialText = file ? `(${fileTypeLabel}解析中...) ${text}` : text;
+
+      // 仮保存
+      const docRef = await addDoc(collection(db, "memories"), {
+        userId: currentUser.value.uid,
+        text: initialText,
+        createdAt: serverTimestamp(),
+        tags: [],
+        aiSummary: "AI処理中...",
+        hasImage: !!file,
+        fileType: file?.type || null,
+      });
+
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (apiKey) {
+        const targetModelName = await getSmartModelName(apiKey);
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: targetModelName,
+          generationConfig: { responseMimeType: "application/json" },
+        });
+
+        let promptParts: any[] = [];
+
+        if (file) {
+          const filePart = await fileToGenerativePart(file);
+          promptParts.push(filePart);
+          promptParts.push({
+            text: `
+            画像/資料を分析して記憶データを作成してください。
+            ユーザーメモ: ${text}
+            出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "全テキスト"}
+          `,
+          });
+        } else {
+          promptParts.push({
+            text: `
+            以下のテキストを分析して記憶データを作成してください。
+            内容: ${text}
+            出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "${text}"}
+          `,
+          });
+        }
+
+        const result = await model.generateContent(promptParts);
+        const aiData = JSON.parse(result.response.text());
+        const finalContent = file
+          ? `【${fileTypeLabel}】${text}\n\n${aiData.fullText}`
+          : text;
+
+        // ★ベクトル計算
+        const embedModel = getEmbeddingModel(apiKey);
+        const embedResult = await embedModel.embedContent(finalContent);
+        const embedding = embedResult.embedding.values;
+
+        // 保存
+        await updateDoc(docRef, {
+          text: finalContent,
+          aiSummary: aiData.summary,
+          tags: aiData.tags,
+          embedding: embedding, // ベクトル保存
+        });
+
+        // ローカル更新
+        const newMem: Memory = {
+          id: docRef.id,
+          userId: currentUser.value.uid,
+          text: finalContent,
+          aiSummary: aiData.summary,
+          tags: aiData.tags,
+          createdAt: new Date(),
+          hasImage: !!file,
+          fileType: file?.type,
+        };
+        memories.value.unshift(newMem);
+      }
+    } catch (e) {
+      console.error("Add memory error:", e);
+      alert("保存エラー");
+    } finally {
+      isAiThinking.value = false;
+    }
+  };
+
+  // ★ URL読み込み機能
+  const addUrlMemory = async (url: string) => {
+    if (!currentUser.value) return;
+    isAiThinking.value = true;
+
+    try {
+      // Functions呼び出し
+      const functions = getFunctions();
+      const scrapeFunc = httpsCallable(functions, "scrapeUrl");
+      const result: any = await scrapeFunc({ url });
+
+      if (result.data.success) {
+        const { title, content } = result.data;
+        const fullText = `【WEB記事】${title}\nURL: ${url}\n\n${content}`;
+
+        // 通常のメモとして保存（ベクトル計算含む）
+        await addMemory(fullText);
+      }
+    } catch (e: any) {
+      console.error("URL Add Error:", e);
+      alert("記事の読み込みに失敗しました: " + e.message);
+    } finally {
+      isAiThinking.value = false;
+    }
+  };
+
+  const updateMemory = async (id: string, newText: string) => {
+    // 既存の実装と同じ
+    if (!currentUser.value || !newText.trim()) return;
+    try {
+      await updateDoc(doc(db, "memories", id), { text: newText });
+      const target = memories.value.find((m) => m.id === id);
+      if (target) target.text = newText;
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const deleteMemory = async (id: string) => {
+    if (!confirm("削除しますか？")) return;
+    await deleteDoc(doc(db, "memories", id));
+    memories.value = memories.value.filter((m) => m.id !== id);
+  };
+
+  const deleteChatLog = async (id: string) => {
+    await deleteDoc(doc(db, "chat_logs", id));
+    chatLogs.value = chatLogs.value.filter((l) => l.id !== id);
+  };
+
+  // 4. 最強のチャット機能 (ベクトル検索 + マインドマップ + アクション)
+  const askBrain = async (question: string): Promise<string> => {
+    if (!question.trim() || !currentUser.value) return "";
+    isAiThinking.value = true;
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+      // 1. 質問のベクトル化
+      const embedModel = getEmbeddingModel(apiKey);
+      const qEmbed = await embedModel.embedContent(question);
+      const qVec = qEmbed.embedding.values;
+
+      // 2. 関連度順にソート (ベクトル検索)
+      const scoredMemories = memories.value
+        .map((m) => ({
+          ...m,
+          score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
+        }))
+        .sort((a, b) => b.score - a.score);
+
+      // 上位30件だけをコンテキストに含める（これで100件の壁を突破）
+      const contextMemories = scoredMemories.slice(0, 30);
+      const context = contextMemories
+        .map(
+          (m) =>
+            `- [${m.createdAt?.toDate ? m.createdAt.toDate().toLocaleDateString() : ""}] ${m.text.slice(0, 500)}`,
+        )
+        .join("\n\n");
+
+      // 3. AIへの指示（マインドマップとアクションをJSONで要求）
+      const targetModelName = await getSmartModelName(apiKey);
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: targetModelName });
+
+      const prompt = `
+        あなたはユーザーの「第二の脳」です。以下の【記憶データ】を参考に質問に答えてください。
+        
+        【重要指示】
+        回答は必ず以下のJSON形式で行ってください。Markdownは不要です。
+        {
+          "answer": "質問への回答本文（丁寧な口調で）",
+          "mermaid": "関連性や構造を図解するためのMermaid記法コード（グラフやフローチャート）。不要な場合はnull",
+          "action": { "title": "カレンダー登録用の件名", "date": "YYYY-MM-DD HH:mm (推定日時)", "description": "詳細" } または null
+        }
+
+        【ユーザーの質問】${question}
+        【記憶データ(関連順)】${context}
+      `;
+
+      const result = await model.generateContent(prompt);
+      const rawText = result.response.text();
+
+      // JSONパース（AIがMarkdown記法をつけることがあるので除去）
+      const cleanJson = rawText
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+      let data;
+      try {
+        data = JSON.parse(cleanJson);
+      } catch (e) {
+        // パース失敗時はそのままテキストとして扱う
+        data = { answer: rawText, mermaid: null, action: null };
+      }
+
+      // アクションURL生成
+      let actionUrl = "";
+      if (data.action && data.action.title) {
+        const baseUrl =
+          "https://www.google.com/calendar/render?action=TEMPLATE";
+        const textParam = `&text=${encodeURIComponent(data.action.title)}`;
+        const detailsParam = `&details=${encodeURIComponent(data.action.description || "")}`;
+        // 日時はAIの推定が曖昧なら現在時刻を入れるなどの処理が必要だが、今回は簡易的に
+        actionUrl = `${baseUrl}${textParam}${detailsParam}`;
+      }
+
+      // 4. ログ保存
+      const logData = {
+        userId: currentUser.value.uid,
+        question: question,
+        answer: data.answer,
+        mermaidCode: data.mermaid || null,
+        action: actionUrl
+          ? { title: data.action.title, url: actionUrl, date: data.action.date }
+          : null,
+        createdAt: serverTimestamp(),
+      };
+
+      const logRef = await addDoc(collection(db, "chat_logs"), logData);
+
+      chatLogs.value.unshift({
+        id: logRef.id,
+        ...logData,
+        createdAt: new Date(),
+      } as any);
+
+      return data.answer; // チャットUIへの返り値
+    } catch (e: any) {
+      return "エラー: " + e.message;
+    } finally {
+      isAiThinking.value = false;
+    }
+  };
+
+  const allTags = computed(() => {
+    const tags = new Set<string>();
+    memories.value.forEach((m) => {
+      if (m.tags) m.tags.forEach((t) => tags.add(t));
+    });
+    return Array.from(tags);
+  });
+
+  return {
+    currentUser,
+    memories,
+    filteredMemories, // ★これを使う
+    chatLogs,
+    loading,
+    isAiThinking,
+    activeTag,
+    allTags,
+    initAuth,
+    logout,
+    addMemory,
+    addUrlMemory, // ★公開
+    updateMemory,
+    deleteMemory,
+    askBrain,
+    deleteChatLog,
+    selectTag,
+  };
+}
+</file>
+
+<file path="functions/.gitignore">
+node_modules/
+*.local
+</file>
+
+<file path="functions/index.js">
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.sendDailyReminders = exports.notifyOnReservationDeleted = exports.notifyOnReservationCreated = exports.lineWebhook = exports.sendAutoThanksLine = exports.searchProduct = exports.getAiRecommendation = exports.linkLineAccount = void 0;
+const https_1 = require("firebase-functions/v2/https");
+const firestore_1 = require("firebase-functions/v2/firestore");
+const scheduler_1 = require("firebase-functions/v2/scheduler");
+const v2_1 = require("firebase-functions/v2");
+const params_1 = require("firebase-functions/params");
+const admin = __importStar(require("firebase-admin"));
+const axios_1 = __importDefault(require("axios"));
+const line = __importStar(require("@line/bot-sdk"));
+const generative_ai_1 = require("@google/generative-ai");
+if (admin.apps.length === 0) {
+    admin.initializeApp();
+}
+const db = admin.firestore();
+(0, v2_1.setGlobalOptions)({
+    region: "asia-northeast1",
+    memory: "1GiB",
+    maxInstances: 10,
+});
+const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN");
+const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET");
+const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID");
+const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET");
+const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
+const yahooAppId = (0, params_1.defineSecret)("YAHOO_APP_ID");
+// --- 通知送信ヘルパー ---
+const sendPushNotification = async (uid, title, body) => {
+    var _a;
+    try {
+        const userDoc = await db.collection("users").doc(uid).get();
+        const tokens = ((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.fcmTokens) || [];
+        if (tokens.length > 0) {
+            const message = { notification: { title, body }, tokens: tokens };
+            await admin.messaging().sendEachForMulticast(message);
+        }
+    }
+    catch (e) {
+        console.error("FCM Error:", e);
+    }
+};
+const sendLineNotification = async (uid, message, token, secret) => {
+    var _a;
+    try {
+        const userDoc = await db.collection("users").doc(uid).get();
+        const lineUserId = (_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.lineUserId;
+        if (lineUserId) {
+            const client = new line.Client({
+                channelAccessToken: token,
+                channelSecret: secret,
+            });
+            await client.pushMessage(lineUserId, { type: "text", text: message });
+        }
+    }
+    catch (e) {
+        console.error("LINE Error:", e);
+    }
+};
+// --- 機能実装 ---
+// 1. LINE連携
+exports.linkLineAccount = (0, https_1.onCall)({
+    secrets: [
+        lineLoginChannelId,
+        lineLoginChannelSecret,
+        lineBotToken,
+        lineBotSecret,
+    ],
+}, async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    const { code, redirectUri } = request.data;
+    try {
+        const params = new URLSearchParams();
+        params.append("grant_type", "authorization_code");
+        params.append("code", code);
+        params.append("redirect_uri", redirectUri);
+        params.append("client_id", lineLoginChannelId.value());
+        params.append("client_secret", lineLoginChannelSecret.value());
+        const tokenResponse = await axios_1.default.post("https://api.line.me/oauth2/v2.1/token", params);
+        const { access_token } = tokenResponse.data;
+        const profileResponse = await axios_1.default.get("https://api.line.me/v2/profile", { headers: { Authorization: `Bearer ${access_token}` } });
+        await db.collection("users").doc(request.auth.uid).set({
+            isLineLinked: true,
+            lineUserId: profileResponse.data.userId,
+            lineDisplayName: profileResponse.data.displayName,
+        }, { merge: true });
+        return { success: true };
+    }
+    catch (error) {
+        throw new https_1.HttpsError("internal", error.message);
+    }
+});
+// 2. AI (Magic Karte) - 強制整形版
+exports.getAiRecommendation = (0, https_1.onCall)({ secrets: [geminiApiKey] }, async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    const apiKey = geminiApiKey.value();
+    const { roughNote } = request.data;
+    if (!apiKey)
+        return {
+            rawText: JSON.stringify({
+                technical: "APIキーエラー",
+                line: "設定を確認してください",
+            }),
+        };
+    try {
+        const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
+        // ★JSONモードのみ指定（SchemaTypeは使わない）
+        const model = genAI.getGenerativeModel({
+            model: "gemini-1.5-flash",
+            generationConfig: { responseMimeType: "application/json" },
+        });
+        const prompt = `
+        美容師のアシスタントAIです。
+        以下の【メモ】を元に、JSONデータのみを出力してください。
+        挨拶や余計な文章は一切不要です。
+
+        【メモ】
+        ${roughNote}
+
+        【出力形式】
+        {
+            "technical": "美容師向けの専門的なカルテ文章（施術内容、薬剤など）",
+            "line": "お客様へ送るサンクスLINEの文章（絵文字を使い、親しみやすく）"
+        }
+        `;
+        const result = await model.generateContent(prompt);
+        let text = result.response.text();
+        // ★強制クリーニング処理
+        // AIが Markdown (```json ... ```) をつけた場合や、前後に文字を入れた場合に対応
+        text = text
+            .replace(/```json/g, "")
+            .replace(/```/g, "")
+            .trim();
+        const firstBrace = text.indexOf("{");
+        const lastBrace = text.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace !== -1) {
+            text = text.substring(firstBrace, lastBrace + 1);
+        }
+        else {
+            // JSONが見つからない場合、無理やりJSONを作って返す
+            return {
+                rawText: JSON.stringify({
+                    technical: text,
+                    line: "生成内容を確認してください",
+                }),
+            };
+        }
+        // 念のためパース確認（ここで失敗してもcatchで拾う）
+        JSON.parse(text);
+        return { rawText: text };
+    }
+    catch (e) {
+        console.error("AI Error:", e);
+        // エラーでもJSONを返してアプリが落ちないようにする
+        return {
+            rawText: JSON.stringify({
+                technical: "AI生成に失敗しました",
+                line: "手動で入力してください",
+            }),
+        };
+    }
+});
+// 3. 商品検索
+exports.searchProduct = (0, https_1.onCall)({ secrets: [yahooAppId] }, async (request) => {
+    var _a, _b;
+    if (!request.auth)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    const { code } = request.data;
+    const appId = yahooAppId.value();
+    if (!code || !appId)
+        return { name: null };
+    try {
+        const res = await axios_1.default.get(`https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch?appid=${appId}&jan_code=${code}&results=1`);
+        return { name: ((_b = (_a = res.data.hits) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.name) || null };
+    }
+    catch (e) {
+        return { name: null };
+    }
+});
+// 4. サンクスLINE自動送信 - 確実版
+exports.sendAutoThanksLine = (0, firestore_1.onDocumentCreated)({ document: "logs/{logId}", secrets: [lineBotToken, lineBotSecret] }, async (event) => {
+    var _a, _b;
+    const snapshot = event.data;
+    if (!snapshot) {
+        console.log("No snapshot data");
+        return;
+    }
+    const logData = snapshot.data();
+    // ★重要: stylistId が無い場合は authorId (作成者) を代用
+    const stylistId = logData.stylistId || logData.authorId;
+    const customerId = logData.customerId;
+    const customLineMessage = logData.customLineMessage;
+    console.log(`[ThanksLine] Start. Stylist:${stylistId} Customer:${customerId}`);
+    if (!stylistId || !customerId) {
+        console.error("[ThanksLine] ID不足のため中止");
+        return;
+    }
+    try {
+        // 設定チェック
+        const settingsRef = db
+            .collection("users")
+            .doc(stylistId)
+            .collection("system")
+            .doc("auto_messages");
+        const settingsSnap = await settingsRef.get();
+        // 設定ドキュメント自体がない場合は「有効」として扱う
+        const settings = settingsSnap.exists
+            ? settingsSnap.data()
+            : { enabled: true };
+        if ((settings === null || settings === void 0 ? void 0 : settings.enabled) === false) {
+            console.log("[ThanksLine] 自動送信設定がOFFです");
+            return;
+        }
+        // 顧客のLINE連携チェック
+        const customerRef = await db.collection("users").doc(customerId).get();
+        const lineUserId = (_a = customerRef.data()) === null || _a === void 0 ? void 0 : _a.lineUserId;
+        const customerName = ((_b = customerRef.data()) === null || _b === void 0 ? void 0 : _b.name) || "お客様";
+        if (!lineUserId) {
+            console.log("[ThanksLine] 顧客がLINE未連携");
+            return;
+        }
+        const template = (settings === null || settings === void 0 ? void 0 : settings.template) ||
+            "{name}様\n\n本日はご来店ありがとうございました！";
+        const msg = customLineMessage || template.replace(/\{name\}/g, customerName);
+        const token = lineBotToken.value();
+        const secret = lineBotSecret.value();
+        if (!token) {
+            console.error("[ThanksLine] Token未設定");
+            return;
+        }
+        const client = new line.Client({
+            channelAccessToken: token,
+            channelSecret: secret,
+        });
+        await client.pushMessage(lineUserId, { type: "text", text: msg });
+        console.log(`[ThanksLine] 送信成功: ${lineUserId}`);
+    }
+    catch (e) {
+        console.error("[ThanksLine] エラー:", e);
+    }
+});
+// 5. LINE Webhook
+exports.lineWebhook = (0, https_1.onRequest)({ secrets: [lineBotToken, lineBotSecret] }, async (req, res) => {
+    res.json({ success: true });
+});
+// 6. 予約作成通知
+exports.notifyOnReservationCreated = (0, firestore_1.onDocumentCreated)({
+    document: "reservations/{reservationId}",
+    secrets: [lineBotToken, lineBotSecret],
+}, async (event) => {
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    const data = snapshot.data();
+    const { stylistId, customerId, customerName, date, time, createdBy } = data;
+    const token = lineBotToken.value();
+    const secret = lineBotSecret.value();
+    const msg = `【予約完了】\n${customerName}様\n📅 ${date} ${time}`;
+    if (createdBy === customerId) {
+        await sendPushNotification(stylistId, "新着予約", msg);
+        await sendLineNotification(stylistId, msg, token, secret);
+    }
+    else if (createdBy === stylistId) {
+        await sendPushNotification(customerId, "予約のお知らせ", msg);
+        await sendLineNotification(customerId, msg, token, secret);
+    }
+    else {
+        await sendPushNotification(stylistId, "新着予約", msg);
+        await sendPushNotification(customerId, "予約のお知らせ", msg);
+    }
+    try {
+        const connectionsRef = db.collection("connections");
+        const querySnapshot = await connectionsRef
+            .where("stylistId", "==", stylistId)
+            .where("customerId", "==", customerId)
+            .get();
+        if (!querySnapshot.empty) {
+            const batch = db.batch();
+            querySnapshot.docs.forEach((doc) => {
+                batch.update(doc.ref, { nextReservation: date });
+            });
+            await batch.commit();
+        }
+    }
+    catch (e) {
+        console.error("Next reservation error", e);
+    }
+});
+// 7. 予約キャンセル通知
+exports.notifyOnReservationDeleted = (0, firestore_1.onDocumentDeleted)({
+    document: "reservations/{reservationId}",
+    secrets: [lineBotToken, lineBotSecret],
+}, async (event) => {
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    const data = snapshot.data();
+    const { stylistId, customerId, customerName, date, time } = data;
+    const token = lineBotToken.value();
+    const secret = lineBotSecret.value();
+    const msg = `【予約キャンセル】\n${customerName}様\n📅 ${date} ${time}\n予約が取り消されました。`;
+    await sendPushNotification(stylistId, "予約キャンセル", msg);
+    await sendLineNotification(stylistId, msg, token, secret);
+    await sendPushNotification(customerId, "予約キャンセル", msg);
+    await sendLineNotification(customerId, msg, token, secret);
+});
+// 8. リマインダー通知
+exports.sendDailyReminders = (0, scheduler_1.onSchedule)("every day 09:00", async (event) => {
+    const today = new Date();
+    today.setDate(today.getDate() + 1);
+    const tomorrowStr = today.toISOString().split("T")[0];
+    const snapshot = await db
+        .collection("reservations")
+        .where("date", "==", tomorrowStr)
+        .get();
+    if (snapshot.empty)
+        return;
+    snapshot.forEach(async (doc) => {
+        const data = doc.data();
+        const msg = `【リマインダー】\n明日 ${data.time} よりご予約がございます。\nお待ちしております！`;
+        await sendPushNotification(data.customerId, "ご予約のリマインダー", msg);
+    });
+});
+</file>
+
+<file path="functions/package.json">
+{
+  "name": "functions",
+  "scripts": {
+    "lint": "eslint --ext .js,.ts .",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "22"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@line/bot-sdk": "^10.5.0",
+    "axios": "^1.13.2",
+    "cheerio": "^1.1.2",
+    "cors": "^2.8.5",
+    "firebase-admin": "^12.1.0",
+    "firebase-functions": "^5.0.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "firebase-functions-test": "^3.1.0",
+    "typescript": "^5.4.5"
+  },
+  "private": true
+}
+</file>
+
+<file path="functions/tsconfig.json">
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "noImplicitReturns": true,
+    "noUnusedLocals": false,
+    "strict": false,
+    "target": "es2018",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "lib",
+    "rootDir": "."
+  },
+  "compileOnSave": true,
+  "include": ["index.ts"]
+}
+</file>
+
+<file path="public/firebase-messaging-sw.js">
+// public/firebase-messaging-sw.js
+importScripts(
+  "https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"
+);
+importScripts(
+  "https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"
+);
+
+// Firebase設定 (ご自身のプロジェクト設定に合わせてください)
+// ※ vite.envの内容はここでは使えないため、ハードコードするかビルドプロセスで置換が必要です
+const firebaseConfig = {
+  apiKey: "AIzaSyCd_kTXZpRbQcNZkd6V2-QIAQtBwXzwv40",
+  authDomain: "hair-link-app-ee2a3.firebaseapp.com",
+  projectId: "hair-link-app-ee2a3",
+  storageBucket: "hair-link-app-ee2a3.firebasestorage.app",
+  messagingSenderId: "501197211494",
+  appId: "1:501197211494:web:93f6bb5b057f0df7872aa7",
+  measurementId: "G-2SLGR0821E",
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const messaging = firebase.messaging();
+
+// バックグラウンド通知のハンドリング
+messaging.onBackgroundMessage((payload) => {
+  console.log(
+    "[firebase-messaging-sw.js] Received background message ",
+    payload
+  );
+
+  const notificationTitle = payload.notification.title;
+  const notificationOptions = {
+    body: payload.notification.body,
+    icon: "/logo.png", // アイコン画像のパス
+    badge: "/logo.png", // バッジ画像のパス
+  };
+
+  self.registration.showNotification(notificationTitle, notificationOptions);
+});
+</file>
+
+<file path="public/presentation.html">
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HairLink - 美容師のための経営OS</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Poppins:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --primary: #0d9488; /* Teal 600 */
+        --primary-light: #2dd4bf; /* Teal 400 */
+        --dark: #1c1917; /* Stone 900 */
+        --darker: #0c0a09; /* Stone 950 */
+        --light: #fafaf9; /* Stone 50 */
+        --accent: #f43f5e; /* Rose 500 */
+        --text-gray: #a8a29e;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Poppins", "Noto Sans JP", sans-serif;
+        background-color: var(--darker);
+        color: var(--light);
+        overflow: hidden; /* スクロールバーを隠す */
+      }
+
+      /* スライドコンテナ */
+      .slides-container {
+        width: 100vw;
+        height: 100vh;
+        overflow-y: scroll;
+        scroll-snap-type: y mandatory;
+        scroll-behavior: smooth;
+      }
+
+      /* 個別スライド */
+      section {
+        width: 100vw;
+        height: 100vh;
+        scroll-snap-align: start;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 2rem;
+        overflow: hidden;
+      }
+
+      /* 背景装飾 */
+      .bg-blob {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(80px);
+        opacity: 0.3;
+        z-index: 0;
+      }
+
+      /* タイポグラフィ */
+      h1 {
+        font-size: clamp(2.5rem, 6vw, 5rem);
+        font-weight: 900;
+        line-height: 1.1;
+        margin-bottom: 1.5rem;
+        background: linear-gradient(135deg, #fff 0%, var(--primary-light) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-align: center;
+        z-index: 1;
+      }
+
+      h2 {
+        font-size: clamp(1.5rem, 4vw, 3rem);
+        color: var(--primary);
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        margin-bottom: 2rem;
+        text-align: center;
+        z-index: 1;
+      }
+
+      h3 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        color: white;
+      }
+
+      p {
+        font-size: 1.2rem;
+        color: var(--text-gray);
+        max-width: 800px;
+        text-align: center;
+        line-height: 1.8;
+        z-index: 1;
+      }
+
+      /* アニメーション用クラス */
+      .fade-in-up {
+        opacity: 0;
+        transform: translateY(30px);
+        transition: all 0.8s ease-out;
+      }
+
+      section.active .fade-in-up {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      /* 遅延設定 */
+      .delay-100 {
+        transition-delay: 0.1s;
+      }
+      .delay-200 {
+        transition-delay: 0.2s;
+      }
+      .delay-300 {
+        transition-delay: 0.3s;
+      }
+      .delay-500 {
+        transition-delay: 0.5s;
+      }
+
+      /* パルスアニメーション (初月無料用) */
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      .pulse-badge {
+        animation: pulse 2s infinite;
+      }
+
+      /* --- モックアップなどのビジュアル要素 --- */
+
+      /* スマホモック */
+      .phone {
+        width: 280px;
+        height: 580px;
+        background: #fff;
+        border-radius: 40px;
+        border: 8px solid #333;
+        position: relative;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        z-index: 2;
+      }
+      .notch {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 120px;
+        height: 25px;
+        background: #333;
+        border-bottom-left-radius: 16px;
+        border-bottom-right-radius: 16px;
+        z-index: 10;
+      }
+      .screen {
+        flex: 1;
+        background: #fafaf9;
+        overflow: hidden;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* カードUI */
+      .ui-card {
+        background: white;
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        margin-bottom: 12px;
+      }
+
+      /* グラフバー */
+      .bar-container {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+        height: 100px;
+        padding: 10px 0;
+      }
+      .bar {
+        width: 100%;
+        background: var(--primary);
+        border-radius: 4px 4px 0 0;
+        opacity: 0.8;
+      }
+
+      /* --- スライドごとのスタイル --- */
+
+      /* Slide 1: 表紙 */
+      #slide-1 .mockups {
+        display: flex;
+        gap: 40px;
+        margin-top: 40px;
+        transform: perspective(1000px) rotateY(-10deg) rotateX(5deg);
+      }
+
+      /* Slide 2: 課題 */
+      .problem-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        width: 100%;
+        max-width: 1000px;
+        margin-top: 40px;
+        z-index: 2;
+      }
+      .problem-card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 30px;
+        border-radius: 20px;
+        text-align: center;
+      }
+      .icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        display: block;
+      }
+
+      /* Slide 3: 解決策 */
+      .solution-row {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 20px;
+        margin-top: 40px;
+        z-index: 2;
+      }
+      .feature-box {
+        width: 180px;
+        height: 180px;
+        background: linear-gradient(145deg, #1e293b, #0f172a);
+        border-radius: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+      }
+
+      /* Slide 4: 強み (在庫DX) */
+      .scan-flow {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin-top: 40px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .arrow {
+        font-size: 2rem;
+        color: var(--text-gray);
+      }
+
+      /* Slide 5: UX */
+      .ticket {
+        width: 320px;
+        background: white;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        color: #333;
+        margin-top: 30px;
+        transform: rotate(-3deg);
+      }
+      .ticket-top {
+        background: var(--primary);
+        padding: 20px;
+        color: white;
+      }
+      .ticket-bottom {
+        padding: 20px;
+        position: relative;
+        border-top: 2px dashed #ddd;
+      }
+      .ticket-bottom::before,
+      .ticket-bottom::after {
+        content: "";
+        position: absolute;
+        top: -10px;
+        width: 20px;
+        height: 20px;
+        background: var(--darker);
+        border-radius: 50%;
+      }
+      .ticket-bottom::before {
+        left: -10px;
+      }
+      .ticket-bottom::after {
+        right: -10px;
+      }
+
+      /* Slide 6: オファー */
+      .offer-price {
+        font-size: 4rem;
+        font-weight: 900;
+        color: white;
+        text-shadow: 0 0 20px var(--primary);
+      }
+      .qr-box {
+        width: 200px;
+        height: 200px;
+        background: white;
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 30px 0;
+        color: #333;
+        font-weight: bold;
+      }
+
+      /* ナビゲーションヒント */
+      .nav-hint {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.3);
+        z-index: 100;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="nav-hint">Use ↑ ↓ keys to navigate</div>
+
+    <div class="slides-container" id="container">
+      <!-- Slide 1: 表紙 -->
+      <section id="s1">
+        <div
+          class="bg-blob"
+          style="
+            top: -10%;
+            left: -10%;
+            width: 500px;
+            height: 500px;
+            background: var(--primary);
+          "
+        ></div>
+
+        <p
+          class="fade-in-up"
+          style="
+            letter-spacing: 0.2em;
+            color: var(--primary-light);
+            font-weight: bold;
+            margin-bottom: 1rem;
+          "
+        >
+          HAIR SALON DX PLATFORM
+        </p>
+        <h1 class="fade-in-up delay-100">
+          ハサミを置いた後の業務を、<br />ゼロにする。
+        </h1>
+        <p class="fade-in-up delay-200">
+          個人美容師のための、手のひら経営OS 「HairLink」
+        </p>
+
+        <div class="mockups fade-in-up delay-300">
+          <!-- 美容師画面 -->
+          <div class="phone" style="transform: translateY(20px)">
+            <div class="notch"></div>
+            <div
+              class="screen"
+              style="background: #1c1917; padding: 20px; color: white"
+            >
+              <div style="margin-top: 30px; font-weight: bold">Dashboard</div>
+              <div
+                style="
+                  background: #292524;
+                  padding: 15px;
+                  border-radius: 15px;
+                  margin-top: 20px;
+                "
+              >
+                <div style="font-size: 10px; color: #aaa">GROSS PROFIT</div>
+                <div style="font-size: 24px; font-weight: bold">¥845,000</div>
+              </div>
+              <div
+                style="
+                  margin-top: 20px;
+                  height: 100px;
+                  display: flex;
+                  align-items: flex-end;
+                  gap: 5px;
+                "
+              >
+                <div class="bar" style="height: 40%"></div>
+                <div class="bar" style="height: 60%"></div>
+                <div class="bar" style="height: 30%"></div>
+                <div class="bar" style="height: 80%"></div>
+                <div class="bar" style="height: 50%"></div>
+              </div>
+            </div>
+          </div>
+          <!-- 顧客画面 -->
+          <div
+            class="phone"
+            style="
+              transform: translate(-30px, -20px);
+              z-index: 3;
+              border-color: #eee;
+            "
+          >
+            <div class="notch" style="background: black"></div>
+            <div
+              class="screen"
+              style="background: #fff; padding: 20px; color: #333"
+            >
+              <div
+                style="margin-top: 30px; font-weight: bold; text-align: center"
+              >
+                MEMBER CARD
+              </div>
+              <div
+                style="
+                  background: linear-gradient(135deg, #333, #000);
+                  height: 160px;
+                  border-radius: 20px;
+                  margin-top: 20px;
+                  padding: 20px;
+                  color: white;
+                  display: flex;
+                  flex-direction: column;
+                  justify-content: space-between;
+                "
+              >
+                <div style="font-size: 10px; letter-spacing: 2px">
+                  MEMBER ID
+                </div>
+                <div
+                  style="
+                    font-size: 20px;
+                    letter-spacing: 3px;
+                    font-family: monospace;
+                  "
+                >
+                  8823-1192
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Slide 2: 課題 -->
+      <section id="s2">
+        <h2 class="fade-in-up">The Problem</h2>
+        <h1 class="fade-in-up delay-100" style="font-size: 3rem">
+          美容師の "見えない" 3つの負担
+        </h1>
+
+        <div class="problem-grid fade-in-up delay-200">
+          <div class="problem-card">
+            <span class="icon">💬</span>
+            <h3>予約調整の泥沼</h3>
+            <p style="font-size: 0.9rem">
+              施術中も鳴り止まないLINE。<br />ダブルブッキングの恐怖と、<br />深夜まで続く返信作業。
+            </p>
+          </div>
+          <div class="problem-card">
+            <span class="icon">📦</span>
+            <h3>在庫管理のストレス</h3>
+            <p style="font-size: 0.9rem">
+              「数えるのが面倒」<br />感覚で発注してミス発生。<br />お客様を断る最悪の事態に。
+            </p>
+          </div>
+          <div class="problem-card">
+            <span class="icon">💸</span>
+            <h3>ドンブリ勘定</h3>
+            <p style="font-size: 0.9rem">
+              売上はわかる。<br />でも「手元にいくら残るか」<br />利益が見えていない不安。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Slide 3: 解決策 -->
+      <section id="s3">
+        <div
+          class="bg-blob"
+          style="
+            top: 50%;
+            right: -10%;
+            width: 600px;
+            height: 600px;
+            background: var(--accent);
+          "
+        ></div>
+
+        <h2 class="fade-in-up">Solution</h2>
+        <h1 class="fade-in-up delay-100">HairLinkがすべて解決します</h1>
+        <p class="fade-in-up delay-200">
+          必要な機能だけを、ひとつのアプリに統合しました。
+        </p>
+
+        <div class="solution-row fade-in-up delay-300">
+          <div class="feature-box">
+            <span class="icon" style="margin: 0">📅</span>
+            <span style="font-weight: bold; margin-top: 10px">WEB予約</span>
+          </div>
+          <div class="feature-box">
+            <span class="icon" style="margin: 0">📝</span>
+            <span style="font-weight: bold; margin-top: 10px">電子カルテ</span>
+          </div>
+          <div class="feature-box">
+            <span class="icon" style="margin: 0">📊</span>
+            <span style="font-weight: bold; margin-top: 10px">経営分析</span>
+          </div>
+          <div
+            class="feature-box"
+            style="
+              border-color: var(--primary);
+              box-shadow: 0 0 20px var(--primary);
+            "
+          >
+            <span class="icon" style="margin: 0">📷</span>
+            <span
+              style="
+                font-weight: bold;
+                margin-top: 10px;
+                color: var(--primary-light);
+              "
+              >在庫DX</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- Slide 4: 最大の強み -->
+      <section id="s4">
+        <h2 class="fade-in-up">Core Value</h2>
+        <h1 class="fade-in-up delay-100">
+          「ピッ」とするだけ。<br />在庫と利益を完全自動化。
+        </h1>
+
+        <div class="scan-flow fade-in-up delay-200">
+          <!-- Step 1 -->
+          <div
+            class="ui-card"
+            style="width: 220px; text-align: center; color: #333"
+          >
+            <div
+              style="
+                background: #f5f5f5;
+                height: 120px;
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin-bottom: 10px;
+              "
+            >
+              <span style="font-size: 3rem">📷</span>
+            </div>
+            <p style="font-weight: bold">バーコード読取</p>
+            <p style="font-size: 0.8rem; color: #666">施術ログ作成時に</p>
+          </div>
+
+          <div class="arrow">➡</div>
+
+          <!-- Step 2 -->
+          <div
+            class="ui-card"
+            style="width: 220px; text-align: center; color: #333"
+          >
+            <div
+              style="
+                font-size: 3rem;
+                font-weight: 900;
+                color: var(--accent);
+                height: 120px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              "
+            >
+              -1
+            </div>
+            <p style="font-weight: bold">在庫自動減算</p>
+            <p style="font-size: 0.8rem; color: #666">棚卸し不要</p>
+          </div>
+
+          <div class="arrow">➡</div>
+
+          <!-- Step 3 -->
+          <div
+            class="ui-card"
+            style="
+              width: 220px;
+              text-align: center;
+              background: #1c1917;
+              color: white;
+            "
+          >
+            <div
+              style="
+                height: 120px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+              "
+            >
+              <span style="font-size: 0.8rem; color: #aaa">PROFIT</span>
+              <span
+                style="
+                  font-size: 2rem;
+                  font-weight: bold;
+                  color: var(--primary-light);
+                "
+                >¥Updated</span
+              >
+            </div>
+            <p style="font-weight: bold">粗利・原価計算</p>
+            <p style="font-size: 0.8rem; color: #aaa">経営状態が見える</p>
+          </div>
+        </div>
+
+        <p class="fade-in-up delay-300" style="margin-top: 40px">
+          HPBにはない「原価管理」機能で、手残りの利益を最大化します。
+        </p>
+      </section>
+
+      <!-- Slide 5: UX -->
+      <section id="s5">
+        <div
+          class="bg-blob"
+          style="
+            bottom: -10%;
+            left: -10%;
+            width: 500px;
+            height: 500px;
+            background: #fff;
+          "
+        ></div>
+
+        <h2 class="fade-in-up">User Experience</h2>
+        <h1
+          class="fade-in-up delay-100"
+          style="color: #333; text-shadow: 0 0 20px black"
+        >
+          お客様も喜ぶ、<br />プレミアムな体験
+        </h1>
+
+        <div class="ticket fade-in-up delay-200">
+          <div class="ticket-top">
+            <div style="font-size: 12px; opacity: 0.8; margin-bottom: 5px">
+              BOOKING CONFIRMED
+            </div>
+            <div style="font-size: 24px; font-weight: bold">HairLink Salon</div>
+          </div>
+          <div class="ticket-bottom">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 15px;
+              "
+            >
+              <div>
+                <div style="font-size: 10px; color: #999">DATE</div>
+                <div style="font-size: 18px; font-weight: bold">12 / 24</div>
+              </div>
+              <div style="text-align: right">
+                <div style="font-size: 10px; color: #999">TIME</div>
+                <div style="font-size: 18px; font-weight: bold">14:00</div>
+              </div>
+            </div>
+            <div style="font-size: 10px; color: #999">MENU</div>
+            <div style="font-size: 14px; font-weight: bold">
+              Cut + Illumina Color
+            </div>
+          </div>
+        </div>
+
+        <p class="fade-in-up delay-300" style="margin-top: 30px">
+          「この美容師さん、最先端。」<br />
+          そう感じさせる洗練されたデザインが、あなたのブランディングになります。
+        </p>
+      </section>
+
+      <!-- Slide 6: オファー -->
+      <section id="s6">
+        <p style="color: var(--primary); font-weight: bold">START TODAY</p>
+        <h1>まずは無料で<br />体験してください</h1>
+
+        <div class="qr-box fade-in-up delay-200">
+          <img
+            src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://hair-link-app.web.app"
+            alt="QR Code"
+          />
+        </div>
+
+        <div class="fade-in-up delay-300">
+          <p>PRO PLAN</p>
+          <!-- 初月無料バッジ -->
+          <div
+            class="pulse-badge"
+            style="
+              background: var(--accent);
+              color: white;
+              display: inline-block;
+              padding: 6px 16px;
+              border-radius: 50px;
+              font-size: 0.8rem;
+              font-weight: bold;
+              margin-bottom: 10px;
+              box-shadow: 0 4px 10px rgba(244, 63, 94, 0.4);
+            "
+          >
+            🎉 初月無料キャンペーン中
+          </div>
+          <div class="offer-price">
+            ¥2,980<span
+              style="font-size: 1.5rem; font-weight: 400; color: #aaa"
+            >
+              / month</span
+            >
+          </div>
+          <p style="margin-top: 20px">
+            在庫管理スタッフと予約受付スタッフを雇うコストを、<br />
+            カラー剤たった3本分の価格で。
+          </p>
+        </div>
+
+        <p style="margin-top: 50px; font-size: 0.9rem; opacity: 0.5">
+          Designed by Takumi Yoshioka
+        </p>
+      </section>
+    </div>
+
+    <script>
+      // Intersection Observer for Animation
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("active");
+            } else {
+              entry.target.classList.remove("active");
+            }
+          });
+        },
+        { threshold: 0.3 }
+      );
+
+      document.querySelectorAll("section").forEach((section) => {
+        observer.observe(section);
+      });
+
+      // Keyboard Navigation
+      document.addEventListener("keydown", (e) => {
+        const container = document.getElementById("container");
+        if (e.key === "ArrowDown" || e.key === "ArrowRight" || e.key === " ") {
+          e.preventDefault();
+          container.scrollBy({ top: window.innerHeight, behavior: "smooth" });
+        } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+          e.preventDefault();
+          container.scrollBy({ top: -window.innerHeight, behavior: "smooth" });
+        }
+      });
+    </script>
+  </body>
+</html>
+</file>
+
+<file path="src/components/NotificationBell/NotificationBell.vue">
+<script setup lang="ts">
+import { computed, ref, onMounted, onUnmounted } from "vue";
+import { useNotifications } from "@/composables/useNotifications";
+
+const {
+  notifications,
+  isDropdownOpen,
+  toggleDropdown,
+  markAsRead,
+  markAllRead,
+} = useNotifications();
+
+const unreadCount = computed(
+  () => notifications.value.filter((n) => !n.isRead).length
+);
+const bellContainerRef = ref<HTMLElement | null>(null);
+
+// 外側クリックを検知して閉じる処理
+const handleClickOutside = (event: MouseEvent) => {
+  if (
+    isDropdownOpen.value &&
+    bellContainerRef.value &&
+    !bellContainerRef.value.contains(event.target as Node)
+  ) {
+    isDropdownOpen.value = false;
+  }
+};
+
+onMounted(() => {
+  document.addEventListener("click", handleClickOutside);
+});
+onUnmounted(() => {
+  document.removeEventListener("click", handleClickOutside);
+});
+
+// 時間表示 (例: 5分前)
+const formatTime = (date: Date) => {
+  const diff = (new Date().getTime() - date.getTime()) / 1000;
+  if (diff < 60) return "たった今";
+  if (diff < 3600) return `${Math.floor(diff / 60)}分前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}時間前`;
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+};
+
+// 通知タイプごとのスタイル
+const getTypeStyles = (type: string) => {
+  switch (type) {
+    case "reservation":
+      return {
+        icon: "📅",
+        bg: "bg-teal-50",
+        border: "border-teal-100",
+        text: "text-teal-700",
+      };
+    case "cancel":
+      return {
+        icon: "⚠️",
+        bg: "bg-rose-50",
+        border: "border-rose-100",
+        text: "text-rose-700",
+      };
+    default:
+      return {
+        icon: "ℹ️",
+        bg: "bg-slate-50",
+        border: "border-slate-100",
+        text: "text-slate-500",
+      };
+  }
+};
+</script>
+
+<template>
+  <div ref="bellContainerRef" class="relative z-50">
+    <button
+      @click.stop="toggleDropdown"
+      class="relative w-10 h-10 rounded-full bg-white border border-slate-100 flex items-center justify-center hover:bg-slate-50 transition active:scale-95 shadow-sm"
+    >
+      <span class="text-xl">🔔</span>
+      <span
+        v-if="unreadCount > 0"
+        class="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white animate-pulse"
+      >
+        {{ unreadCount > 9 ? "9+" : unreadCount }}
+      </span>
+    </button>
+
+    <Transition name="pop">
+      <div
+        v-if="isDropdownOpen"
+        class="absolute top-12 right-[-60px] md:right-0 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden origin-top-right"
+      >
+        <div
+          class="px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 backdrop-blur"
+        >
+          <h3 class="font-bold text-sm text-slate-700">通知センター</h3>
+          <button
+            v-if="unreadCount > 0"
+            @click="markAllRead"
+            class="text-[10px] text-teal-600 font-bold hover:underline"
+          >
+            すべて既読
+          </button>
+        </div>
+
+        <div class="max-h-[350px] overflow-y-auto custom-scrollbar">
+          <div
+            v-if="notifications.length === 0"
+            class="p-10 text-center text-slate-400 text-xs"
+          >
+            <p class="text-2xl mb-2">💤</p>
+            通知はありません
+          </div>
+
+          <div
+            v-for="item in notifications"
+            :key="item.id"
+            @click="markAsRead(item.id)"
+            class="p-4 border-b border-slate-50 hover:bg-slate-50 transition cursor-pointer relative group"
+            :class="{ 'bg-teal-50/20': !item.isRead }"
+          >
+            <div
+              v-if="!item.isRead"
+              class="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-rose-500 rounded-full"
+            ></div>
+
+            <div class="flex gap-3 pl-2">
+              <div
+                class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-lg shadow-sm border"
+                :class="[
+                  getTypeStyles(item.type).bg,
+                  getTypeStyles(item.type).border,
+                ]"
+              >
+                {{ getTypeStyles(item.type).icon }}
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex justify-between items-start mb-0.5">
+                  <p class="text-xs font-bold text-slate-800 truncate">
+                    {{ item.title }}
+                  </p>
+                  <span class="text-[9px] text-slate-400 flex-shrink-0 ml-2">{{
+                    formatTime(item.timestamp)
+                  }}</span>
+                </div>
+                <p
+                  class="text-[11px] text-slate-500 leading-tight line-clamp-2"
+                >
+                  {{ item.message }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </div>
+</template>
+
+<style scoped>
+.pop-enter-active,
+.pop-leave-active {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.pop-enter-from,
+.pop-leave-to {
+  opacity: 0;
+  transform: scale(0.95) translateY(-10px);
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+</style>
+</file>
+
+<file path="src/uiParts/BaseButton/BaseButton.vue">
+<script setup lang="ts">
+interface Props {
+  variant?: "primary" | "secondary" | "danger" | "text";
+  block?: boolean;
+}
+withDefaults(defineProps<Props>(), {
+  variant: "primary",
+  block: false,
+});
+</script>
+
+<template>
+  <button
+    :class="[
+      'font-bold py-2 px-4 rounded-lg transition duration-200 flex items-center justify-center gap-2 shadow-sm',
+      block ? 'w-full' : '',
+      variant === 'primary'
+        ? 'bg-rose-500 hover:bg-rose-600 text-white'
+        : variant === 'secondary'
+        ? 'bg-white border-2 border-rose-500 text-rose-600 hover:bg-rose-50'
+        : variant === 'danger'
+        ? 'bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-600'
+        : 'text-stone-500 hover:text-stone-700 hover:bg-stone-100',
+    ]"
+  >
+    <slot></slot>
+  </button>
+</template>
+</file>
+
+<file path="src/uiParts/BaseCard/BaseCard.vue">
+<template>
+  <div
+    class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 overflow-hidden relative"
+  >
+    <slot></slot>
+  </div>
+</template>
+</file>
+
+<file path="src/uiParts/BaseInput/BaseInput.vue">
+<script setup lang="ts">
+defineProps<{
+  modelValue: string | number;
+  label?: string;
+  type?: string;
+  placeholder?: string;
+}>();
+defineEmits(["update:modelValue"]);
+</script>
+
+<template>
+  <div class="w-full">
+    <label
+      v-if="label"
+      class="block text-xs font-bold text-stone-500 mb-1.5 ml-1"
+      >{{ label }}</label
+    >
+    <input
+      :type="type || 'text'"
+      :value="modelValue"
+      @input="
+        $emit('update:modelValue', ($event.target as HTMLInputElement).value)
+      "
+      :placeholder="placeholder"
+      class="w-full border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-rose-400 focus:border-rose-400 outline-none transition bg-white text-stone-700 placeholder-stone-300"
+    />
+  </div>
+</template>
+</file>
+
+<file path="src/uiParts/BaseModal/BaseModal.vue">
+<script setup lang="ts">
+import { ref } from "vue";
+
+const dialog = ref<HTMLDialogElement | null>(null);
+
+// ★重要: 親から show() と close() を呼べるようにする
+defineExpose({
+  show: () => dialog.value?.showModal(),
+  close: () => dialog.value?.close(),
+});
+</script>
+
+<template>
+  <dialog
+    ref="dialog"
+    class="modal p-0 rounded-xl shadow-2xl backdrop:bg-black/50"
+    @click.self="dialog?.close()"
+  >
+    <div class="bg-white p-6 w-80 md:w-96 max-h-[85vh] overflow-y-auto">
+      <slot></slot>
+    </div>
+  </dialog>
+</template>
+</file>
+
+<file path="src/env.d.ts">
+/// <reference types="vite/client" />
+
+declare module "*.vue" {
+  import type { DefineComponent } from "vue";
+  const component: DefineComponent<{}, {}, any>;
+  export default component;
+}
+</file>
+
+<file path="src/firebase.ts">
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+import { getMessaging } from "firebase/messaging"; // 追加
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+};
+
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
+export const messaging = getMessaging(app); // 追加
+
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code == "failed-precondition") {
+    console.error("複数タブで開いているためオフライン機能が無効です");
+  } else if (err.code == "unimplemented") {
+    console.error("ブラウザが対応していません");
+  }
+});
+</file>
+
+<file path="src/main.ts">
+import { createApp } from "vue";
+import "./style.css";
+import App from "./App.vue";
+import router from "./router";
+
+const app = createApp(App);
+app.use(router);
+app.mount("#app");
+</file>
+
+<file path="src/style.css">
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* 影の質感をApple風に調整 */
+  --shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+  --shadow-card: 0 10px 40px -10px rgba(0, 0, 0, 0.08);
+}
+
+body {
+  /* 真っ白(#ffffff)ではなく、目に優しいごく薄いグレー */
+  background-color: #f8fafc;
+  color: #1e293b;
+  /* iOSのような滑らかな文字レンダリング */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 日本語フォントの最適化 */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans",
+    Meiryo, sans-serif;
+}
+
+/* スクロールバーを隠してスタイリッシュに */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* グラスモーフィズム（すりガラス）効果 */
+.glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* 高級感のあるカード */
+.modern-card {
+  background: white;
+  border-radius: 24px;
+  box-shadow: var(--shadow-soft);
+  border: 1px solid rgba(241, 245, 249, 1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.modern-card:active {
+  transform: scale(0.99);
+}
+
+/* アニメーション */
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.animate-enter {
+  animation: fadeInScale 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+</file>
+
+<file path=".gitignore">
+node_modules
+.DS_Store
+dist
+dist-ssr
+*.local
+.vscode/
+.env
+</file>
+
+<file path="firebase.json">
+{
+  "hosting": {
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]
+    }
+  ]
+}
+</file>
+
+<file path="postcss.config.js">
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
+</file>
+
+<file path="tailwind.config.js">
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ["./index.html", "./src/**/*.{vue,js,ts,jsx,tsx}"],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+};
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "jsx": "preserve",
+    "sourceMap": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "lib": ["ESNext", "DOM"],
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "types": ["vite/client"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"]
+}
+</file>
+
+<file path="src/composables/useNotifications.ts">
+import { ref } from "vue";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import { doc, setDoc, arrayUnion } from "firebase/firestore";
+import { db, auth } from "@/firebase";
+
+export interface NotificationItem {
+  id: string;
+  type: "reservation" | "cancel" | "info";
+  title: string;
+  message: string;
+  timestamp: Date;
+  isRead: boolean;
+}
+
+// グローバルステート
+const notifications = ref<NotificationItem[]>([]);
+const isDropdownOpen = ref(false);
+const STORAGE_KEY = "hairlink_notifications";
+
+// ★重要: Firebaseコンソールで取得したVAPIDキーを入れてください
+const VAPID_KEY =
+  "BDc2GU2MYvtgOjzdx5cnFjp9xeAQ2DhkrmtF6w3MVzkKzb0DTJmtJCrSOiKs0J90vXZ6glr-5Wl2jHJGmETBSc8";
+
+export function useNotifications() {
+  // 履歴をローカルストレージから読み込む
+  const loadNotifications = () => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        notifications.value = parsed.map((n: any) => ({
+          ...n,
+          timestamp: new Date(n.timestamp),
+        }));
+      } catch (e) {
+        console.error("Failed to load notifications", e);
+      }
+    }
+  };
+
+  // 履歴をローカルストレージに保存
+  const saveNotifications = () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications.value));
+  };
+
+  // 通知を追加する
+  const addNotification = (
+    type: "reservation" | "cancel" | "info",
+    title: string,
+    message: string
+  ) => {
+    const newItem: NotificationItem = {
+      id: Date.now().toString(),
+      type,
+      title,
+      message,
+      timestamp: new Date(),
+      isRead: false,
+    };
+    notifications.value.unshift(newItem);
+
+    // 最大50件まで保存
+    if (notifications.value.length > 50) {
+      notifications.value.pop();
+    }
+
+    saveNotifications();
+
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate(200);
+    }
+  };
+
+  const markAsRead = (id: string) => {
+    const target = notifications.value.find((n) => n.id === id);
+    if (target) {
+      target.isRead = true;
+      saveNotifications();
+    }
+  };
+
+  const markAllRead = () => {
+    notifications.value.forEach((n) => (n.isRead = true));
+    saveNotifications();
+  };
+
+  const toggleDropdown = () => {
+    isDropdownOpen.value = !isDropdownOpen.value;
+  };
+
+  const getUnreadCount = () =>
+    notifications.value.filter((n) => !n.isRead).length;
+
+  // --- FCM設定 ---
+  const requestNotificationPermission = async () => {
+    // まず履歴をロード
+    loadNotifications();
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === "granted") {
+        const messaging = getMessaging();
+
+        // フォアグラウンド受信時
+        onMessage(messaging, (payload) => {
+          console.log("Message received. ", payload);
+          addNotification(
+            "info", // プッシュ通知はinfo扱い
+            payload.notification?.title || "通知",
+            payload.notification?.body || ""
+          );
+        });
+
+        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+        if (token && auth.currentUser) {
+          await saveTokenToDatabase(token);
+        }
+      }
+    } catch (err) {
+      console.error("Unable to get permission to notify.", err);
+    }
+  };
+
+  const saveTokenToDatabase = async (token: string) => {
+    if (!auth.currentUser) return;
+    const userRef = doc(db, "users", auth.currentUser.uid);
+    await setDoc(
+      userRef,
+      {
+        fcmTokens: arrayUnion(token),
+      },
+      { merge: true }
+    );
+  };
+
+  return {
+    notifications,
+    isDropdownOpen,
+    addNotification,
+    markAsRead,
+    markAllRead,
+    toggleDropdown,
+    getUnreadCount,
+    requestNotificationPermission,
+  };
+}
+</file>
+
+<file path="src/views/HomeView/HomeView.ts">
+import { ref, onMounted, onUnmounted, computed, watch } from "vue";
+import { getAuth, signOut, onAuthStateChanged } from "firebase/auth";
+import { useHairLink } from "@/composables/useMyBrain";
+
+const THEMES: Record<string, any> = {
+  teal: {
+    name: "Teal (Default)",
+    primary: "teal",
+    bgSoft: "bg-teal-50",
+    textMain: "text-teal-600",
+    textDark: "text-teal-800",
+    border: "border-teal-100",
+    gradient: "from-teal-600 to-cyan-500",
+    shadow: "shadow-teal-200/50",
+    accent: "bg-teal-600",
+    button: "hover:bg-teal-100",
+  },
+  rose: {
+    name: "Rose Pink",
+    primary: "rose",
+    bgSoft: "bg-rose-50",
+    textMain: "text-rose-500",
+    textDark: "text-rose-800",
+    border: "border-rose-100",
+    gradient: "from-rose-500 to-orange-400",
+    shadow: "shadow-rose-200/50",
+    accent: "bg-rose-500",
+    button: "hover:bg-rose-100",
+  },
+  blue: {
+    name: "Ocean Blue",
+    primary: "blue",
+    bgSoft: "bg-blue-50",
+    textMain: "text-blue-600",
+    textDark: "text-blue-800",
+    border: "border-blue-100",
+    gradient: "from-blue-600 to-indigo-500",
+    shadow: "shadow-blue-200/50",
+    accent: "bg-blue-600",
+    button: "hover:bg-blue-100",
+  },
+  stone: {
+    name: "Monochrome",
+    primary: "stone",
+    bgSoft: "bg-stone-100",
+    textMain: "text-stone-600",
+    textDark: "text-stone-800",
+    border: "border-stone-200",
+    gradient: "from-stone-700 to-stone-500",
+    shadow: "shadow-stone-300/50",
+    accent: "bg-stone-700",
+    button: "hover:bg-stone-200",
+  },
+};
+
+export default function useHomeView() {
+  const auth = getAuth();
+  const {
+    currentUser,
+    logs,
+    allStylistLogs, // 1. ここで取得して
+    clients,
+    loading,
+    fetchUserProfile,
+    fetchLogs,
+    fetchAllStylistLogs,
+    fetchMyReservations,
+    fetchStylistReservations,
+    fetchMyReservation,
+    fetchClientReservations,
+    myReservations,
+    stylistReservations,
+    clientReservations,
+    myReservation,
+    addLog,
+    deleteLog,
+    connectUser,
+    fetchMyClients,
+    updateNextReservation,
+    updateUserProfile,
+    fetchInventory,
+    cancelReservation,
+  } = useHairLink();
+
+  const currentTab = ref("home");
+  const salesPeriod = ref("6m");
+  const activeClientId = ref<string | null>(null);
+  const activeConnectionId = ref<string | null>(null);
+  const showQR = ref(false);
+  const scanInput = ref("");
+  const currentLogTargetId = ref<string | null>(null);
+  const isSaving = ref(false);
+  const editName = ref("");
+  const editTheme = ref("teal");
+
+  // 美容師が顧客詳細を開いたときの顧客情報
+  const activeClientName = computed(() => {
+    const client = clients.value.find(
+      (c) => c.customerId === activeClientId.value,
+    );
+    return client ? client.customerName : "お客様";
+  });
+
+  let unsubscribe: any;
+
+  onMounted(() => {
+    unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        await fetchUserProfile(user.uid);
+      }
+    });
+  });
+
+  onUnmounted(() => {
+    if (unsubscribe) unsubscribe();
+  });
+
+  watch(
+    currentUser,
+    (user) => {
+      if (user && user.uid) {
+        editName.value = user.name || "";
+        editTheme.value = user.themeColor || "teal";
+
+        if (user.role === "customer") {
+          currentLogTargetId.value = user.uid;
+          fetchLogs(user.uid);
+          fetchMyReservations(user.uid);
+          fetchMyReservation(user.uid);
+        } else if (user.role === "stylist") {
+          fetchMyClients(user.uid);
+          fetchAllStylistLogs(user.uid);
+          fetchInventory();
+          fetchStylistReservations(user.uid);
+        }
+      }
+    },
+    { immediate: true },
+  );
+
+  const selectClient = (client: any) => {
+    activeClientId.value = client.customerId;
+    activeConnectionId.value = client.id;
+    currentLogTargetId.value = client.customerId;
+    fetchLogs(client.customerId);
+    fetchClientReservations(client.customerId);
+  };
+
+  const selectClientFromCalendar = (eventData: any) => {
+    if (currentUser.value?.role === "customer") return;
+
+    let customerId = "";
+    if (typeof eventData === "string") {
+      customerId = eventData;
+    } else if (eventData?.customerId) {
+      customerId = eventData.customerId;
+    } else if (eventData?.extendedProps?.customerId) {
+      customerId = eventData.extendedProps.customerId;
+    } else if (eventData?.event?.extendedProps?.customerId) {
+      customerId = eventData.event.extendedProps.customerId;
+    }
+
+    if (customerId) {
+      const client = clients.value.find((c) => c.customerId === customerId);
+      if (client) {
+        selectClient(client);
+        currentTab.value = "home";
+      } else {
+        console.warn("Client not found in list:", customerId);
+        alert(
+          "顧客データが見つかりません。リストが最新でない可能性があります。",
+        );
+      }
+    } else {
+      console.warn("No customer ID in event data");
+    }
+  };
+
+  const goHome = () => {
+    activeClientId.value = null;
+    currentTab.value = "home";
+  };
+
+  const handleDeleteLog = async (id: string) => {
+    await deleteLog(id);
+  };
+
+  const handleCancelReservation = async (id: string) => {
+    await cancelReservation(id);
+  };
+
+  const handleConnect = async () => {
+    if (!scanInput.value) return;
+    const success = await connectUser(auth.currentUser!.uid, scanInput.value);
+    if (success) {
+      alert("顧客リストに追加しました！");
+      scanInput.value = "";
+    }
+  };
+
+  const handleQRDetect = async (decodedText: string) => {
+    if (!decodedText) return;
+    scanInput.value = decodedText;
+    const success = await connectUser(auth.currentUser!.uid, decodedText);
+    if (success) {
+      alert("顧客リストに追加しました！ (QR)");
+      scanInput.value = "";
+    }
+  };
+
+  const logout = async () => {
+    await signOut(auth);
+  };
+
+  const onNextDateChange = async (client: any, event: Event) => {
+    const input = event.target as HTMLInputElement;
+    if (input.value) {
+      await updateNextReservation(client.id, input.value);
+    }
+  };
+
+  const saveSettings = async () => {
+    if (!auth.currentUser) return;
+    isSaving.value = true;
+    try {
+      const success = await updateUserProfile(auth.currentUser.uid, {
+        name: editName.value,
+        themeColor: editTheme.value,
+      });
+      if (success) {
+        alert("設定を保存しました✨");
+        currentTab.value = "home";
+      }
+    } finally {
+      isSaving.value = false;
+    }
+  };
+
+  const currentTheme = computed(() => {
+    const themeKey = currentUser.value?.themeColor || "teal";
+    return THEMES[themeKey] || THEMES["teal"];
+  });
+
+  const currentMonthSales = computed(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    return allStylistLogs.value
+      .filter((log) => {
+        if (!log.date) return false;
+        const logDate = new Date(log.date);
+        return (
+          logDate.getFullYear() === currentYear &&
+          logDate.getMonth() + 1 === currentMonth
+        );
+      })
+      .reduce((sum, log) => sum + (Number(log.price) || 0), 0);
+  });
+
+  const monthlySalesData = computed(() => {
+    const sourceLogs =
+      allStylistLogs.value.length > 0 ? allStylistLogs.value : [];
+    const result = [];
+    const now = new Date();
+
+    if (salesPeriod.value === "1m") {
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const y = d.getFullYear();
+        const m = d.getMonth() + 1;
+        const dateStr = d.getDate();
+        const dailyTotal = sourceLogs
+          .filter((log) => {
+            if (!log.date) return false;
+            const logDate = new Date(log.date);
+            return (
+              logDate.getFullYear() === y &&
+              logDate.getMonth() + 1 === m &&
+              logDate.getDate() === d.getDate()
+            );
+          })
+          .reduce((sum, log) => sum + (Number(log.price) || 0), 0);
+        result.push({ label: `${dateStr}日`, amount: dailyTotal });
+      }
+    } else {
+      let monthsCount = 6;
+      if (salesPeriod.value === "3m") monthsCount = 3;
+      if (salesPeriod.value === "1y") monthsCount = 12;
+      if (salesPeriod.value === "3y") monthsCount = 36;
+      if (salesPeriod.value === "all") monthsCount = 60;
+
+      for (let i = monthsCount - 1; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const year = d.getFullYear();
+        const month = d.getMonth() + 1;
+        const monthlyTotal = sourceLogs
+          .filter((log) => {
+            if (!log.date) return false;
+            const logDate = new Date(log.date);
+            return (
+              logDate.getFullYear() === year && logDate.getMonth() + 1 === month
+            );
+          })
+          .reduce((sum, log) => sum + (Number(log.price) || 0), 0);
+        let label = `${month}月`;
+        if (month === 1 || i === monthsCount - 1) label = `${year}年${month}月`;
+        result.push({ label: label, amount: monthlyTotal });
+      }
+    }
+    return result;
+  });
+
+  const totalSales = computed(() => {
+    return logs.value.reduce((sum, log) => sum + (Number(log.price) || 0), 0);
+  });
+
+  const clientsWithSales = computed(() => {
+    return clients.value.map((client) => {
+      const clientLogs = allStylistLogs.value.filter(
+        (log) => log.customerId === client.customerId,
+      );
+      const ltv = clientLogs.reduce(
+        (sum, log) => sum + (Number(log.price) || 0),
+        0,
+      );
+      return { ...client, ltv };
+    });
+  });
+
+  const calendarEvents = computed(() => {
+    if (currentUser.value?.role === "stylist") {
+      return stylistReservations.value.map((r) => ({
+        date: r.date,
+        title: `【${r.customerName || "客"}】${r.time} ${r.menu || ""}`,
+        type: "reservation",
+        customerId: r.customerId,
+        extendedProps: {
+          customerId: r.customerId,
+        },
+      }));
+    } else {
+      return myReservations.value.map((r) => ({
+        date: r.date,
+        title: `${r.time} 美容室 (${r.menu || ""})`,
+        type: "reservation",
+      }));
+    }
+  });
+
+  return {
+    currentTab,
+    salesPeriod,
+    currentUser,
+    logs,
+    allStylistLogs, // ★ 2. ここでreturnしないとVue側で使えません！(修正済み)
+    clients,
+    clientsWithSales,
+    loading,
+    activeClientId,
+    activeConnectionId,
+    activeClientName,
+    clientReservations,
+    showQR,
+    scanInput,
+    isSaving,
+    fetchLogs,
+    handleDeleteLog,
+    handleConnect,
+    handleQRDetect,
+    logout,
+    currentLogTargetId,
+    selectClient,
+    selectClientFromCalendar,
+    goHome,
+    onNextDateChange,
+    totalSales,
+    monthlySalesData,
+    currentMonthSales,
+    calendarEvents,
+    myReservation,
+    editName,
+    editTheme,
+    saveSettings,
+    currentTheme,
+    THEMES,
+    handleCancelReservation,
+  };
+}
+</file>
+
+<file path="src/views/LoginView/LoginView.ts">
+import { ref } from "vue";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+  signOut,
+} from "firebase/auth";
+import { getFirestore, doc, setDoc } from "firebase/firestore";
+import { useRouter } from "vue-router";
+
+export default function useLoginView() {
+  const router = useRouter();
+  const isLoginMode = ref(true);
+  const email = ref("");
+  const password = ref("");
+  const loading = ref(false);
+
+  const handleSubmit = async () => {
+    if (!email.value || !password.value) return alert("入力してください");
+    loading.value = true;
+    const auth = getAuth();
+    const db = getFirestore();
+
+    try {
+      if (isLoginMode.value) {
+        // --- ログイン ---
+        const userCredential = await signInWithEmailAndPassword(
+          auth,
+          email.value,
+          password.value
+        );
+        const user = userCredential.user;
+
+        if (!user.emailVerified) {
+          // 未認証なら待機画面へ
+          router.push("/verify-email");
+        } else {
+          router.push("/");
+        }
+      } else {
+        // --- 新規登録 ---
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          email.value,
+          password.value
+        );
+        const user = userCredential.user;
+
+        // ユーザー情報保存
+        await setDoc(doc(db, "users", user.uid), {
+          email: email.value,
+          role: "student",
+          createdAt: new Date(),
+        });
+
+        // ★メール送信
+        await sendEmailVerification(user);
+        alert(
+          "確認メールを送信しました。\nメール内のリンクをクリックしてください。"
+        );
+
+        // 待機画面へ
+        router.push("/verify-email");
+      }
+    } catch (e: any) {
+      console.error(e);
+      let msg = "エラーが発生しました";
+      if (e.code === "auth/email-already-in-use")
+        msg = "このメールアドレスは既に登録されています";
+      if (e.code === "auth/weak-password")
+        msg = "パスワードは6文字以上にしてください";
+      if (e.code === "auth/invalid-credential")
+        msg = "メールアドレスまたはパスワードが間違っています";
+      alert(msg);
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  return {
+    isLoginMode,
+    email,
+    password,
+    loading,
+    handleSubmit,
+  };
+}
+</file>
+
+<file path="src/views/LoginView/LoginView.vue">
+<script setup lang="ts">
+import { ref } from "vue";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+} from "firebase/auth";
+import { getFirestore, doc, setDoc } from "firebase/firestore";
+import { useRouter } from "vue-router";
+
+const router = useRouter();
+const isLoginMode = ref(true);
+const email = ref("");
+const password = ref("");
+const loading = ref(false);
+
+const handleSubmit = async () => {
+  if (!email.value || !password.value) return alert("入力してください");
+  loading.value = true;
+  const auth = getAuth();
+  const db = getFirestore();
+
+  try {
+    if (isLoginMode.value) {
+      await signInWithEmailAndPassword(auth, email.value, password.value);
+      router.push("/");
+    } else {
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email.value,
+        password.value,
+      );
+      await setDoc(doc(db, "users", userCredential.user.uid), {
+        email: email.value,
+        createdAt: new Date(),
+      });
+      router.push("/");
+    }
+  } catch (e: any) {
+    alert(e.message);
+  } finally {
+    loading.value = false;
+  }
+};
+</script>
+
+<template>
+  <div
+    class="min-h-[100dvh] w-full bg-slate-900 flex items-center justify-center p-6"
+  >
+    <div
+      class="w-full max-w-md bg-white/10 backdrop-blur-md rounded-3xl p-8 shadow-2xl border border-white/20"
+    >
+      <div class="text-center mb-8">
+        <h1
+          class="text-4xl font-black text-white mb-2 flex justify-center items-center gap-2"
+        >
+          🧠 My Brain
+        </h1>
+        <p class="text-slate-400 text-xs font-bold tracking-wider">
+          あなただけの第2の脳
+        </p>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1 ml-1"
+            >Email</label
+          >
+          <input
+            v-model="email"
+            type="email"
+            class="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 font-bold text-white outline-none focus:ring-2 focus:ring-blue-500 transition"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1 ml-1"
+            >Password</label
+          >
+          <input
+            v-model="password"
+            type="password"
+            class="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 font-bold text-white outline-none focus:ring-2 focus:ring-blue-500 transition"
+          />
+        </div>
+
+        <button
+          @click="handleSubmit"
+          :disabled="loading"
+          class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-500 transition active:scale-95 disabled:opacity-50 mt-4"
+        >
+          {{
+            loading
+              ? "処理中..."
+              : isLoginMode
+                ? "脳に接続 (ログイン)"
+                : "脳を作成 (新規登録)"
+          }}
+        </button>
+
+        <div class="text-center mt-6">
+          <button
+            @click="isLoginMode = !isLoginMode"
+            class="text-xs font-bold text-slate-400 hover:text-white transition"
+          >
+            {{ isLoginMode ? "アカウント作成はこちら" : "ログインはこちら" }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
+<file path="src/views/VerifyEmailView/VerifyEmailView.vue">
+<script setup lang="ts">
+import { ref } from "vue";
+import { getAuth, sendEmailVerification, signOut } from "firebase/auth";
+import { useRouter } from "vue-router";
+
+const auth = getAuth();
+const router = useRouter();
+const user = auth.currentUser;
+const loading = ref(false);
+const message = ref("");
+
+// 再送信処理
+const resendEmail = async () => {
+  if (!user) return;
+  loading.value = true;
+  try {
+    await sendEmailVerification(user);
+    message.value = "確認メールを再送信しました。";
+  } catch (e: any) {
+    if (e.code === "auth/too-many-requests") {
+      message.value = "少し時間を置いてから再試行してください。";
+    } else {
+      message.value = "送信に失敗しました。";
+    }
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 「確認しました」ボタン（リロードして状態確認）
+const checkVerification = async () => {
+  if (!user) return;
+  loading.value = true;
+  try {
+    await user.reload(); // Firebaseの状態を最新に更新
+    if (user.emailVerified) {
+      alert("認証を確認しました！");
+      router.push("/");
+    } else {
+      alert(
+        "まだ認証が完了していません。\nメールのリンクをクリックしましたか？"
+      );
+    }
+  } catch (e) {
+    console.error(e);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const handleLogout = async () => {
+  await signOut(auth);
+  router.push("/login");
+};
+</script>
+
+<template>
+  <div
+    class="min-h-screen bg-slate-50 flex items-center justify-center p-6 font-sans"
+  >
+    <div
+      class="max-w-md w-full bg-white rounded-3xl p-8 shadow-sm border border-slate-100 text-center"
+    >
+      <div
+        class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-6"
+      >
+        ✉️
+      </div>
+
+      <h2 class="text-xl font-bold text-slate-800 mb-4">
+        メールアドレスの確認
+      </h2>
+
+      <p class="text-sm text-slate-600 mb-6 leading-relaxed">
+        <strong>{{ user?.email }}</strong> 宛に確認メールを送信しました。<br />
+        メール内のリンクをクリックして、アカウントを有効化してください。
+      </p>
+
+      <div class="space-y-3">
+        <button
+          @click="checkVerification"
+          :disabled="loading"
+          class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition shadow-lg shadow-blue-200"
+        >
+          {{ loading ? "確認中..." : "認証完了 (アプリへ進む)" }}
+        </button>
+
+        <button
+          @click="resendEmail"
+          :disabled="loading"
+          class="w-full py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition"
+        >
+          メールを再送信
+        </button>
+      </div>
+
+      <p
+        v-if="message"
+        class="mt-4 text-xs text-blue-600 font-bold animate-pulse"
+      >
+        {{ message }}
+      </p>
+
+      <div class="mt-8 pt-6 border-t border-slate-100">
+        <p class="text-xs text-slate-400 mb-2">メールが届かない場合</p>
+        <p class="text-[10px] text-slate-400">
+          ・迷惑メールフォルダをご確認ください<br />
+          ・メールアドレスが間違っている場合はログアウトしてやり直してください
+        </p>
+        <button
+          @click="handleLogout"
+          class="mt-4 text-xs text-slate-500 underline hover:text-slate-800"
+        >
+          ログアウト / アドレス変更
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
+<file path="src/App.vue">
+<script setup lang="ts">
+import { onMounted } from "vue";
+import { useMyBrain } from "@/composables/useMyBrain";
+
+const { initAuth } = useMyBrain();
+
+onMounted(() => {
+  initAuth(); // 認証監視スタート
+});
+</script>
+
+<template>
+  <router-view />
+</template>
+</file>
+
+<file path=".firebaserc">
+{
+  "projects": {
+    "default": "next-ns",
+    "n": "my-brain-145b1"
+  },
+  "targets": {},
+  "etags": {}
+}
+</file>
+
+<file path="firestore.indexes.json">
+{
+  "indexes": [
+    {
+      "collectionGroup": "memories",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "chat_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "next-ns",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && firebase deploy"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@line/bot-sdk": "^10.5.0",
+    "axios": "^1.13.2",
+    "chart.js": "^4.5.1",
+    "firebase": "^10.14.1",
+    "html5-qrcode": "^2.3.8",
+    "mathjs": "^15.1.0",
+    "mermaid": "^11.12.2",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "vue": "^3.4.0",
+    "vue-chartjs": "^5.3.3",
+    "vue-router": "^4.6.3"
+  },
+  "devDependencies": {
+    "@types/google-apps-script": "^2.0.8",
+    "@types/react": "^19.2.7",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.18",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0",
+    "vite-plugin-pwa": "^1.2.0",
+    "vue-tsc": "^1.8.25"
+  }
+}
+</file>
+
+<file path="firestore.rules">
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ユーザー自身だけが読み書きできるようにする共通関数
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // 1. ユーザー情報
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // 2. メモ (My Brain)
+    match /memories/{memoryId} {
+      // 作成時は、自分のIDを入れているかチェック
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      // 読み取り・更新・削除は、自分のデータのみ許可
+      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // 3. チャットログ (My Brain)
+    match /chat_logs/{logId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+  }
+}
+</file>
+
+<file path="index.html">
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/logo.png?v=2" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
+
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+    <meta name="apple-mobile-web-app-title" content="NextNs" />
+    <title>NextNs</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+</file>
+
+<file path="vite.config.ts">
+import { fileURLToPath, URL } from "node:url";
+
+import { defineConfig } from "vite";
+import vue from "@vitejs/plugin-vue";
+import { VitePWA } from "vite-plugin-pwa";
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [
+    vue(),
+    VitePWA({
+      registerType: "autoUpdate",
+      includeAssets: ["favicon.ico", "apple-touch-icon.png", "logo.png"],
+      manifest: {
+        name: "NextNs - 看護師国家試験対策",
+        short_name: "NextNs",
+        // 内容を微修正してマニフェストの更新を促す
+        description:
+          "看護師国家試験対策のための学習支援アプリ。最新の過去問とAI解説を搭載。",
+        theme_color: "#ffffff",
+        background_color: "#ffffff",
+        display: "standalone",
+        icons: [
+          {
+            src: "logo.png",
+            sizes: "192x192",
+            type: "image/png",
+          },
+          {
+            src: "logo.png",
+            sizes: "512x512",
+            type: "image/png",
+          },
+          {
+            src: "logo.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any maskable",
+          },
+        ],
+      },
+    }),
+  ],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
+});
+</file>
+
+<file path="functions/lib/index.js">
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.scrapeUrl = void 0;
+const https_1 = require("firebase-functions/v2/https");
+const v2_1 = require("firebase-functions/v2");
+const admin = __importStar(require("firebase-admin"));
+const axios_1 = __importDefault(require("axios"));
+const cheerio = __importStar(require("cheerio"));
+// 初期化
+if (admin.apps.length === 0) {
+    admin.initializeApp();
+}
+// 日本リージョンに設定
+(0, v2_1.setGlobalOptions)({ region: "asia-northeast1", memory: "1GiB" });
+/**
+ * URLを受け取り、Webページのタイトルと本文テキストを返す関数
+ */
+exports.scrapeUrl = (0, https_1.onCall)(async (request) => {
+    // 認証チェック
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "ログインが必要です");
+    }
+    const { url } = request.data;
+    if (!url) {
+        throw new https_1.HttpsError("invalid-argument", "URLが必要です");
+    }
+    try {
+        // 1. HTMLを取得
+        const response = await axios_1.default.get(url, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            },
+            timeout: 10000, // 10秒タイムアウト
+        });
+        // 2. HTMLを解析 (cheerio)
+        const $ = cheerio.load(response.data);
+        // 不要な要素を削除
+        $("script").remove();
+        $("style").remove();
+        $("nav").remove();
+        $("footer").remove();
+        $("header").remove();
+        $("iframe").remove();
+        // タイトルと本文を取得
+        const title = $("title").text().trim() || "No Title";
+        // 本文抽出（pタグや記事本文と思われる箇所を優先）
+        let content = "";
+        $("p, h1, h2, h3, h4, li, article").each((_, el) => {
+            const text = $(el).text().trim();
+            if (text.length > 20) {
+                // 短すぎるゴミテキストを除外
+                content += text + "\n";
+            }
+        });
+        // 文字数制限（Geminiに渡すため長すぎると困る場合があるが、Flashならかなりいける）
+        const limitedContent = content.slice(0, 50000); // 5万文字でカット
+        return {
+            success: true,
+            title,
+            content: limitedContent,
+        };
+    }
+    catch (error) {
+        console.error("Scraping Error:", error);
+        throw new https_1.HttpsError("internal", `読み込みに失敗しました: ${error.message}`);
+    }
+});
+</file>
+
+<file path="functions/index.ts">
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { setGlobalOptions } from "firebase-functions/v2";
+import * as admin from "firebase-admin";
+import axios from "axios";
+import * as cheerio from "cheerio";
+
+// 初期化
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
+
+// 日本リージョンに設定
+setGlobalOptions({ region: "asia-northeast1", memory: "1GiB" });
+
+/**
+ * URLを受け取り、Webページのタイトルと本文テキストを返す関数
+ */
+export const scrapeUrl = onCall(async (request) => {
+  // 認証チェック
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "ログインが必要です");
+  }
+
+  const { url } = request.data;
+  if (!url) {
+    throw new HttpsError("invalid-argument", "URLが必要です");
+  }
+
+  try {
+    // 1. HTMLを取得
+    const response = await axios.get(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      },
+      timeout: 10000, // 10秒タイムアウト
+    });
+
+    // 2. HTMLを解析 (cheerio)
+    const $ = cheerio.load(response.data);
+
+    // 不要な要素を削除
+    $("script").remove();
+    $("style").remove();
+    $("nav").remove();
+    $("footer").remove();
+    $("header").remove();
+    $("iframe").remove();
+
+    // タイトルと本文を取得
+    const title = $("title").text().trim() || "No Title";
+
+    // 本文抽出（pタグや記事本文と思われる箇所を優先）
+    let content = "";
+    $("p, h1, h2, h3, h4, li, article").each((_, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 20) {
+        // 短すぎるゴミテキストを除外
+        content += text + "\n";
+      }
+    });
+
+    // 文字数制限（Geminiに渡すため長すぎると困る場合があるが、Flashならかなりいける）
+    const limitedContent = content.slice(0, 50000); // 5万文字でカット
+
+    return {
+      success: true,
+      title,
+      content: limitedContent,
+    };
+  } catch (error: any) {
+    console.error("Scraping Error:", error);
+    throw new HttpsError(
+      "internal",
+      `読み込みに失敗しました: ${error.message}`,
+    );
+  }
+});
+</file>
+
+<file path="src/router/index.ts">
+import { createRouter, createWebHistory } from "vue-router";
+import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
+import HomeView from "../views/HomeView/HomeView.vue";
+import LoginView from "../views/LoginView/LoginView.vue";
+import VerifyEmailView from "../views/VerifyEmailView/VerifyEmailView.vue";
+
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    {
+      path: "/",
+      name: "home",
+      component: HomeView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/login",
+      name: "login",
+      component: LoginView,
+      meta: { public: true },
+    },
+    {
+      path: "/verify-email",
+      name: "verify-email",
+      component: VerifyEmailView,
+      meta: { requiresAuth: true },
+    },
+  ],
+});
+
+router.beforeEach(async (to, from, next) => {
+  const auth = getAuth();
+  const currentUser = await new Promise<User | null>((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
+
+  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
+
+  if (requiresAuth && !currentUser) {
+    next("/login");
+  } else if (to.path === "/login" && currentUser) {
+    next("/");
+  } else {
+    next();
+  }
+});
+
+export default router;
+</file>
+
+<file path="src/types/index.ts">
+// 脳みそに保存するデータの型
+export interface Memory {
+  id: string;
+  userId: string;
+  text: string; // メモの内容
+  aiSummary?: string; // AIによる要約
+  tags?: string[]; // AIがつけたタグ
+  createdAt: any;
+}
+</file>
+
+<file path="src/views/HomeView/HomeView.vue">
+<script setup lang="ts">
+import { ref, onMounted } from "vue";
+import { useMyBrain, type Memory } from "@/composables/useMyBrain";
+
+const {
+  currentUser,
+  memories,
+  chatLogs,
+  activeTag, // ★追加
+  allTags, // ★追加
+  selectTag, // ★追加
+  addMemory,
+  updateMemory,
+  deleteMemory,
+  deleteChatLog,
+  askBrain,
+  isAiThinking,
+  initAuth,
+  logout,
+  loading,
+} = useMyBrain();
+
+const inputMode = ref<"memo" | "chat">("memo");
+const inputText = ref("");
+const currentStreamingAnswer = ref("");
+const selectedFile = ref<File | null>(null); // ★変更: Image -> File
+const filePreview = ref<string | null>(null);
+const fileInputRef = ref<HTMLInputElement | null>(null);
+const chatContainerRef = ref<HTMLElement | null>(null);
+
+const editingMemory = ref<Memory | null>(null);
+const editContent = ref("");
+
+const isListening = ref(false);
+let recognition: any = null;
+
+onMounted(() => {
+  initAuth();
+
+  if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+    const SpeechRecognition =
+      (window as any).webkitSpeechRecognition ||
+      (window as any).SpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.lang = "ja-JP";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results)
+        .map((result: any) => result[0].transcript)
+        .join("");
+      inputText.value = transcript;
+    };
+
+    recognition.onend = () => {
+      isListening.value = false;
+    };
+    recognition.onerror = () => {
+      isListening.value = false;
+    };
+  }
+});
+
+const toggleListening = () => {
+  if (!recognition) return alert("音声入力未対応ブラウザです");
+  if (isListening.value) recognition.stop();
+  else {
+    isListening.value = true;
+    recognition.start();
+  }
+};
+
+const handleFileSelect = (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  if (target.files && target.files[0]) {
+    const file = target.files[0];
+    selectedFile.value = file;
+
+    // 画像ならプレビュー、それ以外はアイコン表示用ダミー
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        filePreview.value = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    } else {
+      filePreview.value = null; // 画像以外はプレビューなし
+    }
+  }
+};
+
+const clearFile = () => {
+  selectedFile.value = null;
+  filePreview.value = null;
+  if (fileInputRef.value) fileInputRef.value.value = "";
+};
+
+const handleSend = async () => {
+  if (!inputText.value.trim() && !selectedFile.value) return;
+
+  if (inputMode.value === "memo") {
+    const text = inputText.value;
+    const file = selectedFile.value;
+    inputText.value = "";
+    clearFile();
+    await addMemory(text, file);
+  } else {
+    const question = inputText.value;
+    inputText.value = "";
+    clearFile();
+
+    currentStreamingAnswer.value = "";
+    const answer = await askBrain(question);
+
+    const chars = answer.split("");
+    for (const char of chars) {
+      currentStreamingAnswer.value += char;
+      if (chatContainerRef.value) {
+        chatContainerRef.value.scrollTop = chatContainerRef.value.scrollHeight;
+      }
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    currentStreamingAnswer.value = "";
+  }
+};
+
+const openDetail = (memo: Memory) => {
+  editingMemory.value = memo;
+  editContent.value = memo.text;
+};
+
+const saveUpdate = async () => {
+  if (editingMemory.value) {
+    await updateMemory(editingMemory.value.id, editContent.value);
+    editingMemory.value = null;
+  }
+};
+</script>
+
+<template>
+  <div class="h-screen flex flex-col bg-slate-950 text-slate-200 font-sans">
+    <header
+      class="h-14 px-4 flex items-center justify-between border-b border-slate-800 bg-slate-900/50 backdrop-blur z-20"
+    >
+      <div class="font-black text-lg tracking-tight">🧠 My Brain</div>
+      <button
+        @click="logout"
+        class="text-xs font-bold text-slate-500 hover:text-white transition"
+      >
+        ログアウト
+      </button>
+    </header>
+
+    <div
+      v-if="allTags.length > 0"
+      class="px-4 py-2 bg-slate-900/50 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-hide flex gap-2"
+    >
+      <button
+        @click="selectTag(null)"
+        class="text-[10px] font-bold px-3 py-1 rounded-full transition border"
+        :class="
+          !activeTag
+            ? 'bg-white text-slate-900 border-white'
+            : 'bg-slate-800 text-slate-400 border-slate-700'
+        "
+      >
+        すべて
+      </button>
+      <button
+        v-for="tag in allTags"
+        :key="tag"
+        @click="selectTag(tag)"
+        class="text-[10px] font-bold px-3 py-1 rounded-full transition border"
+        :class="
+          activeTag === tag
+            ? 'bg-blue-600 text-white border-blue-600'
+            : 'bg-slate-800 text-slate-400 border-slate-700'
+        "
+      >
+        #{{ tag }}
+      </button>
+    </div>
+
+    <main
+      ref="chatContainerRef"
+      class="flex-1 overflow-y-auto p-4 space-y-6 pb-44 scrollbar-hide"
+    >
+      <div v-if="inputMode === 'memo'" class="space-y-4">
+        <div
+          v-if="memories.length === 0 && !loading"
+          class="text-center py-20 opacity-30"
+        >
+          <div class="text-4xl mb-4">📝</div>
+          <p>表示できる記憶がありません。</p>
+        </div>
+
+        <div
+          v-for="memo in memories"
+          :key="memo.id"
+          @click="openDetail(memo)"
+          class="group relative bg-slate-900 border border-slate-800 p-4 rounded-2xl transition hover:border-slate-600 animate-fade-in cursor-pointer active:scale-[0.98]"
+        >
+          <div
+            class="absolute top-4 right-4 flex gap-3 opacity-0 group-hover:opacity-100 transition"
+          >
+            <span class="text-xs text-slate-500">詳細・編集</span>
+          </div>
+
+          <div
+            v-if="memo.hasImage"
+            class="mb-2 text-xs font-bold flex items-center gap-1"
+            :class="
+              memo.fileType?.includes('pdf') ? 'text-red-400' : 'text-blue-400'
+            "
+          >
+            <span v-if="memo.fileType?.includes('pdf')">📄 PDF資料</span>
+            <span v-else>📷 画像メモ</span>
+          </div>
+
+          <p
+            class="text-sm text-slate-300 whitespace-pre-wrap mb-3 line-clamp-3"
+          >
+            {{ memo.text }}
+          </p>
+
+          <div class="flex flex-wrap gap-2 items-center">
+            <div
+              v-if="memo.aiSummary"
+              class="text-[10px] bg-slate-800 px-2 py-1 rounded text-slate-400"
+            >
+              📝 {{ memo.aiSummary }}
+            </div>
+            <span
+              v-for="tag in memo.tags"
+              :key="tag"
+              class="text-[10px] font-bold text-blue-400"
+            >
+              #{{ tag }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="inputMode === 'chat'" class="space-y-6">
+        <div
+          v-if="chatLogs.length === 0 && !isAiThinking"
+          class="text-center py-20 opacity-30"
+        >
+          <div class="text-4xl mb-4">💬</div>
+          <p>チャット履歴がありません。</p>
+        </div>
+
+        <div
+          v-if="isAiThinking || currentStreamingAnswer"
+          class="bg-blue-900/20 border border-blue-500/30 p-4 rounded-2xl animate-pulse-soft"
+        >
+          <div
+            class="flex items-center gap-2 mb-2 text-blue-400 font-bold text-xs"
+          >
+            <span>🤖</span> Thinking...
+          </div>
+          <p class="text-sm leading-relaxed whitespace-pre-wrap">
+            {{ currentStreamingAnswer }}<span class="animate-blink">|</span>
+          </p>
+        </div>
+
+        <div
+          v-for="log in chatLogs"
+          :key="log.id"
+          class="space-y-2 animate-fade-in group"
+        >
+          <div class="flex justify-end">
+            <div
+              class="bg-slate-800 text-white px-4 py-2 rounded-2xl rounded-tr-sm text-sm max-w-[80%]"
+            >
+              {{ log.question }}
+            </div>
+          </div>
+          <div class="flex justify-start relative">
+            <button
+              @click="deleteChatLog(log.id)"
+              class="absolute -left-6 top-2 text-slate-700 hover:text-red-500 opacity-0 group-hover:opacity-100 transition text-xs"
+            >
+              🗑️
+            </button>
+            <div
+              class="bg-indigo-900/40 border border-indigo-500/20 text-indigo-100 px-4 py-3 rounded-2xl rounded-tl-sm text-sm max-w-[90%] leading-relaxed whitespace-pre-wrap"
+            >
+              {{ log.answer }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div
+      v-if="editingMemory"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      @click.self="editingMemory = null"
+    >
+      <div
+        class="bg-slate-900 w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-slate-700 flex flex-col max-h-[80vh]"
+      >
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-lg">📝 メモ詳細・編集</h3>
+          <button
+            @click="
+              deleteMemory(editingMemory.id);
+              editingMemory = null;
+            "
+            class="text-xs text-red-400 hover:text-red-300 font-bold"
+          >
+            削除
+          </button>
+        </div>
+
+        <textarea
+          v-model="editContent"
+          class="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-300 outline-none focus:border-blue-500 mb-4 resize-none leading-relaxed"
+        ></textarea>
+
+        <div class="flex gap-3">
+          <button
+            @click="editingMemory = null"
+            class="flex-1 py-3 rounded-xl font-bold text-slate-400 hover:bg-slate-800"
+          >
+            閉じる
+          </button>
+          <button
+            @click="saveUpdate"
+            class="flex-1 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-500"
+          >
+            保存する
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <footer
+      class="fixed bottom-0 w-full bg-slate-900/90 backdrop-blur border-t border-slate-800 p-4 pb-8 z-30 transition-all"
+    >
+      <div class="max-w-md mx-auto">
+        <div
+          class="flex gap-2 mb-4 justify-center bg-slate-800 p-1 rounded-full w-fit mx-auto"
+        >
+          <button
+            @click="inputMode = 'memo'"
+            class="text-xs font-bold px-6 py-2 rounded-full transition flex items-center gap-2"
+            :class="
+              inputMode === 'memo'
+                ? 'bg-white text-slate-900 shadow-md'
+                : 'text-slate-400 hover:text-white'
+            "
+          >
+            <span>📝</span> 記憶する
+          </button>
+          <button
+            @click="inputMode = 'chat'"
+            class="text-xs font-bold px-6 py-2 rounded-full transition flex items-center gap-2"
+            :class="
+              inputMode === 'chat'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            "
+          >
+            <span>🔍</span> 思い出す
+          </button>
+        </div>
+
+        <div
+          v-if="selectedFile"
+          class="relative mb-2 inline-block animate-fade-in"
+        >
+          <img
+            v-if="filePreview"
+            :src="filePreview"
+            class="h-20 rounded-lg border border-slate-600"
+          />
+          <div
+            v-else
+            class="h-20 w-20 bg-slate-800 rounded-lg border border-slate-600 flex flex-col items-center justify-center p-2"
+          >
+            <span class="text-2xl">📄</span>
+            <span
+              class="text-[8px] text-slate-400 truncate w-full text-center mt-1"
+              >{{ selectedFile.name }}</span
+            >
+          </div>
+          <button
+            @click="clearFile"
+            class="absolute -top-2 -right-2 bg-slate-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-500"
+          >
+            ×
+          </button>
+        </div>
+
+        <div class="relative flex items-end gap-2">
+          <button
+            @click="toggleListening"
+            class="w-10 h-10 flex items-center justify-center rounded-xl transition shadow-lg relative overflow-hidden"
+            :class="
+              isListening
+                ? 'bg-red-500 text-white animate-pulse'
+                : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+            "
+          >
+            <span class="relative z-10">{{ isListening ? "■" : "🎙️" }}</span>
+            <div
+              v-if="isListening"
+              class="absolute inset-0 bg-red-600 animate-ping opacity-75"
+            ></div>
+          </button>
+
+          <div v-if="inputMode === 'memo'">
+            <input
+              type="file"
+              ref="fileInputRef"
+              accept="image/*, application/pdf, text/plain, .csv"
+              class="hidden"
+              @change="handleFileSelect"
+            />
+            <button
+              @click="fileInputRef?.click()"
+              class="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 transition"
+            >
+              📎
+            </button>
+          </div>
+
+          <textarea
+            v-model="inputText"
+            rows="1"
+            class="flex-1 bg-slate-800 border border-slate-700 text-white rounded-2xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden"
+            :placeholder="
+              isListening
+                ? '聞いています...'
+                : inputMode === 'memo'
+                  ? '記憶する内容...'
+                  : '質問を入力...'
+            "
+            @keydown.enter.prevent="handleSend"
+          ></textarea>
+
+          <button
+            @click="handleSend"
+            :disabled="(!inputText && !selectedFile) || isAiThinking"
+            class="w-10 h-10 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg shadow-blue-900/50"
+          >
+            ↑
+          </button>
+        </div>
+      </div>
+    </footer>
+  </div>
+</template>
+
+<style>
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-pulse-soft {
+  animation: pulse-soft 2s infinite;
+}
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+.animate-blink {
+  animation: blink 1s infinite;
+}
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+</style>
+</file>
+
+<file path=".firebase/hosting.ZGlzdA.cache">
+sw.js,1768626163656,18788d6aea83581d333c6349bb7a8d659d50f1735cb99270be021df786732cdf
+registerSW.js,1768626163037,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+workbox-8c29f6e4.js,1768626163656,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+manifest.webmanifest,1768626163037,e23c66a17eae9a20ef9043e61f89a8261cc0022c603416c0dee217ad5189f7e6
+index.html,1768626163037,32dbb46a651d62dfa17f2550f042cff401bfb835ed5251d8e93aa59a6917717b
+firebase-messaging-sw.js,1768626162921,8d8cf84c873b19b20b1328e697daeb3ef8d264cfe3e53683cd4da02a30ee90b1
+assets/index-JRqLppNC.css,1768626163037,bb665714a89b22af86d5be99a51945acba1bc619f84d650835540a42e6c0e842
+presentation.html,1768626162922,ae3b4772b21fdc1fc26348c7df9444275707a36e81107e5ccf9737ca72ec523d
+pwa-192x192.png,1768626162922,121b31ad4cdaa0c40de36dfa9392079ab01285a12f2c6db18bfc5b935cefa843
+pwa-512x512.png,1768626162923,121b31ad4cdaa0c40de36dfa9392079ab01285a12f2c6db18bfc5b935cefa843
+apple-touch-icon.png,1768626162921,121b31ad4cdaa0c40de36dfa9392079ab01285a12f2c6db18bfc5b935cefa843
+logo.png,1768626162921,121b31ad4cdaa0c40de36dfa9392079ab01285a12f2c6db18bfc5b935cefa843
+assets/index-CvErrxRj.js,1768626163037,3a1cb74279815820d098961a4d072f54bff09c6f91763ab7b107547514f1bdc2
+</file>
+
+</files>
