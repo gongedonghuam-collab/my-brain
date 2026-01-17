@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Brain - あなただけの第2の脳</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Poppins:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        /* My Brain 用のカラーパレット */
+        --primary: #3b82f6; /* Blue 500 */
+        --primary-light: #60a5fa; /* Blue 400 */
+        --dark: #0f172a; /* Slate 900 */
+        --darker: #020617; /* Slate 950 */
+        --light: #f8fafc; /* Slate 50 */
+        --accent: #8b5cf6; /* Violet 500 */
+        --text-gray: #94a3b8;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Poppins", "Noto Sans JP", sans-serif;
+        background-color: var(--darker);
+        color: var(--light);
+        overflow-x: hidden; /* 横スクロール禁止 */
+      }
+
+      /* スライドコンテナ */
+      .slides-container {
+        width: 100vw;
+        height: 100vh;
+        overflow-y: scroll;
+        scroll-snap-type: y mandatory;
+        scroll-behavior: smooth;
+      }
+
+      /* 個別スライド */
+      section {
+        width: 100vw;
+        height: 100vh;
+        scroll-snap-align: start;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 2rem;
+        overflow: hidden;
+      }
+
+      /* 背景装飾 */
+      .bg-blob {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(100px);
+        opacity: 0.2;
+        z-index: 0;
+      }
+
+      /* タイポグラフィ */
+      h1 {
+        font-size: clamp(2.5rem, 6vw, 5rem);
+        font-weight: 900;
+        line-height: 1.1;
+        margin-bottom: 1.5rem;
+        background: linear-gradient(135deg, #fff 0%, var(--primary-light) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-align: center;
+        z-index: 1;
+      }
+
+      h2 {
+        font-size: clamp(1.5rem, 4vw, 3rem);
+        color: var(--primary);
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        margin-bottom: 2rem;
+        text-align: center;
+        z-index: 1;
+      }
+
+      h3 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        color: white;
+      }
+
+      p {
+        font-size: 1.2rem;
+        color: var(--text-gray);
+        max-width: 800px;
+        text-align: center;
+        line-height: 1.8;
+        z-index: 1;
+      }
+
+      /* アニメーション用クラス */
+      .fade-in-up {
+        opacity: 0;
+        transform: translateY(30px);
+        transition: all 0.8s ease-out;
+      }
+
+      section.active .fade-in-up {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      /* 遅延設定 */
+      .delay-100 {
+        transition-delay: 0.1s;
+      }
+      .delay-200 {
+        transition-delay: 0.2s;
+      }
+      .delay-300 {
+        transition-delay: 0.3s;
+      }
+      .delay-500 {
+        transition-delay: 0.5s;
+      }
+
+      /* パルスアニメーション */
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      .pulse-badge {
+        animation: pulse 2s infinite;
+      }
+
+      /* --- ビジュアル要素 --- */
+
+      /* スマホモック */
+      .phone {
+        width: 280px;
+        height: 580px;
+        background: #0f172a;
+        border-radius: 40px;
+        border: 8px solid #334155;
+        position: relative;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        z-index: 2;
+      }
+      .notch {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 120px;
+        height: 25px;
+        background: #334155;
+        border-bottom-left-radius: 16px;
+        border-bottom-right-radius: 16px;
+        z-index: 10;
+      }
+      .screen {
+        flex: 1;
+        background: #020617;
+        overflow: hidden;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        color: white;
+        padding: 20px;
+      }
+
+      /* チャット吹き出し */
+      .chat-bubble {
+        padding: 12px 16px;
+        border-radius: 16px;
+        font-size: 0.8rem;
+        margin-bottom: 10px;
+        max-width: 85%;
+        line-height: 1.5;
+      }
+      .chat-user {
+        background-color: #1e293b;
+        align-self: flex-end;
+        border-top-right-radius: 4px;
+      }
+      .chat-ai {
+        background-color: rgba(59, 130, 246, 0.2);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: #bfdbfe;
+        align-self: flex-start;
+        border-top-left-radius: 4px;
+      }
+
+      /* カード */
+      .problem-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        width: 100%;
+        max-width: 1000px;
+        margin-top: 40px;
+        z-index: 2;
+      }
+      .problem-card {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 30px;
+        border-radius: 20px;
+        text-align: center;
+        transition: transform 0.3s;
+      }
+      .problem-card:hover {
+        transform: translateY(-5px);
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        display: block;
+      }
+
+      /* 解決策アイコン */
+      .solution-row {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 24px;
+        margin-top: 40px;
+        z-index: 2;
+      }
+      .feature-box {
+        width: 160px;
+        height: 160px;
+        background: linear-gradient(145deg, #1e293b, #0f172a);
+        border-radius: 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+      }
+
+      /* ボタン */
+      .btn-primary {
+        background: var(--primary);
+        color: white;
+        font-weight: bold;
+        padding: 1rem 3rem;
+        border-radius: 50px;
+        text-decoration: none;
+        font-size: 1.2rem;
+        transition: all 0.3s;
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        margin-top: 30px;
+        display: inline-block;
+      }
+      .btn-primary:hover {
+        transform: scale(1.05);
+        box-shadow: 0 0 30px rgba(59, 130, 246, 0.8);
+      }
+
+      /* ナビゲーションヒント */
+      .nav-hint {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.3);
+        z-index: 100;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="nav-hint">Scroll or Use Arrow Keys ↓</div>
+
+    <div class="slides-container" id="container">
+      <section id="s1">
+        <div
+          class="bg-blob"
+          style="
+            top: -10%;
+            left: -10%;
+            width: 600px;
+            height: 600px;
+            background: var(--primary);
+          "
+        ></div>
+
+        <div style="margin-bottom: 20px">
+          <img
+            src="/logo.png?v=3"
+            width="80"
+            height="80"
+            style="
+              border-radius: 20px;
+              box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+            "
+            class="fade-in-up"
+          />
+        </div>
+
+        <p
+          class="fade-in-up"
+          style="
+            letter-spacing: 0.2em;
+            color: var(--primary-light);
+            font-weight: bold;
+            margin-bottom: 1rem;
+          "
+        >
+          AI KNOWLEDGE BASE
+        </p>
+        <h1 class="fade-in-up delay-100">
+          あなたの記憶を、<br />AIが拡張する。
+        </h1>
+        <p class="fade-in-up delay-200">
+          忘れても大丈夫。あなただけの「第2の脳」がここにあります。
+        </p>
+
+        <a href="/" class="btn-primary fade-in-up delay-300">今すぐ始める</a>
+
+        <div
+          class="fade-in-up delay-500"
+          style="margin-top: 40px; position: relative"
+        >
+          <div class="phone" style="transform: rotate(-5deg) translateY(20px)">
+            <div class="notch"></div>
+            <div class="screen">
+              <div
+                style="
+                  margin-top: 40px;
+                  font-weight: 900;
+                  font-size: 1.2rem;
+                  text-align: center;
+                  margin-bottom: 20px;
+                "
+              >
+                My Brain
+              </div>
+              <div class="chat-bubble chat-user">
+                先週の会議で決まったA社の予算っていくらだっけ？
+              </div>
+              <div class="chat-bubble chat-ai">
+                先週木曜日のメモによると、A社の予算は「300万円（税抜）」で承認されています。<br /><br />関連資料：<br />📄
+                240115_議事録.pdf
+              </div>
+              <div class="chat-bubble chat-user">ありがとう！助かった。</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s2">
+        <h2 class="fade-in-up">The Problem</h2>
+        <h1
+          class="fade-in-up delay-100"
+          style="font-size: 2.5rem; margin-bottom: 3rem"
+        >
+          脳の容量、足りてますか？
+        </h1>
+
+        <div class="problem-grid fade-in-up delay-200">
+          <div class="problem-card">
+            <span class="icon">🌫️</span>
+            <h3>思い出せない</h3>
+            <p style="font-size: 0.9rem">
+              「あの件、どうなったっけ？」<br />大事な情報を忘れてしまい、<br />信頼を失う恐怖。
+            </p>
+          </div>
+          <div class="problem-card">
+            <span class="icon">🔍</span>
+            <h3>見つからない</h3>
+            <p style="font-size: 0.9rem">
+              LINE、Slack、メモ帳...<br />情報が散らばりすぎて、<br />検索に時間を浪費する毎日。
+            </p>
+          </div>
+          <div class="problem-card">
+            <span class="icon">🤯</span>
+            <h3>整理できない</h3>
+            <p style="font-size: 0.9rem">
+              情報はインプットするだけ。<br />整理する時間がなく、<br />知識として定着しない。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="s3">
+        <div
+          class="bg-blob"
+          style="
+            top: 50%;
+            right: -10%;
+            width: 600px;
+            height: 600px;
+            background: var(--accent);
+          "
+        ></div>
+
+        <h2 class="fade-in-up">Solution</h2>
+        <h1 class="fade-in-up delay-100">放り込むだけで、整理完了。</h1>
+        <p class="fade-in-up delay-200">
+          My
+          Brainは、あらゆる情報を一元管理し、AIがあなたの思考をサポートします。
+        </p>
+
+        <div class="solution-row fade-in-up delay-300">
+          <div class="feature-box">
+            <span class="icon" style="margin: 0">📝</span>
+            <span style="font-weight: bold; margin-top: 10px">メモ・画像</span>
+            <span style="font-size: 0.7rem; opacity: 0.7; margin-top: 5px"
+              >何でも保存</span
+            >
+          </div>
+          <div class="feature-box">
+            <span class="icon" style="margin: 0">🌐</span>
+            <span style="font-weight: bold; margin-top: 10px">Web保存</span>
+            <span style="font-size: 0.7rem; opacity: 0.7; margin-top: 5px"
+              >URL貼るだけ</span
+            >
+          </div>
+          <div
+            class="feature-box"
+            style="
+              border-color: var(--primary);
+              box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+            "
+          >
+            <span class="icon" style="margin: 0">🤖</span>
+            <span
+              style="
+                font-weight: bold;
+                margin-top: 10px;
+                color: var(--primary-light);
+              "
+              >AI検索</span
+            >
+            <span style="font-size: 0.7rem; opacity: 0.7; margin-top: 5px"
+              >会話で思い出す</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <section id="s4">
+        <h2 class="fade-in-up">AI Core</h2>
+        <h1 class="fade-in-up delay-100">
+          ただの検索じゃない。<br />文脈を理解する「対話」です。
+        </h1>
+
+        <div
+          style="
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 40px;
+          "
+          class="fade-in-up delay-200"
+        >
+          <div
+            style="
+              width: 300px;
+              background: #1e293b;
+              padding: 20px;
+              border-radius: 20px;
+              border: 1px solid #334155;
+            "
+          >
+            <div style="font-size: 2rem; margin-bottom: 10px">🧠</div>
+            <h3 style="font-size: 1.2rem">曖昧な記憶でOK</h3>
+            <p style="font-size: 0.9rem; text-align: left">
+              「先月の飲み会で話題になった映画なんだっけ？」のような、キーワードを覚えていなくてもAIが推測して答えます。
+            </p>
+          </div>
+
+          <div
+            style="
+              width: 300px;
+              background: #1e293b;
+              padding: 20px;
+              border-radius: 20px;
+              border: 1px solid #334155;
+            "
+          >
+            <div style="font-size: 2rem; margin-bottom: 10px">📊</div>
+            <h3 style="font-size: 1.2rem">構造化・図解</h3>
+            <p style="font-size: 0.9rem; text-align: left">
+              複雑な情報は、AIが自動でマインドマップや表に変換。視覚的に理解を助けます。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="s5">
+        <p style="color: var(--primary); font-weight: bold" class="fade-in-up">
+          FREE ACCESS
+        </p>
+        <h1 class="fade-in-up delay-100">あなたの脳を、アップデートしよう。</h1>
+
+        <div class="fade-in-up delay-200" style="margin: 30px 0">
+          <div
+            class="pulse-badge"
+            style="
+              background: var(--accent);
+              color: white;
+              padding: 8px 20px;
+              border-radius: 50px;
+              font-weight: bold;
+              margin-bottom: 20px;
+            "
+          >
+            🚀 ベータ版につき完全無料
+          </div>
+        </div>
+
+        <a href="/" class="btn-primary fade-in-up delay-300">My Brain を開く</a>
+
+        <p
+          class="fade-in-up delay-500"
+          style="margin-top: 50px; font-size: 0.8rem; opacity: 0.5"
+        >
+          Designed by Takumi Yoshioka
+        </p>
+      </section>
+    </div>
+
+    <script>
+      // Intersection Observer
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("active");
+            } else {
+              entry.target.classList.remove("active");
+            }
+          });
+        },
+        { threshold: 0.3 },
+      );
+
+      document.querySelectorAll("section").forEach((section) => {
+        observer.observe(section);
+      });
+
+      // Key Nav
+      document.addEventListener("keydown", (e) => {
+        const container = document.getElementById("container");
+        if (e.key === "ArrowDown" || e.key === "ArrowRight" || e.key === " ") {
+          e.preventDefault();
+          container.scrollBy({ top: window.innerHeight, behavior: "smooth" });
+        } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+          e.preventDefault();
+          container.scrollBy({ top: -window.innerHeight, behavior: "smooth" });
+        }
+      });
+    </script>
+  </body>
+</html>

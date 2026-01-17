@@ -1,21 +1,21 @@
 // public/firebase-messaging-sw.js
 importScripts(
-  "https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"
+  "https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js",
 );
 importScripts(
-  "https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"
+  "https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js",
 );
 
 // Firebase設定 (ご自身のプロジェクト設定に合わせてください)
 // ※ vite.envの内容はここでは使えないため、ハードコードするかビルドプロセスで置換が必要です
 const firebaseConfig = {
-  apiKey: "AIzaSyCd_kTXZpRbQcNZkd6V2-QIAQtBwXzwv40",
-  authDomain: "hair-link-app-ee2a3.firebaseapp.com",
-  projectId: "hair-link-app-ee2a3",
-  storageBucket: "hair-link-app-ee2a3.firebasestorage.app",
-  messagingSenderId: "501197211494",
-  appId: "1:501197211494:web:93f6bb5b057f0df7872aa7",
-  measurementId: "G-2SLGR0821E",
+  apiKey: "AIzaSyASEFgUclaLh1fvHW5k0OSIluT7D2Ekq2M",
+  authDomain: "my-brain-145b1.firebaseapp.com",
+  projectId: "my-brain-145b1",
+  storageBucket: "my-brain-145b1.firebasestorage.app",
+  messagingSenderId: "431208476657",
+  appId: "1:431208476657:web:23f150bffbe65e6d479e50",
+  measurementId: "G-T0GV83YGEG",
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -26,7 +26,7 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log(
     "[firebase-messaging-sw.js] Received background message ",
-    payload
+    payload,
   );
 
   const notificationTitle = payload.notification.title;

@@ -18,9 +18,7 @@ import {
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-// import { dot } from "mathjs"; // 軽量化のため手動計算します
 
-// --- 型定義 ---
 export interface Memory {
   id: string;
   userId: string;
@@ -30,8 +28,8 @@ export interface Memory {
   createdAt: any;
   hasImage?: boolean;
   fileType?: string;
-  embedding?: number[]; // ★追加: ベクトルデータ
-  sourceUrl?: string; // ★追加: 引用元URL
+  embedding?: number[];
+  sourceUrl?: string;
 }
 
 export interface ChatLog {
@@ -40,9 +38,8 @@ export interface ChatLog {
   question: string;
   answer: string;
   createdAt: any;
-  mermaidCode?: string; // ★追加: マインドマップコード
+  mermaidCode?: string;
   action?: {
-    // ★追加: アクション（カレンダーなど）
     title: string;
     date?: string;
     url: string;
@@ -56,15 +53,12 @@ export interface User {
   photoURL?: string | null;
 }
 
-// --- グローバルステート ---
 const currentUser = ref<User | null>(null);
 const memories = ref<Memory[]>([]);
 const chatLogs = ref<ChatLog[]>([]);
 const loading = ref(false);
 const isAiThinking = ref(false);
 const activeTag = ref<string | null>(null);
-
-// --- ヘルパー関数 ---
 
 // 画像Base64変換
 const fileToGenerativePart = async (file: File) => {
@@ -81,7 +75,7 @@ const fileToGenerativePart = async (file: File) => {
   );
 };
 
-// コサイン類似度計算 (ベクトル検索用)
+// コサイン類似度計算
 const cosineSimilarity = (vecA: number[], vecB: number[]) => {
   if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
   let dotProduct = 0;
@@ -96,13 +90,11 @@ const cosineSimilarity = (vecA: number[], vecB: number[]) => {
 };
 
 export function useMyBrain() {
-  // Embeddingモデル取得
   const getEmbeddingModel = (apiKey: string) => {
     const genAI = new GoogleGenerativeAI(apiKey);
     return genAI.getGenerativeModel({ model: "text-embedding-004" });
   };
 
-  // 生成モデル名取得
   const getSmartModelName = async (apiKey: string): Promise<string> => {
     try {
       const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
@@ -122,7 +114,6 @@ export function useMyBrain() {
     }
   };
 
-  // 1. 認証 & 初期ロード
   const initAuth = () => {
     onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -158,17 +149,18 @@ export function useMyBrain() {
     window.location.reload();
   };
 
-  // 2. データ取得 (全件取得してクライアント側でベクトル検索するため、limitを緩和)
-  // ※本来はVector DBを使うべきですが、個人用なら数千件まではこれで十分高速です
+  // 2. データ取得
   const fetchMemories = async () => {
     if (!currentUser.value) return;
     loading.value = true;
     try {
+      // ★修正: limit(500) を削除し、全件取得するように変更
+      // ※件数が多い場合、初回の読み込みに少し時間がかかる可能性がありますが、
+      // 取得後はクライアント側でキャッシュされるため高速に動作します。
       let q = query(
         collection(db, "memories"),
         where("userId", "==", currentUser.value.uid),
         orderBy("createdAt", "desc"),
-        limit(500), // 直近500件を取得（ベクトル検索の母数）
       );
       const snap = await getDocs(q);
       memories.value = snap.docs.map(
@@ -192,12 +184,12 @@ export function useMyBrain() {
         collection(db, "chat_logs"),
         where("userId", "==", currentUser.value.uid),
         orderBy("createdAt", "desc"),
-        limit(50),
+        limit(50), // チャット履歴は表示用なので50件制限のままでOK
       );
       const snap = await getDocs(q);
-      chatLogs.value = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() }) as ChatLog,
-      );
+      chatLogs.value = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as ChatLog)
+        .reverse();
     } catch (e) {
       console.error("Fetch chat logs error:", e);
     }
@@ -205,7 +197,6 @@ export function useMyBrain() {
 
   const selectTag = async (tag: string | null) => {
     activeTag.value = tag;
-    // クライアントサイドフィルタリング (データ再取得はしない)
   };
 
   const filteredMemories = computed(() => {
@@ -213,7 +204,7 @@ export function useMyBrain() {
     return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
   });
 
-  // 3. メモ追加 (Text / Image / File)
+  // 3. メモ追加
   const addMemory = async (text: string, file?: File | null) => {
     if (!currentUser.value) return;
     isAiThinking.value = true;
@@ -224,7 +215,6 @@ export function useMyBrain() {
       const fileTypeLabel = isImage ? "画像" : isPdf ? "PDF" : "ファイル";
       const initialText = file ? `(${fileTypeLabel}解析中...) ${text}` : text;
 
-      // 仮保存
       const docRef = await addDoc(collection(db, "memories"), {
         userId: currentUser.value.uid,
         text: initialText,
@@ -272,20 +262,17 @@ export function useMyBrain() {
           ? `【${fileTypeLabel}】${text}\n\n${aiData.fullText}`
           : text;
 
-        // ★ベクトル計算
         const embedModel = getEmbeddingModel(apiKey);
         const embedResult = await embedModel.embedContent(finalContent);
         const embedding = embedResult.embedding.values;
 
-        // 保存
         await updateDoc(docRef, {
           text: finalContent,
           aiSummary: aiData.summary,
           tags: aiData.tags,
-          embedding: embedding, // ベクトル保存
+          embedding: embedding,
         });
 
-        // ローカル更新
         const newMem: Memory = {
           id: docRef.id,
           userId: currentUser.value.uid,
@@ -306,13 +293,11 @@ export function useMyBrain() {
     }
   };
 
-  // ★ URL読み込み機能
   const addUrlMemory = async (url: string) => {
     if (!currentUser.value) return;
     isAiThinking.value = true;
 
     try {
-      // Functions呼び出し
       const functions = getFunctions();
       const scrapeFunc = httpsCallable(functions, "scrapeUrl");
       const result: any = await scrapeFunc({ url });
@@ -320,8 +305,6 @@ export function useMyBrain() {
       if (result.data.success) {
         const { title, content } = result.data;
         const fullText = `【WEB記事】${title}\nURL: ${url}\n\n${content}`;
-
-        // 通常のメモとして保存（ベクトル計算含む）
         await addMemory(fullText);
       }
     } catch (e: any) {
@@ -333,7 +316,6 @@ export function useMyBrain() {
   };
 
   const updateMemory = async (id: string, newText: string) => {
-    // 既存の実装と同じ
     if (!currentUser.value || !newText.trim()) return;
     try {
       await updateDoc(doc(db, "memories", id), { text: newText });
@@ -355,7 +337,7 @@ export function useMyBrain() {
     chatLogs.value = chatLogs.value.filter((l) => l.id !== id);
   };
 
-  // 4. 最強のチャット機能 (ベクトル検索 + マインドマップ + アクション)
+  // 4. チャット機能
   const askBrain = async (question: string): Promise<string> => {
     if (!question.trim() || !currentUser.value) return "";
     isAiThinking.value = true;
@@ -363,12 +345,10 @@ export function useMyBrain() {
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
-      // 1. 質問のベクトル化
       const embedModel = getEmbeddingModel(apiKey);
       const qEmbed = await embedModel.embedContent(question);
       const qVec = qEmbed.embedding.values;
 
-      // 2. 関連度順にソート (ベクトル検索)
       const scoredMemories = memories.value
         .map((m) => ({
           ...m,
@@ -376,7 +356,6 @@ export function useMyBrain() {
         }))
         .sort((a, b) => b.score - a.score);
 
-      // 上位30件だけをコンテキストに含める（これで100件の壁を突破）
       const contextMemories = scoredMemories.slice(0, 30);
       const context = contextMemories
         .map(
@@ -385,7 +364,6 @@ export function useMyBrain() {
         )
         .join("\n\n");
 
-      // 3. AIへの指示（マインドマップとアクションをJSONで要求）
       const targetModelName = await getSmartModelName(apiKey);
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: targetModelName });
@@ -408,7 +386,6 @@ export function useMyBrain() {
       const result = await model.generateContent(prompt);
       const rawText = result.response.text();
 
-      // JSONパース（AIがMarkdown記法をつけることがあるので除去）
       const cleanJson = rawText
         .replace(/```json/g, "")
         .replace(/```/g, "")
@@ -417,22 +394,18 @@ export function useMyBrain() {
       try {
         data = JSON.parse(cleanJson);
       } catch (e) {
-        // パース失敗時はそのままテキストとして扱う
         data = { answer: rawText, mermaid: null, action: null };
       }
 
-      // アクションURL生成
       let actionUrl = "";
       if (data.action && data.action.title) {
         const baseUrl =
           "https://www.google.com/calendar/render?action=TEMPLATE";
         const textParam = `&text=${encodeURIComponent(data.action.title)}`;
         const detailsParam = `&details=${encodeURIComponent(data.action.description || "")}`;
-        // 日時はAIの推定が曖昧なら現在時刻を入れるなどの処理が必要だが、今回は簡易的に
         actionUrl = `${baseUrl}${textParam}${detailsParam}`;
       }
 
-      // 4. ログ保存
       const logData = {
         userId: currentUser.value.uid,
         question: question,
@@ -446,13 +419,13 @@ export function useMyBrain() {
 
       const logRef = await addDoc(collection(db, "chat_logs"), logData);
 
-      chatLogs.value.unshift({
+      chatLogs.value.push({
         id: logRef.id,
         ...logData,
         createdAt: new Date(),
       } as any);
 
-      return data.answer; // チャットUIへの返り値
+      return data.answer;
     } catch (e: any) {
       return "エラー: " + e.message;
     } finally {
@@ -471,7 +444,7 @@ export function useMyBrain() {
   return {
     currentUser,
     memories,
-    filteredMemories, // ★これを使う
+    filteredMemories,
     chatLogs,
     loading,
     isAiThinking,
@@ -480,7 +453,7 @@ export function useMyBrain() {
     initAuth,
     logout,
     addMemory,
-    addUrlMemory, // ★公開
+    addUrlMemory,
     updateMemory,
     deleteMemory,
     askBrain,

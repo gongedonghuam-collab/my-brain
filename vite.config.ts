@@ -12,27 +12,25 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "apple-touch-icon.png", "logo.png"],
       manifest: {
-        name: "NextNs - 看護師国家試験対策",
-        short_name: "NextNs",
-        // 内容を微修正してマニフェストの更新を促す
-        description:
-          "看護師国家試験対策のための学習支援アプリ。最新の過去問とAI解説を搭載。",
-        theme_color: "#ffffff",
-        background_color: "#ffffff",
+        name: "My Brain - AI Knowledge Base",
+        short_name: "My Brain",
+        description: "AIがあなたの記憶をサポートする、あなただけの第2の脳。",
+        theme_color: "#0f172a",
+        background_color: "#0f172a",
         display: "standalone",
         icons: [
           {
-            src: "logo.png",
+            src: "logo.png?v=3", // ★ここを変更
             sizes: "192x192",
             type: "image/png",
           },
           {
-            src: "logo.png",
+            src: "logo.png?v=3", // ★ここを変更
             sizes: "512x512",
             type: "image/png",
           },
           {
-            src: "logo.png",
+            src: "logo.png?v=3", // ★ここを変更
             sizes: "512x512",
             type: "image/png",
             purpose: "any maskable",

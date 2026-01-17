@@ -4,9 +4,13 @@ import {
   getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  sendEmailVerification,
 } from "firebase/auth";
-import { getFirestore, doc, setDoc } from "firebase/firestore";
+import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 import { useRouter } from "vue-router";
+import { googleProvider } from "@/../firebase"; // ★修正: 正しいパスに変更
 
 const router = useRouter();
 const isLoginMode = ref(true);
@@ -14,30 +18,88 @@ const email = ref("");
 const password = ref("");
 const loading = ref(false);
 
+const auth = getAuth();
+const db = getFirestore();
+
+// Googleログイン処理
+const handleGoogleLogin = async () => {
+  loading.value = true;
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+
+    const userRef = doc(db, "users", user.uid);
+    const userSnap = await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+      await setDoc(userRef, {
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        role: "student",
+        createdAt: new Date(),
+      });
+    }
+
+    router.push("/app");
+  } catch (e: any) {
+    console.error(e);
+    alert("Googleログインに失敗しました: " + e.message);
+  } finally {
+    loading.value = false;
+  }
+};
+
+// メールログイン処理
 const handleSubmit = async () => {
   if (!email.value || !password.value) return alert("入力してください");
   loading.value = true;
-  const auth = getAuth();
-  const db = getFirestore();
 
   try {
     if (isLoginMode.value) {
-      await signInWithEmailAndPassword(auth, email.value, password.value);
-      router.push("/");
+      // --- ログイン ---
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email.value,
+        password.value,
+      );
+      const user = userCredential.user;
+
+      if (!user.emailVerified) {
+        router.push("/verify-email");
+      } else {
+        router.push("/app");
+      }
     } else {
+      // --- 新規登録 ---
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email.value,
         password.value,
       );
-      await setDoc(doc(db, "users", userCredential.user.uid), {
+      const user = userCredential.user;
+
+      await setDoc(doc(db, "users", user.uid), {
         email: email.value,
+        role: "student",
         createdAt: new Date(),
       });
-      router.push("/");
+
+      await sendEmailVerification(user);
+      alert(
+        "確認メールを送信しました。\nメール内のリンクをクリックしてください。",
+      );
+      router.push("/verify-email");
     }
   } catch (e: any) {
-    alert(e.message);
+    let msg = "エラーが発生しました";
+    if (e.code === "auth/email-already-in-use")
+      msg = "このメールアドレスは既に登録されています";
+    if (e.code === "auth/weak-password")
+      msg = "パスワードは6文字以上にしてください";
+    if (e.code === "auth/invalid-credential")
+      msg = "メールアドレスまたはパスワードが間違っています";
+    alert(msg);
   } finally {
     loading.value = false;
   }
@@ -63,6 +125,25 @@ const handleSubmit = async () => {
       </div>
 
       <div class="space-y-4">
+        <button
+          @click="handleGoogleLogin"
+          :disabled="loading"
+          class="w-full bg-white text-slate-700 font-bold py-3 rounded-xl shadow-md hover:bg-slate-50 transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          <img
+            src="https://www.svgrepo.com/show/475656/google-color.svg"
+            class="w-5 h-5"
+            alt="Google"
+          />
+          Googleで{{ isLoginMode ? "ログイン" : "登録" }}
+        </button>
+
+        <div class="flex items-center gap-2 my-4">
+          <div class="h-px bg-slate-700 flex-1"></div>
+          <span class="text-slate-500 text-xs">または</span>
+          <div class="h-px bg-slate-700 flex-1"></div>
+        </div>
+
         <div>
           <label class="block text-xs font-bold text-slate-400 mb-1 ml-1"
             >Email</label
@@ -93,8 +174,8 @@ const handleSubmit = async () => {
             loading
               ? "処理中..."
               : isLoginMode
-                ? "脳に接続 (ログイン)"
-                : "脳を作成 (新規登録)"
+                ? "メールでログイン"
+                : "メールで登録"
           }}
         </button>
 

@@ -54,13 +54,31 @@ public/
   apple-touch-icon.png
   firebase-messaging-sw.js
   logo.png
-  presentation.html
+  lp.html
   pwa-192x192.png
   pwa-512x512.png
 src/
   components/
+    AppHeader/
+      AppHeader.vue
+      useAppHeader.ts
+    ChatList/
+      ChatList.vue
+      useChatList.ts
+    InputFooter/
+      InputFooter.vue
+      useInputFooter.ts
+    MemoList/
+      MemoList.vue
+      useMemoList.ts
+    MemoryModal/
+      MemoryModal.vue
+      useMemoryModal.ts
     NotificationBell/
       NotificationBell.vue
+    TagFilter/
+      TagFilter.vue
+      useTagFilter.ts
   composables/
     useMyBrain.ts
     useNotifications.ts
@@ -79,8 +97,9 @@ src/
       BaseModal.vue
   views/
     HomeView/
-      HomeView.ts
       HomeView.vue
+    LandingView/
+      LandingView.vue
     LoginView/
       LoginView.ts
       LoginView.vue
@@ -94,11 +113,13 @@ src/
 .firebaserc
 .gitignore
 firebase.json
+firebase.ts
 firestore.indexes.json
 firestore.rules
 index.html
 package.json
 postcss.config.js
+README.md
 tailwind.config.js
 tsconfig.json
 vite.config.ts
@@ -107,497 +128,2089 @@ vite.config.ts
 <files>
 This section contains the contents of the repository's files.
 
-<file path="src/composables/useMyBrain.ts">
-import { ref, computed } from "vue";
-import { db, auth } from "@/firebase";
-import {
-  doc,
-  getDoc,
-  collection,
-  query,
-  limit,
-  getDocs,
-  addDoc,
-  deleteDoc,
-  updateDoc,
-  setDoc,
-  orderBy,
-  serverTimestamp,
-  where,
-} from "firebase/firestore";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { getFunctions, httpsCallable } from "firebase/functions";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-// import { dot } from "mathjs"; // 軽量化のため手動計算します
-
-// --- 型定義 ---
-export interface Memory {
-  id: string;
-  userId: string;
-  text: string;
-  aiSummary?: string;
-  tags?: string[];
-  createdAt: any;
-  hasImage?: boolean;
-  fileType?: string;
-  embedding?: number[]; // ★追加: ベクトルデータ
-  sourceUrl?: string; // ★追加: 引用元URL
-}
-
-export interface ChatLog {
-  id: string;
-  userId: string;
-  question: string;
-  answer: string;
-  createdAt: any;
-  mermaidCode?: string; // ★追加: マインドマップコード
-  action?: {
-    // ★追加: アクション（カレンダーなど）
-    title: string;
-    date?: string;
-    url: string;
-  };
-}
-
-export interface User {
-  uid: string;
-  email: string;
-  displayName?: string;
-  photoURL?: string | null;
-}
-
-// --- グローバルステート ---
-const currentUser = ref<User | null>(null);
-const memories = ref<Memory[]>([]);
-const chatLogs = ref<ChatLog[]>([]);
-const loading = ref(false);
-const isAiThinking = ref(false);
-const activeTag = ref<string | null>(null);
-
-// --- ヘルパー関数 ---
-
-// 画像Base64変換
-const fileToGenerativePart = async (file: File) => {
-  return new Promise<{ inlineData: { data: string; mimeType: string } }>(
-    (resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = (reader.result as string).split(",")[1];
-        resolve({ inlineData: { data: base64String, mimeType: file.type } });
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    },
-  );
-};
-
-// コサイン類似度計算 (ベクトル検索用)
-const cosineSimilarity = (vecA: number[], vecB: number[]) => {
-  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < vecA.length; i++) {
-    dotProduct += vecA[i] * vecB[i];
-    normA += vecA[i] * vecA[i];
-    normB += vecB[i] * vecB[i];
-  }
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-};
-
-export function useMyBrain() {
-  // Embeddingモデル取得
-  const getEmbeddingModel = (apiKey: string) => {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    return genAI.getGenerativeModel({ model: "text-embedding-004" });
-  };
-
-  // 生成モデル名取得
-  const getSmartModelName = async (apiKey: string): Promise<string> => {
-    try {
-      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-      const listResponse = await fetch(listUrl);
-      if (!listResponse.ok) return "gemini-1.5-flash";
-      const listData = await listResponse.json();
-      const generationModels = (listData.models || []).filter((m: any) =>
-        m.supportedGenerationMethods?.includes("generateContent"),
-      );
-      const flash = generationModels.find((m: any) =>
-        m.name.includes("gemini-1.5-flash"),
-      );
-      const targetModelObj = flash || generationModels[0];
-      return targetModelObj?.name.replace("models/", "") || "gemini-1.5-flash";
-    } catch (e) {
-      return "gemini-1.5-flash";
-    }
-  };
-
-  // 1. 認証 & 初期ロード
-  const initAuth = () => {
-    onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          currentUser.value = {
-            uid: user.uid,
-            email: user.email || "",
-            displayName: data.displayName,
-            photoURL: user.photoURL || undefined,
-          };
-        } else {
-          const newUser = {
-            uid: user.uid,
-            email: user.email || "",
-            createdAt: serverTimestamp(),
-          };
-          await setDoc(doc(db, "users", user.uid), newUser);
-          currentUser.value = newUser;
-        }
-        await Promise.all([fetchMemories(), fetchChatLogs()]);
-      } else {
-        currentUser.value = null;
-        memories.value = [];
-        chatLogs.value = [];
+<file path="public/lp.html">
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Brain - あなただけの第2の脳</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Poppins:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        /* My Brain 用のカラーパレット */
+        --primary: #3b82f6; /* Blue 500 */
+        --primary-light: #60a5fa; /* Blue 400 */
+        --dark: #0f172a; /* Slate 900 */
+        --darker: #020617; /* Slate 950 */
+        --light: #f8fafc; /* Slate 50 */
+        --accent: #8b5cf6; /* Violet 500 */
+        --text-gray: #94a3b8;
       }
-    });
-  };
 
-  const logout = async () => {
-    await signOut(auth);
-    window.location.reload();
-  };
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-  // 2. データ取得 (全件取得してクライアント側でベクトル検索するため、limitを緩和)
-  // ※本来はVector DBを使うべきですが、個人用なら数千件まではこれで十分高速です
-  const fetchMemories = async () => {
-    if (!currentUser.value) return;
-    loading.value = true;
-    try {
-      let q = query(
-        collection(db, "memories"),
-        where("userId", "==", currentUser.value.uid),
-        orderBy("createdAt", "desc"),
-        limit(500), // 直近500件を取得（ベクトル検索の母数）
+      body {
+        font-family: "Poppins", "Noto Sans JP", sans-serif;
+        background-color: var(--darker);
+        color: var(--light);
+        overflow-x: hidden; /* 横スクロール禁止 */
+      }
+
+      /* スライドコンテナ */
+      .slides-container {
+        width: 100vw;
+        height: 100vh;
+        overflow-y: scroll;
+        scroll-snap-type: y mandatory;
+        scroll-behavior: smooth;
+      }
+
+      /* 個別スライド */
+      section {
+        width: 100vw;
+        height: 100vh;
+        scroll-snap-align: start;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 2rem;
+        overflow: hidden;
+      }
+
+      /* 背景装飾 */
+      .bg-blob {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(100px);
+        opacity: 0.2;
+        z-index: 0;
+      }
+
+      /* タイポグラフィ */
+      h1 {
+        font-size: clamp(2.5rem, 6vw, 5rem);
+        font-weight: 900;
+        line-height: 1.1;
+        margin-bottom: 1.5rem;
+        background: linear-gradient(135deg, #fff 0%, var(--primary-light) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-align: center;
+        z-index: 1;
+      }
+
+      h2 {
+        font-size: clamp(1.5rem, 4vw, 3rem);
+        color: var(--primary);
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        margin-bottom: 2rem;
+        text-align: center;
+        z-index: 1;
+      }
+
+      h3 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        color: white;
+      }
+
+      p {
+        font-size: 1.2rem;
+        color: var(--text-gray);
+        max-width: 800px;
+        text-align: center;
+        line-height: 1.8;
+        z-index: 1;
+      }
+
+      /* アニメーション用クラス */
+      .fade-in-up {
+        opacity: 0;
+        transform: translateY(30px);
+        transition: all 0.8s ease-out;
+      }
+
+      section.active .fade-in-up {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      /* 遅延設定 */
+      .delay-100 {
+        transition-delay: 0.1s;
+      }
+      .delay-200 {
+        transition-delay: 0.2s;
+      }
+      .delay-300 {
+        transition-delay: 0.3s;
+      }
+      .delay-500 {
+        transition-delay: 0.5s;
+      }
+
+      /* パルスアニメーション */
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      .pulse-badge {
+        animation: pulse 2s infinite;
+      }
+
+      /* --- ビジュアル要素 --- */
+
+      /* スマホモック */
+      .phone {
+        width: 280px;
+        height: 580px;
+        background: #0f172a;
+        border-radius: 40px;
+        border: 8px solid #334155;
+        position: relative;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        z-index: 2;
+      }
+      .notch {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 120px;
+        height: 25px;
+        background: #334155;
+        border-bottom-left-radius: 16px;
+        border-bottom-right-radius: 16px;
+        z-index: 10;
+      }
+      .screen {
+        flex: 1;
+        background: #020617;
+        overflow: hidden;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        color: white;
+        padding: 20px;
+      }
+
+      /* チャット吹き出し */
+      .chat-bubble {
+        padding: 12px 16px;
+        border-radius: 16px;
+        font-size: 0.8rem;
+        margin-bottom: 10px;
+        max-width: 85%;
+        line-height: 1.5;
+      }
+      .chat-user {
+        background-color: #1e293b;
+        align-self: flex-end;
+        border-top-right-radius: 4px;
+      }
+      .chat-ai {
+        background-color: rgba(59, 130, 246, 0.2);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: #bfdbfe;
+        align-self: flex-start;
+        border-top-left-radius: 4px;
+      }
+
+      /* カード */
+      .problem-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        width: 100%;
+        max-width: 1000px;
+        margin-top: 40px;
+        z-index: 2;
+      }
+      .problem-card {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 30px;
+        border-radius: 20px;
+        text-align: center;
+        transition: transform 0.3s;
+      }
+      .problem-card:hover {
+        transform: translateY(-5px);
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        display: block;
+      }
+
+      /* 解決策アイコン */
+      .solution-row {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 24px;
+        margin-top: 40px;
+        z-index: 2;
+      }
+      .feature-box {
+        width: 160px;
+        height: 160px;
+        background: linear-gradient(145deg, #1e293b, #0f172a);
+        border-radius: 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+      }
+
+      /* ボタン */
+      .btn-primary {
+        background: var(--primary);
+        color: white;
+        font-weight: bold;
+        padding: 1rem 3rem;
+        border-radius: 50px;
+        text-decoration: none;
+        font-size: 1.2rem;
+        transition: all 0.3s;
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        margin-top: 30px;
+        display: inline-block;
+      }
+      .btn-primary:hover {
+        transform: scale(1.05);
+        box-shadow: 0 0 30px rgba(59, 130, 246, 0.8);
+      }
+
+      /* ナビゲーションヒント */
+      .nav-hint {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.3);
+        z-index: 100;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="nav-hint">Scroll or Use Arrow Keys ↓</div>
+
+    <div class="slides-container" id="container">
+      <section id="s1">
+        <div
+          class="bg-blob"
+          style="
+            top: -10%;
+            left: -10%;
+            width: 600px;
+            height: 600px;
+            background: var(--primary);
+          "
+        ></div>
+
+        <div style="margin-bottom: 20px">
+          <img
+            src="/logo.png?v=3"
+            width="80"
+            height="80"
+            style="
+              border-radius: 20px;
+              box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+            "
+            class="fade-in-up"
+          />
+        </div>
+
+        <p
+          class="fade-in-up"
+          style="
+            letter-spacing: 0.2em;
+            color: var(--primary-light);
+            font-weight: bold;
+            margin-bottom: 1rem;
+          "
+        >
+          AI KNOWLEDGE BASE
+        </p>
+        <h1 class="fade-in-up delay-100">
+          あなたの記憶を、<br />AIが拡張する。
+        </h1>
+        <p class="fade-in-up delay-200">
+          忘れても大丈夫。あなただけの「第2の脳」がここにあります。
+        </p>
+
+        <a href="/" class="btn-primary fade-in-up delay-300">今すぐ始める</a>
+
+        <div
+          class="fade-in-up delay-500"
+          style="margin-top: 40px; position: relative"
+        >
+          <div class="phone" style="transform: rotate(-5deg) translateY(20px)">
+            <div class="notch"></div>
+            <div class="screen">
+              <div
+                style="
+                  margin-top: 40px;
+                  font-weight: 900;
+                  font-size: 1.2rem;
+                  text-align: center;
+                  margin-bottom: 20px;
+                "
+              >
+                My Brain
+              </div>
+              <div class="chat-bubble chat-user">
+                先週の会議で決まったA社の予算っていくらだっけ？
+              </div>
+              <div class="chat-bubble chat-ai">
+                先週木曜日のメモによると、A社の予算は「300万円（税抜）」で承認されています。<br /><br />関連資料：<br />📄
+                240115_議事録.pdf
+              </div>
+              <div class="chat-bubble chat-user">ありがとう！助かった。</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s2">
+        <h2 class="fade-in-up">The Problem</h2>
+        <h1
+          class="fade-in-up delay-100"
+          style="font-size: 2.5rem; margin-bottom: 3rem"
+        >
+          脳の容量、足りてますか？
+        </h1>
+
+        <div class="problem-grid fade-in-up delay-200">
+          <div class="problem-card">
+            <span class="icon">🌫️</span>
+            <h3>思い出せない</h3>
+            <p style="font-size: 0.9rem">
+              「あの件、どうなったっけ？」<br />大事な情報を忘れてしまい、<br />信頼を失う恐怖。
+            </p>
+          </div>
+          <div class="problem-card">
+            <span class="icon">🔍</span>
+            <h3>見つからない</h3>
+            <p style="font-size: 0.9rem">
+              LINE、Slack、メモ帳...<br />情報が散らばりすぎて、<br />検索に時間を浪費する毎日。
+            </p>
+          </div>
+          <div class="problem-card">
+            <span class="icon">🤯</span>
+            <h3>整理できない</h3>
+            <p style="font-size: 0.9rem">
+              情報はインプットするだけ。<br />整理する時間がなく、<br />知識として定着しない。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="s3">
+        <div
+          class="bg-blob"
+          style="
+            top: 50%;
+            right: -10%;
+            width: 600px;
+            height: 600px;
+            background: var(--accent);
+          "
+        ></div>
+
+        <h2 class="fade-in-up">Solution</h2>
+        <h1 class="fade-in-up delay-100">放り込むだけで、整理完了。</h1>
+        <p class="fade-in-up delay-200">
+          My
+          Brainは、あらゆる情報を一元管理し、AIがあなたの思考をサポートします。
+        </p>
+
+        <div class="solution-row fade-in-up delay-300">
+          <div class="feature-box">
+            <span class="icon" style="margin: 0">📝</span>
+            <span style="font-weight: bold; margin-top: 10px">メモ・画像</span>
+            <span style="font-size: 0.7rem; opacity: 0.7; margin-top: 5px"
+              >何でも保存</span
+            >
+          </div>
+          <div class="feature-box">
+            <span class="icon" style="margin: 0">🌐</span>
+            <span style="font-weight: bold; margin-top: 10px">Web保存</span>
+            <span style="font-size: 0.7rem; opacity: 0.7; margin-top: 5px"
+              >URL貼るだけ</span
+            >
+          </div>
+          <div
+            class="feature-box"
+            style="
+              border-color: var(--primary);
+              box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+            "
+          >
+            <span class="icon" style="margin: 0">🤖</span>
+            <span
+              style="
+                font-weight: bold;
+                margin-top: 10px;
+                color: var(--primary-light);
+              "
+              >AI検索</span
+            >
+            <span style="font-size: 0.7rem; opacity: 0.7; margin-top: 5px"
+              >会話で思い出す</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <section id="s4">
+        <h2 class="fade-in-up">AI Core</h2>
+        <h1 class="fade-in-up delay-100">
+          ただの検索じゃない。<br />文脈を理解する「対話」です。
+        </h1>
+
+        <div
+          style="
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 40px;
+          "
+          class="fade-in-up delay-200"
+        >
+          <div
+            style="
+              width: 300px;
+              background: #1e293b;
+              padding: 20px;
+              border-radius: 20px;
+              border: 1px solid #334155;
+            "
+          >
+            <div style="font-size: 2rem; margin-bottom: 10px">🧠</div>
+            <h3 style="font-size: 1.2rem">曖昧な記憶でOK</h3>
+            <p style="font-size: 0.9rem; text-align: left">
+              「先月の飲み会で話題になった映画なんだっけ？」のような、キーワードを覚えていなくてもAIが推測して答えます。
+            </p>
+          </div>
+
+          <div
+            style="
+              width: 300px;
+              background: #1e293b;
+              padding: 20px;
+              border-radius: 20px;
+              border: 1px solid #334155;
+            "
+          >
+            <div style="font-size: 2rem; margin-bottom: 10px">📊</div>
+            <h3 style="font-size: 1.2rem">構造化・図解</h3>
+            <p style="font-size: 0.9rem; text-align: left">
+              複雑な情報は、AIが自動でマインドマップや表に変換。視覚的に理解を助けます。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="s5">
+        <p style="color: var(--primary); font-weight: bold" class="fade-in-up">
+          FREE ACCESS
+        </p>
+        <h1 class="fade-in-up delay-100">あなたの脳を、アップデートしよう。</h1>
+
+        <div class="fade-in-up delay-200" style="margin: 30px 0">
+          <div
+            class="pulse-badge"
+            style="
+              background: var(--accent);
+              color: white;
+              padding: 8px 20px;
+              border-radius: 50px;
+              font-weight: bold;
+              margin-bottom: 20px;
+            "
+          >
+            🚀 ベータ版につき完全無料
+          </div>
+        </div>
+
+        <a href="/" class="btn-primary fade-in-up delay-300">My Brain を開く</a>
+
+        <p
+          class="fade-in-up delay-500"
+          style="margin-top: 50px; font-size: 0.8rem; opacity: 0.5"
+        >
+          Designed by Takumi Yoshioka
+        </p>
+      </section>
+    </div>
+
+    <script>
+      // Intersection Observer
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("active");
+            } else {
+              entry.target.classList.remove("active");
+            }
+          });
+        },
+        { threshold: 0.3 },
       );
-      const snap = await getDocs(q);
-      memories.value = snap.docs.map(
-        (d) =>
-          ({
-            id: d.id,
-            ...d.data(),
-          }) as Memory,
-      );
-    } catch (e) {
-      console.error("Fetch memories error:", e);
-    } finally {
-      loading.value = false;
-    }
-  };
 
-  const fetchChatLogs = async () => {
-    if (!currentUser.value) return;
-    try {
-      const q = query(
-        collection(db, "chat_logs"),
-        where("userId", "==", currentUser.value.uid),
-        orderBy("createdAt", "desc"),
-        limit(50),
-      );
-      const snap = await getDocs(q);
-      chatLogs.value = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() }) as ChatLog,
-      );
-    } catch (e) {
-      console.error("Fetch chat logs error:", e);
-    }
-  };
-
-  const selectTag = async (tag: string | null) => {
-    activeTag.value = tag;
-    // クライアントサイドフィルタリング (データ再取得はしない)
-  };
-
-  const filteredMemories = computed(() => {
-    if (!activeTag.value) return memories.value;
-    return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
-  });
-
-  // 3. メモ追加 (Text / Image / File)
-  const addMemory = async (text: string, file?: File | null) => {
-    if (!currentUser.value) return;
-    isAiThinking.value = true;
-
-    try {
-      const isImage = file?.type.startsWith("image/");
-      const isPdf = file?.type === "application/pdf";
-      const fileTypeLabel = isImage ? "画像" : isPdf ? "PDF" : "ファイル";
-      const initialText = file ? `(${fileTypeLabel}解析中...) ${text}` : text;
-
-      // 仮保存
-      const docRef = await addDoc(collection(db, "memories"), {
-        userId: currentUser.value.uid,
-        text: initialText,
-        createdAt: serverTimestamp(),
-        tags: [],
-        aiSummary: "AI処理中...",
-        hasImage: !!file,
-        fileType: file?.type || null,
+      document.querySelectorAll("section").forEach((section) => {
+        observer.observe(section);
       });
 
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (apiKey) {
-        const targetModelName = await getSmartModelName(apiKey);
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-          model: targetModelName,
-          generationConfig: { responseMimeType: "application/json" },
-        });
-
-        let promptParts: any[] = [];
-
-        if (file) {
-          const filePart = await fileToGenerativePart(file);
-          promptParts.push(filePart);
-          promptParts.push({
-            text: `
-            画像/資料を分析して記憶データを作成してください。
-            ユーザーメモ: ${text}
-            出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "全テキスト"}
-          `,
-          });
-        } else {
-          promptParts.push({
-            text: `
-            以下のテキストを分析して記憶データを作成してください。
-            内容: ${text}
-            出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "${text}"}
-          `,
-          });
+      // Key Nav
+      document.addEventListener("keydown", (e) => {
+        const container = document.getElementById("container");
+        if (e.key === "ArrowDown" || e.key === "ArrowRight" || e.key === " ") {
+          e.preventDefault();
+          container.scrollBy({ top: window.innerHeight, behavior: "smooth" });
+        } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+          e.preventDefault();
+          container.scrollBy({ top: -window.innerHeight, behavior: "smooth" });
         }
+      });
+    </script>
+  </body>
+</html>
+</file>
 
-        const result = await model.generateContent(promptParts);
-        const aiData = JSON.parse(result.response.text());
-        const finalContent = file
-          ? `【${fileTypeLabel}】${text}\n\n${aiData.fullText}`
-          : text;
+<file path="src/components/AppHeader/AppHeader.vue">
+<script setup lang="ts">
+// ロジックファイルを読み込む
+import { useAppHeader } from "./useAppHeader";
 
-        // ★ベクトル計算
-        const embedModel = getEmbeddingModel(apiKey);
-        const embedResult = await embedModel.embedContent(finalContent);
-        const embedding = embedResult.embedding.values;
+// ログアウト機能を取り出す
+const { logout } = useAppHeader();
+</script>
 
-        // 保存
-        await updateDoc(docRef, {
-          text: finalContent,
-          aiSummary: aiData.summary,
-          tags: aiData.tags,
-          embedding: embedding, // ベクトル保存
-        });
+<template>
+  <header
+    class="h-14 px-4 flex items-center justify-between border-b border-slate-800 bg-slate-900/50 backdrop-blur z-20"
+  >
+    <div class="font-black text-lg tracking-tight">🧠 My Brain</div>
 
-        // ローカル更新
-        const newMem: Memory = {
-          id: docRef.id,
-          userId: currentUser.value.uid,
-          text: finalContent,
-          aiSummary: aiData.summary,
-          tags: aiData.tags,
-          createdAt: new Date(),
-          hasImage: !!file,
-          fileType: file?.type,
-        };
-        memories.value.unshift(newMem);
-      }
-    } catch (e) {
-      console.error("Add memory error:", e);
-      alert("保存エラー");
-    } finally {
-      isAiThinking.value = false;
-    }
-  };
+    <button
+      @click="logout"
+      class="text-xs font-bold text-slate-500 hover:text-white transition"
+    >
+      ログアウト
+    </button>
+  </header>
+</template>
+</file>
 
-  // ★ URL読み込み機能
-  const addUrlMemory = async (url: string) => {
-    if (!currentUser.value) return;
-    isAiThinking.value = true;
+<file path="src/components/AppHeader/useAppHeader.ts">
+import { useMyBrain } from "@/composables/useMyBrain";
 
-    try {
-      // Functions呼び出し
-      const functions = getFunctions();
-      const scrapeFunc = httpsCallable(functions, "scrapeUrl");
-      const result: any = await scrapeFunc({ url });
-
-      if (result.data.success) {
-        const { title, content } = result.data;
-        const fullText = `【WEB記事】${title}\nURL: ${url}\n\n${content}`;
-
-        // 通常のメモとして保存（ベクトル計算含む）
-        await addMemory(fullText);
-      }
-    } catch (e: any) {
-      console.error("URL Add Error:", e);
-      alert("記事の読み込みに失敗しました: " + e.message);
-    } finally {
-      isAiThinking.value = false;
-    }
-  };
-
-  const updateMemory = async (id: string, newText: string) => {
-    // 既存の実装と同じ
-    if (!currentUser.value || !newText.trim()) return;
-    try {
-      await updateDoc(doc(db, "memories", id), { text: newText });
-      const target = memories.value.find((m) => m.id === id);
-      if (target) target.text = newText;
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const deleteMemory = async (id: string) => {
-    if (!confirm("削除しますか？")) return;
-    await deleteDoc(doc(db, "memories", id));
-    memories.value = memories.value.filter((m) => m.id !== id);
-  };
-
-  const deleteChatLog = async (id: string) => {
-    await deleteDoc(doc(db, "chat_logs", id));
-    chatLogs.value = chatLogs.value.filter((l) => l.id !== id);
-  };
-
-  // 4. 最強のチャット機能 (ベクトル検索 + マインドマップ + アクション)
-  const askBrain = async (question: string): Promise<string> => {
-    if (!question.trim() || !currentUser.value) return "";
-    isAiThinking.value = true;
-
-    try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-
-      // 1. 質問のベクトル化
-      const embedModel = getEmbeddingModel(apiKey);
-      const qEmbed = await embedModel.embedContent(question);
-      const qVec = qEmbed.embedding.values;
-
-      // 2. 関連度順にソート (ベクトル検索)
-      const scoredMemories = memories.value
-        .map((m) => ({
-          ...m,
-          score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
-        }))
-        .sort((a, b) => b.score - a.score);
-
-      // 上位30件だけをコンテキストに含める（これで100件の壁を突破）
-      const contextMemories = scoredMemories.slice(0, 30);
-      const context = contextMemories
-        .map(
-          (m) =>
-            `- [${m.createdAt?.toDate ? m.createdAt.toDate().toLocaleDateString() : ""}] ${m.text.slice(0, 500)}`,
-        )
-        .join("\n\n");
-
-      // 3. AIへの指示（マインドマップとアクションをJSONで要求）
-      const targetModelName = await getSmartModelName(apiKey);
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: targetModelName });
-
-      const prompt = `
-        あなたはユーザーの「第二の脳」です。以下の【記憶データ】を参考に質問に答えてください。
-        
-        【重要指示】
-        回答は必ず以下のJSON形式で行ってください。Markdownは不要です。
-        {
-          "answer": "質問への回答本文（丁寧な口調で）",
-          "mermaid": "関連性や構造を図解するためのMermaid記法コード（グラフやフローチャート）。不要な場合はnull",
-          "action": { "title": "カレンダー登録用の件名", "date": "YYYY-MM-DD HH:mm (推定日時)", "description": "詳細" } または null
-        }
-
-        【ユーザーの質問】${question}
-        【記憶データ(関連順)】${context}
-      `;
-
-      const result = await model.generateContent(prompt);
-      const rawText = result.response.text();
-
-      // JSONパース（AIがMarkdown記法をつけることがあるので除去）
-      const cleanJson = rawText
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
-      let data;
-      try {
-        data = JSON.parse(cleanJson);
-      } catch (e) {
-        // パース失敗時はそのままテキストとして扱う
-        data = { answer: rawText, mermaid: null, action: null };
-      }
-
-      // アクションURL生成
-      let actionUrl = "";
-      if (data.action && data.action.title) {
-        const baseUrl =
-          "https://www.google.com/calendar/render?action=TEMPLATE";
-        const textParam = `&text=${encodeURIComponent(data.action.title)}`;
-        const detailsParam = `&details=${encodeURIComponent(data.action.description || "")}`;
-        // 日時はAIの推定が曖昧なら現在時刻を入れるなどの処理が必要だが、今回は簡易的に
-        actionUrl = `${baseUrl}${textParam}${detailsParam}`;
-      }
-
-      // 4. ログ保存
-      const logData = {
-        userId: currentUser.value.uid,
-        question: question,
-        answer: data.answer,
-        mermaidCode: data.mermaid || null,
-        action: actionUrl
-          ? { title: data.action.title, url: actionUrl, date: data.action.date }
-          : null,
-        createdAt: serverTimestamp(),
-      };
-
-      const logRef = await addDoc(collection(db, "chat_logs"), logData);
-
-      chatLogs.value.unshift({
-        id: logRef.id,
-        ...logData,
-        createdAt: new Date(),
-      } as any);
-
-      return data.answer; // チャットUIへの返り値
-    } catch (e: any) {
-      return "エラー: " + e.message;
-    } finally {
-      isAiThinking.value = false;
-    }
-  };
-
-  const allTags = computed(() => {
-    const tags = new Set<string>();
-    memories.value.forEach((m) => {
-      if (m.tags) m.tags.forEach((t) => tags.add(t));
-    });
-    return Array.from(tags);
-  });
+export function useAppHeader() {
+  // 脳みそ機能（ログアウトなど）を持ってくる
+  const { logout } = useMyBrain();
 
   return {
-    currentUser,
-    memories,
-    filteredMemories, // ★これを使う
+    logout, // 画面で使えるようにする
+  };
+}
+</file>
+
+<file path="src/components/ChatList/ChatList.vue">
+<script setup lang="ts">
+import { useChatList } from "./useChatList";
+
+const { chatLogs, isAiThinking, deleteChatLog } = useChatList();
+</script>
+
+<template>
+  <div class="space-y-8 px-2">
+    <div
+      v-if="chatLogs.length === 0 && !isAiThinking"
+      class="text-center py-20 opacity-30"
+    >
+      <div class="text-4xl mb-4">💬</div>
+      <p>履歴がありません。</p>
+    </div>
+
+    <div
+      v-for="log in chatLogs"
+      :key="log.id"
+      class="animate-fade-in space-y-2"
+    >
+      <div class="flex justify-end">
+        <div
+          class="bg-slate-700 text-white px-4 py-3 rounded-2xl rounded-tr-sm text-sm max-w-[85%] shadow-sm"
+        >
+          {{ log.question }}
+        </div>
+      </div>
+
+      <div class="flex flex-col items-start max-w-[95%]">
+        <div
+          class="bg-indigo-900/40 border border-indigo-500/20 text-indigo-100 px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed whitespace-pre-wrap w-full shadow-sm"
+        >
+          {{ log.answer }}
+        </div>
+
+        <div
+          v-if="
+            log.mermaidCode &&
+            (log.mermaidCode.startsWith('graph') ||
+              log.mermaidCode.startsWith('mindmap') ||
+              log.mermaidCode.startsWith('flowchart'))
+          "
+          class="mermaid bg-slate-900 p-4 rounded-xl overflow-x-auto text-center mt-2 w-full border border-slate-700"
+        >
+          {{ log.mermaidCode }}
+        </div>
+        <div
+          v-else-if="log.mermaidCode"
+          class="text-[10px] text-slate-500 mt-1 pl-2"
+        >
+          (図解の生成に失敗しました)
+        </div>
+
+        <a
+          v-if="log.action"
+          :href="log.action.url"
+          target="_blank"
+          class="mt-2 flex items-center gap-3 bg-slate-800 hover:bg-slate-700 p-3 rounded-xl transition border border-slate-700 text-slate-300 w-full active:scale-95"
+        >
+          <span class="text-2xl">📅</span>
+          <div class="flex-1 min-w-0">
+            <div class="font-bold text-[10px] text-blue-400">
+              カレンダーに追加
+            </div>
+            <div class="font-bold text-sm truncate">
+              {{ log.action.title }}
+            </div>
+          </div>
+          <span class="text-xl">→</span>
+        </a>
+
+        <div class="flex items-center gap-2 mt-1 ml-1">
+          <button
+            @click="deleteChatLog(log.id)"
+            class="text-[10px] text-slate-500 bg-slate-800/50 px-3 py-1.5 rounded-full flex items-center gap-1 hover:bg-red-900/30 hover:text-red-400 transition active:scale-90"
+          >
+            🗑️ 履歴を削除
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="isAiThinking"
+      class="flex flex-col items-start max-w-[95%] animate-pulse-soft"
+    >
+      <div class="flex items-center gap-2 mb-1 ml-1">
+        <span class="text-lg">🧠</span>
+        <span class="text-[10px] font-bold text-blue-400">My Brain</span>
+      </div>
+      <div
+        class="bg-slate-800/50 border border-slate-700/50 text-slate-300 px-4 py-3 rounded-2xl rounded-tl-sm text-sm w-full shadow-sm flex items-center gap-2"
+      >
+        <div class="flex gap-1">
+          <div
+            class="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"
+            style="animation-delay: 0s"
+          ></div>
+          <div
+            class="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"
+            style="animation-delay: 0.2s"
+          ></div>
+          <div
+            class="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"
+            style="animation-delay: 0.4s"
+          ></div>
+        </div>
+        <span class="text-xs font-bold tracking-wide">思考中...</span>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
+<file path="src/components/ChatList/useChatList.ts">
+import { watch, nextTick } from "vue";
+import { useMyBrain } from "@/composables/useMyBrain";
+import mermaid from "mermaid";
+
+export function useChatList() {
+  const { chatLogs, isAiThinking, deleteChatLog } = useMyBrain();
+
+  // チャットログが更新されたらマインドマップを再描画
+  watch(
     chatLogs,
-    loading,
+    async () => {
+      await nextTick();
+      try {
+        // エラーを抑制しつつ実行
+        mermaid.parseError = (err) => {
+          console.warn("Mermaid syntax error (suppressed):", err);
+        };
+        await mermaid.run();
+      } catch (e) {
+        // ここで爆弾が出るのを防ぐため、何もしないかログだけ出す
+        console.log("Mermaid rendering skipped.");
+      }
+    },
+    { deep: true },
+  );
+
+  return {
+    chatLogs,
     isAiThinking,
+    deleteChatLog,
+  };
+}
+</file>
+
+<file path="src/components/InputFooter/InputFooter.vue">
+<script setup lang="ts">
+import { computed } from "vue";
+import { useInputFooter } from "./useInputFooter";
+
+const props = defineProps<{
+  modelValue: "memo" | "chat" | "url";
+}>();
+
+const emit = defineEmits<{
+  (e: "update:modelValue", val: "memo" | "chat" | "url"): void;
+}>();
+
+const inputMode = computed({
+  get: () => props.modelValue,
+  set: (val) => emit("update:modelValue", val),
+});
+
+// ★修正: 第2引数を削除
+const {
+  inputText,
+  selectedFile,
+  filePreview,
+  fileInputRef,
+  isListening,
+  isAiThinking,
+  toggleListening,
+  handleFileSelect,
+  clearFile,
+  handleSend,
+} = useInputFooter(props.modelValue);
+</script>
+
+<template>
+  <footer
+    class="fixed bottom-0 w-full bg-slate-900/90 backdrop-blur border-t border-slate-800 p-4 pb-8 z-30 transition-all"
+  >
+    <div class="max-w-md mx-auto">
+      <div
+        class="flex gap-2 mb-4 justify-center bg-slate-800 p-1 rounded-full w-fit mx-auto"
+      >
+        <button
+          @click="inputMode = 'memo'"
+          class="text-xs font-bold px-4 py-2 rounded-full transition"
+          :class="
+            inputMode === 'memo'
+              ? 'bg-white text-slate-900'
+              : 'text-slate-400 hover:text-white'
+          "
+        >
+          📝 メモ
+        </button>
+        <button
+          @click="inputMode = 'url'"
+          class="text-xs font-bold px-4 py-2 rounded-full transition"
+          :class="
+            inputMode === 'url'
+              ? 'bg-green-500 text-white'
+              : 'text-slate-400 hover:text-white'
+          "
+        >
+          🌐 URL
+        </button>
+        <button
+          @click="inputMode = 'chat'"
+          class="text-xs font-bold px-4 py-2 rounded-full transition"
+          :class="
+            inputMode === 'chat'
+              ? 'bg-blue-600 text-white'
+              : 'text-slate-400 hover:text-white'
+          "
+        >
+          🔍 会話
+        </button>
+      </div>
+
+      <div
+        v-if="selectedFile"
+        class="relative mb-2 inline-block animate-fade-in"
+      >
+        <img
+          v-if="filePreview"
+          :src="filePreview"
+          class="h-20 rounded-lg border border-slate-600"
+        />
+        <div
+          v-else
+          class="h-20 w-20 bg-slate-800 rounded-lg border border-slate-600 flex flex-col items-center justify-center p-2"
+        >
+          <span class="text-2xl">📄</span>
+          <span
+            class="text-[8px] text-slate-400 truncate w-full text-center mt-1"
+            >{{ selectedFile.name }}</span
+          >
+        </div>
+        <button
+          @click="clearFile"
+          class="absolute -top-2 -right-2 bg-slate-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-500"
+        >
+          ×
+        </button>
+      </div>
+
+      <div class="relative flex items-end gap-2">
+        <button
+          @click="toggleListening"
+          class="w-10 h-10 flex items-center justify-center rounded-xl transition shadow-lg relative overflow-hidden"
+          :class="
+            isListening
+              ? 'bg-red-500 text-white animate-pulse'
+              : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+          "
+        >
+          <span class="relative z-10">{{ isListening ? "■" : "🎙️" }}</span>
+          <div
+            v-if="isListening"
+            class="absolute inset-0 bg-red-600 animate-ping opacity-75"
+          ></div>
+        </button>
+
+        <div v-if="inputMode === 'memo'">
+          <input
+            type="file"
+            ref="fileInputRef"
+            accept="image/*, application/pdf, text/plain"
+            class="hidden"
+            @change="handleFileSelect"
+          />
+          <button
+            @click="fileInputRef?.click()"
+            class="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 transition"
+          >
+            📎
+          </button>
+        </div>
+
+        <textarea
+          v-model="inputText"
+          rows="1"
+          class="flex-1 bg-slate-800 border border-slate-700 text-white rounded-2xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden"
+          :placeholder="
+            inputMode === 'url'
+              ? 'URLを入力...'
+              : inputMode === 'memo'
+                ? '記憶...'
+                : '質問...'
+          "
+          @keydown.enter.prevent="handleSend(inputMode)"
+        ></textarea>
+
+        <button
+          @click="handleSend(inputMode)"
+          :disabled="(!inputText && !selectedFile) || isAiThinking"
+          class="w-10 h-10 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg"
+        >
+          ↑
+        </button>
+      </div>
+    </div>
+  </footer>
+</template>
+</file>
+
+<file path="src/components/InputFooter/useInputFooter.ts">
+import { ref, onMounted } from "vue";
+import { useMyBrain } from "@/composables/useMyBrain";
+
+type InputMode = "memo" | "chat" | "url";
+
+// ★修正: emit 引数を削除（使っていないため）
+export function useInputFooter(inputMode: InputMode) {
+  const { addMemory, addUrlMemory, askBrain, isAiThinking } = useMyBrain();
+
+  const inputText = ref("");
+  const selectedFile = ref<File | null>(null);
+  const filePreview = ref<string | null>(null);
+  const fileInputRef = ref<HTMLInputElement | null>(null);
+  const isListening = ref(false);
+  let recognition: any = null;
+
+  onMounted(() => {
+    if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+      const SpeechRecognition =
+        (window as any).webkitSpeechRecognition ||
+        (window as any).SpeechRecognition;
+      recognition = new SpeechRecognition();
+      recognition.lang = "ja-JP";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.onresult = (event: any) => {
+        inputText.value = Array.from(event.results)
+          .map((r: any) => r[0].transcript)
+          .join("");
+      };
+      recognition.onend = () => {
+        isListening.value = false;
+      };
+    }
+  });
+
+  const toggleListening = () => {
+    if (!recognition) return alert("音声入力未対応ブラウザです");
+    if (isListening.value) recognition.stop();
+    else {
+      isListening.value = true;
+      recognition.start();
+    }
+  };
+
+  const handleFileSelect = (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    if (target.files && target.files[0]) {
+      const file = target.files[0];
+      selectedFile.value = file;
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          filePreview.value = e.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+      } else {
+        filePreview.value = null;
+      }
+    }
+  };
+
+  const clearFile = () => {
+    selectedFile.value = null;
+    filePreview.value = null;
+    if (fileInputRef.value) fileInputRef.value.value = "";
+  };
+
+  const handleSend = async (mode: InputMode) => {
+    const text = inputText.value.trim();
+    if (!text && !selectedFile.value) return;
+
+    if (mode === "memo") {
+      inputText.value = "";
+      const file = selectedFile.value;
+      clearFile();
+      await addMemory(text, file);
+    } else if (mode === "url") {
+      inputText.value = "";
+      await addUrlMemory(text);
+    } else {
+      // チャットモード
+      inputText.value = "";
+      clearFile();
+      await askBrain(text);
+    }
+  };
+
+  return {
+    inputText,
+    selectedFile,
+    filePreview,
+    fileInputRef,
+    isListening,
+    isAiThinking,
+    toggleListening,
+    handleFileSelect,
+    clearFile,
+    handleSend,
+  };
+}
+</file>
+
+<file path="src/components/MemoList/MemoList.vue">
+<script setup lang="ts">
+import { useMemoList } from "./useMemoList";
+import type { Memory } from "@/composables/useMyBrain";
+
+const emit = defineEmits<{
+  (e: "openDetail", memory: Memory): void;
+}>();
+
+const { displayMemories, loading, hasMore, loadMore, handleOpenDetail } =
+  useMemoList(emit);
+</script>
+
+<template>
+  <div class="space-y-4">
+    <div
+      v-if="displayMemories.length === 0 && !loading"
+      class="text-center py-20 opacity-30"
+    >
+      <div class="text-4xl mb-4">📝</div>
+      <p>表示できる記憶がありません。</p>
+    </div>
+
+    <div
+      v-for="memo in displayMemories"
+      :key="memo.id"
+      @click="handleOpenDetail(memo)"
+      class="group relative bg-slate-900 border border-slate-800 p-4 rounded-2xl transition hover:border-slate-600 animate-fade-in cursor-pointer active:scale-[0.98]"
+    >
+      <div
+        class="mb-2 text-xs font-bold flex items-center justify-between text-slate-400"
+      >
+        <div class="flex items-center gap-1">
+          <span v-if="memo.hasImage" class="text-blue-400">📷 画像</span>
+          <span
+            v-else-if="memo.text.includes('【WEB記事】')"
+            class="text-green-400"
+            >🌐 WEB</span
+          >
+          <span v-else-if="memo.fileType?.includes('pdf')" class="text-red-400"
+            >📄 資料</span
+          >
+          <span v-else>📝 メモ</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="opacity-50 text-[10px]">{{
+            memo.createdAt?.toDate?.().toLocaleDateString()
+          }}</span>
+          <span
+            class="bg-slate-800 text-slate-500 px-2 py-0.5 rounded text-[10px]"
+            >詳細</span
+          >
+        </div>
+      </div>
+
+      <p class="text-sm text-slate-300 whitespace-pre-wrap mb-3 line-clamp-3">
+        {{ memo.text }}
+      </p>
+
+      <div class="flex flex-wrap gap-2 items-center">
+        <div
+          v-if="memo.aiSummary"
+          class="text-[10px] bg-slate-800 px-2 py-1 rounded text-slate-400"
+        >
+          📝 {{ memo.aiSummary }}
+        </div>
+        <span
+          v-for="tag in memo.tags"
+          :key="tag"
+          class="text-[10px] font-bold text-blue-400"
+          >#{{ tag }}</span
+        >
+      </div>
+    </div>
+
+    <div v-if="hasMore" class="text-center py-4">
+      <button
+        @click="loadMore"
+        class="text-sm font-bold text-slate-500 hover:text-white bg-slate-800 px-6 py-2 rounded-full transition"
+      >
+        ▼ もっと読み込む
+      </button>
+    </div>
+  </div>
+</template>
+</file>
+
+<file path="src/components/MemoList/useMemoList.ts">
+import { ref, computed } from "vue";
+import { useMyBrain, type Memory } from "@/composables/useMyBrain";
+
+export function useMemoList(
+  emit: (event: "openDetail", memory: Memory) => void,
+) {
+  const { filteredMemories, loading } = useMyBrain();
+
+  // 初期表示件数（20件）
+  const displayLimit = ref(20);
+
+  // 画面に表示するのは、制限内の件数だけ
+  const displayMemories = computed(() => {
+    return filteredMemories.value.slice(0, displayLimit.value);
+  });
+
+  // 全件数よりも表示件数が少なければ「もっと見る」ボタンを出せる
+  const hasMore = computed(() => {
+    return displayLimit.value < filteredMemories.value.length;
+  });
+
+  // 「もっと見る」を押した時の処理
+  const loadMore = () => {
+    displayLimit.value += 20;
+  };
+
+  const handleOpenDetail = (memo: Memory) => {
+    emit("openDetail", memo);
+  };
+
+  return {
+    displayMemories, // ← ここを画面で使う
+    loading,
+    hasMore,
+    loadMore,
+    handleOpenDetail,
+  };
+}
+</file>
+
+<file path="src/components/MemoryModal/MemoryModal.vue">
+<script setup lang="ts">
+import { useMemoryModal } from "./useMemoryModal";
+import type { Memory } from "@/composables/useMyBrain";
+
+const props = defineProps<{
+  memory: Memory | null;
+}>();
+
+const emit = defineEmits(["close"]);
+
+const { editContent, saveUpdate, remove } = useMemoryModal(props, emit);
+</script>
+
+<template>
+  <div
+    v-if="memory"
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+    @click.self="$emit('close')"
+  >
+    <div
+      class="bg-slate-900 w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-slate-700 flex flex-col max-h-[80vh]"
+    >
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-bold text-lg">📝 詳細・編集</h3>
+        <button
+          @click="remove"
+          class="text-xs text-red-400 hover:text-red-300 font-bold"
+        >
+          削除
+        </button>
+      </div>
+      <textarea
+        v-model="editContent"
+        class="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-300 outline-none focus:border-blue-500 mb-4 resize-none leading-relaxed"
+      ></textarea>
+      <div class="flex gap-3">
+        <button
+          @click="$emit('close')"
+          class="flex-1 py-3 rounded-xl font-bold text-slate-400 hover:bg-slate-800"
+        >
+          閉じる
+        </button>
+        <button
+          @click="saveUpdate"
+          class="flex-1 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-500"
+        >
+          保存
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
+<file path="src/components/MemoryModal/useMemoryModal.ts">
+import { ref, watch } from "vue";
+import { useMyBrain, type Memory } from "@/composables/useMyBrain";
+
+export function useMemoryModal(props: { memory: Memory | null }, emit: any) {
+  const { updateMemory, deleteMemory } = useMyBrain();
+  const editContent = ref("");
+
+  // メモが開かれたら、中身のテキストを編集エリアにセットする
+  watch(
+    () => props.memory,
+    (newVal) => {
+      if (newVal) {
+        editContent.value = newVal.text;
+      }
+    },
+  );
+
+  const saveUpdate = async () => {
+    if (props.memory) {
+      await updateMemory(props.memory.id, editContent.value);
+      emit("close"); // 閉じる
+    }
+  };
+
+  const remove = async () => {
+    if (props.memory) {
+      await deleteMemory(props.memory.id);
+      emit("close"); // 閉じる
+    }
+  };
+
+  return {
+    editContent,
+    saveUpdate,
+    remove,
+  };
+}
+</file>
+
+<file path="src/components/TagFilter/TagFilter.vue">
+<script setup lang="ts">
+import { useTagFilter } from "./useTagFilter";
+
+const { activeTag, allTags, selectTag } = useTagFilter();
+</script>
+
+<template>
+  <div
+    v-if="allTags.length > 0"
+    class="px-4 py-2 bg-slate-900/50 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-hide flex gap-2"
+  >
+    <button
+      @click="selectTag(null)"
+      class="text-[10px] font-bold px-3 py-1 rounded-full transition border"
+      :class="
+        !activeTag
+          ? 'bg-white text-slate-900 border-white'
+          : 'bg-slate-800 text-slate-400 border-slate-700'
+      "
+    >
+      すべて
+    </button>
+
+    <button
+      v-for="tag in allTags"
+      :key="tag"
+      @click="selectTag(tag)"
+      class="text-[10px] font-bold px-3 py-1 rounded-full transition border"
+      :class="
+        activeTag === tag
+          ? 'bg-blue-600 text-white border-blue-600'
+          : 'bg-slate-800 text-slate-400 border-slate-700'
+      "
+    >
+      #{{ tag }}
+    </button>
+  </div>
+</template>
+</file>
+
+<file path="src/components/TagFilter/useTagFilter.ts">
+import { useMyBrain } from "@/composables/useMyBrain";
+
+export function useTagFilter() {
+  // 全タグリスト、現在選択中のタグ、タグを選ぶ関数を持ってくる
+  const { activeTag, allTags, selectTag } = useMyBrain();
+
+  return {
     activeTag,
     allTags,
-    initAuth,
-    logout,
-    addMemory,
-    addUrlMemory, // ★公開
-    updateMemory,
-    deleteMemory,
-    askBrain,
-    deleteChatLog,
     selectTag,
   };
 }
+</file>
+
+<file path="src/views/LandingView/LandingView.vue">
+<script setup lang="ts">
+import { useRouter } from "vue-router";
+
+const router = useRouter();
+
+const goToLogin = () => {
+  // ログイン画面へ遷移
+  router.push("/login");
+};
+</script>
+
+<template>
+  <div class="lp-container">
+    <div class="nav-hint">Scroll or Use Arrow Keys ↓</div>
+
+    <div class="slides-container" id="container">
+      <section id="s1">
+        <div class="bg-blob primary-blob"></div>
+
+        <div class="logo-wrapper">
+          <img
+            src="/logo.png?v=3"
+            width="80"
+            height="80"
+            class="lp-logo fade-in-up"
+          />
+        </div>
+
+        <p class="fade-in-up subtitle">AI KNOWLEDGE BASE</p>
+        <h1 class="fade-in-up delay-100">
+          あなたの記憶を、<br />AIが拡張する。
+        </h1>
+        <p class="fade-in-up delay-200 description">
+          忘れても大丈夫。あなただけの「第2の脳」がここにあります。
+        </p>
+
+        <button @click="goToLogin" class="btn-primary fade-in-up delay-300">
+          今すぐ始める
+        </button>
+
+        <div class="fade-in-up delay-500 mock-wrapper">
+          <div class="phone">
+            <div class="notch"></div>
+            <div class="screen">
+              <div class="screen-header">My Brain</div>
+              <div class="chat-bubble chat-user">
+                先週の会議で決まったA社の予算っていくらだっけ？
+              </div>
+              <div class="chat-bubble chat-ai">
+                先週木曜日のメモによると、A社の予算は「300万円（税抜）」で承認されています。<br /><br />関連資料：<br />📄
+                240115_議事録.pdf
+              </div>
+              <div class="chat-bubble chat-user">ありがとう！助かった。</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s2">
+        <h2 class="fade-in-up">The Problem</h2>
+        <h1 class="fade-in-up delay-100 section-title">
+          脳の容量、足りてますか？
+        </h1>
+
+        <div class="problem-grid fade-in-up delay-200">
+          <div class="problem-card">
+            <span class="icon">🌫️</span>
+            <h3>思い出せない</h3>
+            <p>
+              「あの件、どうなったっけ？」<br />大事な情報を忘れてしまい、<br />信頼を失う恐怖。
+            </p>
+          </div>
+          <div class="problem-card">
+            <span class="icon">🔍</span>
+            <h3>見つからない</h3>
+            <p>
+              LINE、Slack、メモ帳...<br />情報が散らばりすぎて、<br />検索に時間を浪費する毎日。
+            </p>
+          </div>
+          <div class="problem-card">
+            <span class="icon">🤯</span>
+            <h3>整理できない</h3>
+            <p>
+              情報はインプットするだけ。<br />整理する時間がなく、<br />知識として定着しない。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="s3">
+        <div class="bg-blob accent-blob"></div>
+
+        <h2 class="fade-in-up">Solution</h2>
+        <h1 class="fade-in-up delay-100 section-title">
+          放り込むだけで、整理完了。
+        </h1>
+        <p class="fade-in-up delay-200 description">
+          My
+          Brainは、あらゆる情報を一元管理し、AIがあなたの思考をサポートします。
+        </p>
+
+        <div class="solution-row fade-in-up delay-300">
+          <div class="feature-box">
+            <span class="icon">📝</span>
+            <span class="feature-title">メモ・画像</span>
+            <span class="feature-desc">何でも保存</span>
+          </div>
+          <div class="feature-box">
+            <span class="icon">🌐</span>
+            <span class="feature-title">Web保存</span>
+            <span class="feature-desc">URL貼るだけ</span>
+          </div>
+          <div class="feature-box highlight-box">
+            <span class="icon">🤖</span>
+            <span class="feature-title highlight-text">AI検索</span>
+            <span class="feature-desc">会話で思い出す</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="s4">
+        <h2 class="fade-in-up">AI Core</h2>
+        <h1 class="fade-in-up delay-100 section-title">
+          ただの検索じゃない。<br />文脈を理解する「対話」です。
+        </h1>
+
+        <div class="ai-features fade-in-up delay-200">
+          <div class="ai-card">
+            <div class="ai-icon">🧠</div>
+            <h3>曖昧な記憶でOK</h3>
+            <p>
+              「先月の飲み会で話題になった映画なんだっけ？」のような、キーワードを覚えていなくてもAIが推測して答えます。
+            </p>
+          </div>
+          <div class="ai-card">
+            <div class="ai-icon">📊</div>
+            <h3>構造化・図解</h3>
+            <p>
+              複雑な情報は、AIが自動でマインドマップや表に変換。視覚的に理解を助けます。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="s5">
+        <p class="fade-in-up primary-text">FREE ACCESS</p>
+        <h1 class="fade-in-up delay-100 section-title">
+          あなたの脳を、アップデートしよう。
+        </h1>
+
+        <div class="fade-in-up delay-200 badge-wrapper">
+          <div class="pulse-badge">🚀 ベータ版につき完全無料</div>
+        </div>
+
+        <button @click="goToLogin" class="btn-primary fade-in-up delay-300">
+          My Brain を開く
+        </button>
+
+        <p class="fade-in-up delay-500 footer-text">
+          Designed by Takumi Yoshioka
+        </p>
+      </section>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+/* スコープ付きCSS */
+.lp-container {
+  --primary: #3b82f6;
+  --primary-light: #60a5fa;
+  --dark: #0f172a;
+  --darker: #020617;
+  --light: #f8fafc;
+  --accent: #8b5cf6;
+  --text-gray: #94a3b8;
+
+  font-family: "Poppins", "Noto Sans JP", sans-serif;
+  background-color: var(--darker);
+  color: var(--light);
+  overflow-x: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.slides-container {
+  width: 100vw;
+  height: 100vh;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+}
+
+section {
+  width: 100vw;
+  height: 100vh;
+  scroll-snap-align: start;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  overflow: hidden;
+}
+
+.bg-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.2;
+  z-index: 0;
+  width: 600px;
+  height: 600px;
+}
+.primary-blob {
+  top: -10%;
+  left: -10%;
+  background: var(--primary);
+}
+.accent-blob {
+  top: 50%;
+  right: -10%;
+  background: var(--accent);
+}
+
+.logo-wrapper {
+  margin-bottom: 20px;
+}
+.lp-logo {
+  border-radius: 20px;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+}
+
+h1 {
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  font-weight: 900;
+  line-height: 1.1;
+  margin-bottom: 1.5rem;
+  background: linear-gradient(135deg, #fff 0%, var(--primary-light) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-align: center;
+  z-index: 1;
+}
+
+h2 {
+  font-size: clamp(1.5rem, 4vw, 3rem);
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  margin-bottom: 2rem;
+  text-align: center;
+  z-index: 1;
+}
+
+h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: white;
+}
+
+p {
+  font-size: 1.2rem;
+  color: var(--text-gray);
+  max-width: 800px;
+  text-align: center;
+  line-height: 1.8;
+  z-index: 1;
+}
+
+.subtitle {
+  letter-spacing: 0.2em;
+  color: var(--primary-light);
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+.description {
+  font-size: 1.2rem;
+  color: var(--text-gray);
+}
+.section-title {
+  font-size: 2.5rem;
+  margin-bottom: 3rem;
+}
+.primary-text {
+  color: var(--primary);
+  font-weight: bold;
+}
+.footer-text {
+  margin-top: 50px;
+  font-size: 0.8rem;
+  opacity: 0.5;
+}
+
+/* アニメーション */
+.fade-in-up {
+  opacity: 0;
+  animation: fadeInUp 0.8s ease-out forwards;
+}
+.delay-100 {
+  animation-delay: 0.1s;
+}
+.delay-200 {
+  animation-delay: 0.2s;
+}
+.delay-300 {
+  animation-delay: 0.3s;
+}
+.delay-500 {
+  animation-delay: 0.5s;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* スマホモック */
+.mock-wrapper {
+  margin-top: 40px;
+  position: relative;
+}
+.phone {
+  width: 280px;
+  height: 580px;
+  background: #0f172a;
+  border-radius: 40px;
+  border: 8px solid #334155;
+  position: relative;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 2;
+  transform: rotate(-5deg) translateY(20px);
+}
+.notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 25px;
+  background: #334155;
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 16px;
+  z-index: 10;
+}
+.screen {
+  flex: 1;
+  background: #020617;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  color: white;
+  padding: 20px;
+}
+.screen-header {
+  margin-top: 40px;
+  font-weight: 900;
+  font-size: 1.2rem;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+/* チャット */
+.chat-bubble {
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 0.8rem;
+  margin-bottom: 10px;
+  max-width: 85%;
+  line-height: 1.5;
+  text-align: left;
+}
+.chat-user {
+  background-color: #1e293b;
+  align-self: flex-end;
+  border-top-right-radius: 4px;
+}
+.chat-ai {
+  background-color: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #bfdbfe;
+  align-self: flex-start;
+  border-top-left-radius: 4px;
+}
+
+/* カード類 */
+.problem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  width: 100%;
+  max-width: 1000px;
+  margin-top: 40px;
+  z-index: 2;
+}
+.problem-card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 30px;
+  border-radius: 20px;
+  text-align: center;
+  transition: transform 0.3s;
+}
+.problem-card:hover {
+  transform: translateY(-5px);
+  background: rgba(255, 255, 255, 0.05);
+}
+.icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.solution-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+  margin-top: 40px;
+  z-index: 2;
+}
+.feature-box {
+  width: 160px;
+  height: 160px;
+  background: linear-gradient(145deg, #1e293b, #0f172a);
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+}
+.feature-title {
+  font-weight: bold;
+  margin-top: 10px;
+}
+.feature-desc {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  margin-top: 5px;
+}
+.highlight-box {
+  border-color: var(--primary);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+}
+.highlight-text {
+  color: var(--primary-light);
+}
+
+.ai-features {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 40px;
+}
+.ai-card {
+  width: 300px;
+  background: #1e293b;
+  padding: 20px;
+  border-radius: 20px;
+  border: 1px solid #334155;
+}
+.ai-icon {
+  font-size: 2rem;
+  margin-bottom: 10px;
+}
+.ai-card h3 {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+.ai-card p {
+  font-size: 0.9rem;
+  text-align: left;
+  margin-bottom: 0;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  font-weight: bold;
+  padding: 1rem 3rem;
+  border-radius: 50px;
+  text-decoration: none;
+  font-size: 1.2rem;
+  transition: all 0.3s;
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+  margin-top: 30px;
+  display: inline-block;
+  border: none;
+  cursor: pointer;
+}
+.btn-primary:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.8);
+}
+
+.badge-wrapper {
+  margin: 30px 0;
+}
+.pulse-badge {
+  background: var(--accent);
+  color: white;
+  padding: 8px 20px;
+  border-radius: 50px;
+  font-weight: bold;
+  margin-bottom: 20px;
+  display: inline-block;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.nav-hint {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.3);
+  z-index: 100;
+}
+</style>
+</file>
+
+<file path="firebase.ts">
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+import { getMessaging } from "firebase/messaging";
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+};
+
+// アプリが既に初期化されているかチェック
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+export const auth = getAuth(app);
+
+// Firestoreの初期化（重複防止）
+let dbInstance;
+try {
+  // すでに初期化済みなら取得するだけ
+  dbInstance = getFirestore(app);
+} catch (e) {
+  // まだなら設定付きで初期化
+  dbInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  });
+}
+export const db = dbInstance;
+
+export const storage = getStorage(app);
+export const messaging = getMessaging(app);
+export const googleProvider = new GoogleAuthProvider();
+</file>
+
+<file path=".firebase/hosting.ZGlzdA.cache">
+registerSW.js,1768628403912,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+sw.js,1768628404573,3baecd6e7c0805354260f1f6f348c3e175874eb13582b5a20f50796f5020e275
+workbox-8c29f6e4.js,1768628404573,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+manifest.webmanifest,1768628403912,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+index.html,1768628403912,49afeafa1f19dc144c009f9a73ebebae5a45f412f8a4e03aa324fb526a134361
+firebase-messaging-sw.js,1768628403527,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+assets/stateDiagram-v2-4FDKWEC3-Do3Yyg2S.js,1768628403911,7b2fbf0f22ea1d039ce0d21ea7e8ae2b11bfe4a318e4d8e10066be7360973b2e
+assets/stateDiagram-FKZM4ZOC-DbuxardE.js,1768628403911,6439ac5e13c8d7f239a26b61d7f7b447da86682211f51f4208b599314a088529
+assets/timeline-definition-IT6M3QCI-DVUYZHE2.js,1768628403911,ba6d156e452be642369f92589ccfda83875056b86d1ff10935da0b728b475f38
+assets/requirementDiagram-UZGBJVZJ-CyGjCHHt.js,1768628403911,73a90f0307e34d0660d0b0edccb92a32d8b43d0c0a37e100f12dbca9a24fe0a1
+presentation.html,1768628403530,ae3b4772b21fdc1fc26348c7df9444275707a36e81107e5ccf9737ca72ec523d
+assets/ordinal-Cboi1Yqb.js,1768628403911,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/xychartDiagram-PRI3JC2R-ZlAVAB-q.js,1768628403911,944bbbaa6865c0f298e4212769798488e1833808521398ebfa314ab56010036d
+assets/pieDiagram-ADFJNKIX-DId5O4Iq.js,1768628403911,3343454a5ce2b015534088088100de2af66899e2a6d0f2f6a969b5ea669c3e5a
+assets/linear-BeH_Xg_M.js,1768628403912,9e735b1c1eea7c96e557d54ba924a21e49896759cadc5c8177fad81a2ef301de
+assets/min-DtctrYp3.js,1768628403911,d04a9f05d9f22d89908f9550d2628f01db614bee2693c3aba230609218479c21
+assets/quadrantDiagram-AYHSOK5B-D6umxZ2Q.js,1768628403911,f991b64e3659fde8fa8cec00c7936189324c1eb2ab27238b3e616011e193e905
+assets/sankeyDiagram-TZEHDZUN-s5s-0TZ2.js,1768628403911,20d43aed927dc2bf79ed46d30fbd49bc6802d7dc6e5147f7cf26e8950d26f62d
+assets/mindmap-definition-VGOIOE7T-Cms-kaLF.js,1768628403911,2e0c343cc6427aaa786b7c3d74f6fb2b79403dfc35a6ebe3c0b20bcaaf486882
+assets/init-Gi6I4Gst.js,1768628403911,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/infoDiagram-WHAUD3N6-D7ElR4ge.js,1768628403911,fd385796cd0e73849d65da74e16f713104498c6dac7d6bea43526c38976f6ca8
+assets/kanban-definition-3W4ZIXB7-sXKcChoN.js,1768628403911,a2af5b96eb058c89f3a07d14dc384539f27ace8918f4aa5ba0c0f223f02abae5
+assets/journeyDiagram-XKPGCS4Q-DnhAqRFp.js,1768628403911,0c367d400d4caf4063bf2e2875d64caff4097dac767409fb643d526016eaaad6
+assets/graph-CZCOCpy_.js,1768628403912,57ab8c05113ab1eca7041896703cef3585caee4331b5a46a65b356ac6642df94
+assets/layout-DvhvnuOt.js,1768628403912,551c2ec5061550f778c3867acc43622b8ef200dd0c47c891fc46482d49c44e82
+assets/diagram-S2PKOQOG-CAzbraPU.js,1768628403911,a00e70bed509df327bcdee0dbac09b6ed444a08e394240e24efe0677d2bd9c48
+assets/gitGraphDiagram-NY62KEGX-DaEWbm5l.js,1768628403911,5242798f2d34eb0f580b63ec694e0f353fe1d53642e0cf0f5b6699f747ac116f
+assets/diagram-QEK2KX5R-CajqBM1a.js,1768628403911,aa12e50e7b4dbd54e4d76071f2b4c7a404a1b048fe2ed48faead2366c308a31e
+assets/erDiagram-Q2GNP2WA-CCV9Nu8N.js,1768628403911,ab00159e2fbcfd58bd73b7f7fb809d3d79bf243c14b4c26cb1706f0c4d201aac
+assets/index-DaqhDtbV.css,1768628403911,ef90d89b3df32917dee04f266902f0746fe62b4404b10495ce101a378fc5645a
+assets/defaultLocale-DX6XiGOO.js,1768628403911,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/diagram-PSM6KHXK-BG2A18_0.js,1768628403911,e5e5b32f80841732d23136c78c281681a69e8ac95de33b0373dfa2455b6ea603
+assets/classDiagram-v2-WZHVMYZB-DXfADWC8.js,1768628403911,72336c26fd38d9efe80f9f5db12abaa04fba0a4511ae2a5deefdce99b0516024
+assets/dagre-6UL2VRFP-DldIt7-C.js,1768628403911,6e38c6c4e0399c14fb55761045f0e7a9ab1bfd39c15bb25be65bf21021c728fb
+assets/clone-BHSgrymN.js,1768628403911,edf60579428411e5dbdbd58555a7772d36e53fa81638adaa1aa1afb69719d823
+assets/chunk-QZHKN3VN-kDMDqvJi.js,1768628403911,134f6017d243e360d6a127cac373e99a1c26ccd48084cb796ca6ebb2b8ed638f
+assets/chunk-TZMSLE5B-Dy5jjUbX.js,1768628403911,fde3774a9c92c20dc5af2af79f7da33773c2f9b28f3ea987ec4650566eef9aab
+assets/classDiagram-2ON5EDUG-DXfADWC8.js,1768628403911,72336c26fd38d9efe80f9f5db12abaa04fba0a4511ae2a5deefdce99b0516024
+assets/flowDiagram-NV44I4VS-CGSzQY3Q.js,1768628403911,1c01ab5c155e90da58d3be74ef10f4faecc490579250d91089fed662b8eabf27
+assets/ganttDiagram-JELNMOA3-B8_mL9bV.js,1768628403912,8492843e6f853519c6febb7652bfc23304369be7ae94ec8bd397e5fa9106c512
+assets/sequenceDiagram-WL72ISMW-yMdLxLZ1.js,1768628403911,7b1aa78ed83c300a1d6b88a055be116efdf5decb332e62f2de585059cb2888b0
+assets/chunk-QN33PNHL-okbhdAMT.js,1768628403911,fef095fa7fb7ab9adeba31b2d9d2db3f697b8734b758e4ac3bdbfba72e0e713f
+assets/chunk-FMBD7UC4-DmaKGz_p.js,1768628403911,545e5a892509d51a655bed31619b54cf0924e78099ebf1bd73a6282939027c44
+assets/cose-bilkent-S5V4N54A-jBD2yzSc.js,1768628403911,aa33236c733a2659b3576dff39a23d50380e2c3d932a0faae9b1e24531f53bf6
+assets/chunk-55IACEB6-C9Jj6EMd.js,1768628403911,0936d7f9254a33e33029b51d3fc04697d71cbcd9d73d7886c3a65eb588ebd817
+assets/chunk-4BX2VUAB-BOO1cnGR.js,1768628403911,b3788f2d23723f86adc1fc7dd25690d671f8a127d32d946c5ac6d5f9dfbdc32a
+assets/chunk-B4BG7PRW-BlqTmvD8.js,1768628403911,a5e0f7a3a11c251f54806b859e8122ff1613a261c920ad18ab84e189b9cca839
+assets/channel-eGqOpf2h.js,1768628403911,b85651bd5ef849c8a1fc3897034cdd3142ce33e5caf6142007b4e10a88299774
+assets/chunk-DI55MBZ5-BAdRmIBe.js,1768628403911,ed27ca869639870276b3d9e5785ba9180fc62bb9cca81291c0f28e4c3b9a0e69
+assets/arc-DV7rFrhX.js,1768628403911,ae1d0b6596a3532413d836407b8a46dec1a13b96d4bd727261ee52ac9e657b2c
+assets/_baseUniq-B_ZpBQyg.js,1768628403912,efef96b2f4935b61d38f5b45c7388356d734e3059e33d35705fc19995c68f83c
+assets/c4Diagram-YG6GDRKO-DBXzGBar.js,1768628403911,a94914d114471703a01cd7a46d38df4d3592f353f0562c7f631aca3b71c733aa
+assets/blockDiagram-VD42YOAC-CEphBr4A.js,1768628403911,699cc833e51b0e42b087b9c12472141d65b31c913ed83e024539f0bb316a4557
+assets/architectureDiagram-VXUJARFQ-DHHWe4Hi.js,1768628403911,f8103d5c0c11126c46ac136651d8ee7aaa90fb66653829bc6acf3a04dc7f4267
+assets/katex-Cu_Erd72.js,1768628403911,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-93AZF-_H.js,1768628403912,cb853ea881cd736bfd8f176a31f15dbe77d97f72f38001b5b45277a777596018
+assets/cytoscape.esm-CyJtwmzi.js,1768628403911,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-BQOQQmgc.js,1768628403912,d28311c4900ec75835c73f709a6f08e410f095d69f801d739b59dcd1a1a65379
+pwa-192x192.png,1768628403534,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1768628403542,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1768628403526,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+logo.png,1768628403529,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+</file>
+
+<file path="functions/lib/index.js">
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.scrapeUrl = void 0;
+const https_1 = require("firebase-functions/v2/https");
+const v2_1 = require("firebase-functions/v2");
+const admin = __importStar(require("firebase-admin"));
+const axios_1 = __importDefault(require("axios"));
+const cheerio = __importStar(require("cheerio"));
+// 初期化
+if (admin.apps.length === 0) {
+    admin.initializeApp();
+}
+// 日本リージョンに設定
+(0, v2_1.setGlobalOptions)({ region: "asia-northeast1", memory: "1GiB" });
+/**
+ * URLを受け取り、Webページのタイトルと本文テキストを返す関数
+ */
+exports.scrapeUrl = (0, https_1.onCall)(async (request) => {
+    // 認証チェック
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "ログインが必要です");
+    }
+    const { url } = request.data;
+    if (!url) {
+        throw new https_1.HttpsError("invalid-argument", "URLが必要です");
+    }
+    try {
+        // 1. HTMLを取得
+        const response = await axios_1.default.get(url, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            },
+            timeout: 10000, // 10秒タイムアウト
+        });
+        // 2. HTMLを解析 (cheerio)
+        const $ = cheerio.load(response.data);
+        // 不要な要素を削除
+        $("script").remove();
+        $("style").remove();
+        $("nav").remove();
+        $("footer").remove();
+        $("header").remove();
+        $("iframe").remove();
+        // タイトルと本文を取得
+        const title = $("title").text().trim() || "No Title";
+        // 本文抽出（pタグや記事本文と思われる箇所を優先）
+        let content = "";
+        $("p, h1, h2, h3, h4, li, article").each((_, el) => {
+            const text = $(el).text().trim();
+            if (text.length > 20) {
+                // 短すぎるゴミテキストを除外
+                content += text + "\n";
+            }
+        });
+        // 文字数制限（Geminiに渡すため長すぎると困る場合があるが、Flashならかなりいける）
+        const limitedContent = content.slice(0, 50000); // 5万文字でカット
+        return {
+            success: true,
+            title,
+            content: limitedContent,
+        };
+    }
+    catch (error) {
+        console.error("Scraping Error:", error);
+        throw new https_1.HttpsError("internal", `読み込みに失敗しました: ${error.message}`);
+    }
+});
 </file>
 
 <file path="functions/.gitignore">
@@ -969,6 +2582,87 @@ exports.sendDailyReminders = (0, scheduler_1.onSchedule)("every day 09:00", asyn
 });
 </file>
 
+<file path="functions/index.ts">
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { setGlobalOptions } from "firebase-functions/v2";
+import * as admin from "firebase-admin";
+import axios from "axios";
+import * as cheerio from "cheerio";
+
+// 初期化
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
+
+// 日本リージョンに設定
+setGlobalOptions({ region: "asia-northeast1", memory: "1GiB" });
+
+/**
+ * URLを受け取り、Webページのタイトルと本文テキストを返す関数
+ */
+export const scrapeUrl = onCall(async (request) => {
+  // 認証チェック
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "ログインが必要です");
+  }
+
+  const { url } = request.data;
+  if (!url) {
+    throw new HttpsError("invalid-argument", "URLが必要です");
+  }
+
+  try {
+    // 1. HTMLを取得
+    const response = await axios.get(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      },
+      timeout: 10000, // 10秒タイムアウト
+    });
+
+    // 2. HTMLを解析 (cheerio)
+    const $ = cheerio.load(response.data);
+
+    // 不要な要素を削除
+    $("script").remove();
+    $("style").remove();
+    $("nav").remove();
+    $("footer").remove();
+    $("header").remove();
+    $("iframe").remove();
+
+    // タイトルと本文を取得
+    const title = $("title").text().trim() || "No Title";
+
+    // 本文抽出（pタグや記事本文と思われる箇所を優先）
+    let content = "";
+    $("p, h1, h2, h3, h4, li, article").each((_, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 20) {
+        // 短すぎるゴミテキストを除外
+        content += text + "\n";
+      }
+    });
+
+    // 文字数制限（Geminiに渡すため長すぎると困る場合があるが、Flashならかなりいける）
+    const limitedContent = content.slice(0, 50000); // 5万文字でカット
+
+    return {
+      success: true,
+      title,
+      content: limitedContent,
+    };
+  } catch (error: any) {
+    console.error("Scraping Error:", error);
+    throw new HttpsError(
+      "internal",
+      `読み込みに失敗しました: ${error.message}`,
+    );
+  }
+});
+</file>
+
 <file path="functions/package.json">
 {
   "name": "functions",
@@ -1025,22 +2719,22 @@ exports.sendDailyReminders = (0, scheduler_1.onSchedule)("every day 09:00", asyn
 <file path="public/firebase-messaging-sw.js">
 // public/firebase-messaging-sw.js
 importScripts(
-  "https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"
+  "https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js",
 );
 importScripts(
-  "https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"
+  "https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js",
 );
 
 // Firebase設定 (ご自身のプロジェクト設定に合わせてください)
 // ※ vite.envの内容はここでは使えないため、ハードコードするかビルドプロセスで置換が必要です
 const firebaseConfig = {
-  apiKey: "AIzaSyCd_kTXZpRbQcNZkd6V2-QIAQtBwXzwv40",
-  authDomain: "hair-link-app-ee2a3.firebaseapp.com",
-  projectId: "hair-link-app-ee2a3",
-  storageBucket: "hair-link-app-ee2a3.firebasestorage.app",
-  messagingSenderId: "501197211494",
-  appId: "1:501197211494:web:93f6bb5b057f0df7872aa7",
-  measurementId: "G-2SLGR0821E",
+  apiKey: "AIzaSyASEFgUclaLh1fvHW5k0OSIluT7D2Ekq2M",
+  authDomain: "my-brain-145b1.firebaseapp.com",
+  projectId: "my-brain-145b1",
+  storageBucket: "my-brain-145b1.firebasestorage.app",
+  messagingSenderId: "431208476657",
+  appId: "1:431208476657:web:23f150bffbe65e6d479e50",
+  measurementId: "G-T0GV83YGEG",
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -1051,7 +2745,7 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log(
     "[firebase-messaging-sw.js] Received background message ",
-    payload
+    payload,
   );
 
   const notificationTitle = payload.notification.title;
@@ -1063,798 +2757,6 @@ messaging.onBackgroundMessage((payload) => {
 
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
-</file>
-
-<file path="public/presentation.html">
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HairLink - 美容師のための経営OS</title>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Poppins:wght@400;600;800&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      :root {
-        --primary: #0d9488; /* Teal 600 */
-        --primary-light: #2dd4bf; /* Teal 400 */
-        --dark: #1c1917; /* Stone 900 */
-        --darker: #0c0a09; /* Stone 950 */
-        --light: #fafaf9; /* Stone 50 */
-        --accent: #f43f5e; /* Rose 500 */
-        --text-gray: #a8a29e;
-      }
-
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      body {
-        font-family: "Poppins", "Noto Sans JP", sans-serif;
-        background-color: var(--darker);
-        color: var(--light);
-        overflow: hidden; /* スクロールバーを隠す */
-      }
-
-      /* スライドコンテナ */
-      .slides-container {
-        width: 100vw;
-        height: 100vh;
-        overflow-y: scroll;
-        scroll-snap-type: y mandatory;
-        scroll-behavior: smooth;
-      }
-
-      /* 個別スライド */
-      section {
-        width: 100vw;
-        height: 100vh;
-        scroll-snap-align: start;
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        padding: 2rem;
-        overflow: hidden;
-      }
-
-      /* 背景装飾 */
-      .bg-blob {
-        position: absolute;
-        border-radius: 50%;
-        filter: blur(80px);
-        opacity: 0.3;
-        z-index: 0;
-      }
-
-      /* タイポグラフィ */
-      h1 {
-        font-size: clamp(2.5rem, 6vw, 5rem);
-        font-weight: 900;
-        line-height: 1.1;
-        margin-bottom: 1.5rem;
-        background: linear-gradient(135deg, #fff 0%, var(--primary-light) 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        text-align: center;
-        z-index: 1;
-      }
-
-      h2 {
-        font-size: clamp(1.5rem, 4vw, 3rem);
-        color: var(--primary);
-        text-transform: uppercase;
-        letter-spacing: 0.2em;
-        margin-bottom: 2rem;
-        text-align: center;
-        z-index: 1;
-      }
-
-      h3 {
-        font-size: 1.5rem;
-        font-weight: 700;
-        margin-bottom: 1rem;
-        color: white;
-      }
-
-      p {
-        font-size: 1.2rem;
-        color: var(--text-gray);
-        max-width: 800px;
-        text-align: center;
-        line-height: 1.8;
-        z-index: 1;
-      }
-
-      /* アニメーション用クラス */
-      .fade-in-up {
-        opacity: 0;
-        transform: translateY(30px);
-        transition: all 0.8s ease-out;
-      }
-
-      section.active .fade-in-up {
-        opacity: 1;
-        transform: translateY(0);
-      }
-
-      /* 遅延設定 */
-      .delay-100 {
-        transition-delay: 0.1s;
-      }
-      .delay-200 {
-        transition-delay: 0.2s;
-      }
-      .delay-300 {
-        transition-delay: 0.3s;
-      }
-      .delay-500 {
-        transition-delay: 0.5s;
-      }
-
-      /* パルスアニメーション (初月無料用) */
-      @keyframes pulse {
-        0% {
-          transform: scale(1);
-        }
-        50% {
-          transform: scale(1.05);
-        }
-        100% {
-          transform: scale(1);
-        }
-      }
-      .pulse-badge {
-        animation: pulse 2s infinite;
-      }
-
-      /* --- モックアップなどのビジュアル要素 --- */
-
-      /* スマホモック */
-      .phone {
-        width: 280px;
-        height: 580px;
-        background: #fff;
-        border-radius: 40px;
-        border: 8px solid #333;
-        position: relative;
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        z-index: 2;
-      }
-      .notch {
-        position: absolute;
-        top: 0;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 120px;
-        height: 25px;
-        background: #333;
-        border-bottom-left-radius: 16px;
-        border-bottom-right-radius: 16px;
-        z-index: 10;
-      }
-      .screen {
-        flex: 1;
-        background: #fafaf9;
-        overflow: hidden;
-        position: relative;
-        display: flex;
-        flex-direction: column;
-      }
-
-      /* カードUI */
-      .ui-card {
-        background: white;
-        border-radius: 16px;
-        padding: 16px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        margin-bottom: 12px;
-      }
-
-      /* グラフバー */
-      .bar-container {
-        display: flex;
-        align-items: flex-end;
-        gap: 8px;
-        height: 100px;
-        padding: 10px 0;
-      }
-      .bar {
-        width: 100%;
-        background: var(--primary);
-        border-radius: 4px 4px 0 0;
-        opacity: 0.8;
-      }
-
-      /* --- スライドごとのスタイル --- */
-
-      /* Slide 1: 表紙 */
-      #slide-1 .mockups {
-        display: flex;
-        gap: 40px;
-        margin-top: 40px;
-        transform: perspective(1000px) rotateY(-10deg) rotateX(5deg);
-      }
-
-      /* Slide 2: 課題 */
-      .problem-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 20px;
-        width: 100%;
-        max-width: 1000px;
-        margin-top: 40px;
-        z-index: 2;
-      }
-      .problem-card {
-        background: rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 30px;
-        border-radius: 20px;
-        text-align: center;
-      }
-      .icon {
-        font-size: 3rem;
-        margin-bottom: 1rem;
-        display: block;
-      }
-
-      /* Slide 3: 解決策 */
-      .solution-row {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 20px;
-        margin-top: 40px;
-        z-index: 2;
-      }
-      .feature-box {
-        width: 180px;
-        height: 180px;
-        background: linear-gradient(145deg, #1e293b, #0f172a);
-        border-radius: 20px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-      }
-
-      /* Slide 4: 強み (在庫DX) */
-      .scan-flow {
-        display: flex;
-        align-items: center;
-        gap: 20px;
-        margin-top: 40px;
-        flex-wrap: wrap;
-        justify-content: center;
-      }
-      .arrow {
-        font-size: 2rem;
-        color: var(--text-gray);
-      }
-
-      /* Slide 5: UX */
-      .ticket {
-        width: 320px;
-        background: white;
-        border-radius: 20px;
-        overflow: hidden;
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-        color: #333;
-        margin-top: 30px;
-        transform: rotate(-3deg);
-      }
-      .ticket-top {
-        background: var(--primary);
-        padding: 20px;
-        color: white;
-      }
-      .ticket-bottom {
-        padding: 20px;
-        position: relative;
-        border-top: 2px dashed #ddd;
-      }
-      .ticket-bottom::before,
-      .ticket-bottom::after {
-        content: "";
-        position: absolute;
-        top: -10px;
-        width: 20px;
-        height: 20px;
-        background: var(--darker);
-        border-radius: 50%;
-      }
-      .ticket-bottom::before {
-        left: -10px;
-      }
-      .ticket-bottom::after {
-        right: -10px;
-      }
-
-      /* Slide 6: オファー */
-      .offer-price {
-        font-size: 4rem;
-        font-weight: 900;
-        color: white;
-        text-shadow: 0 0 20px var(--primary);
-      }
-      .qr-box {
-        width: 200px;
-        height: 200px;
-        background: white;
-        border-radius: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin: 30px 0;
-        color: #333;
-        font-weight: bold;
-      }
-
-      /* ナビゲーションヒント */
-      .nav-hint {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        font-size: 0.8rem;
-        color: rgba(255, 255, 255, 0.3);
-        z-index: 100;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="nav-hint">Use ↑ ↓ keys to navigate</div>
-
-    <div class="slides-container" id="container">
-      <!-- Slide 1: 表紙 -->
-      <section id="s1">
-        <div
-          class="bg-blob"
-          style="
-            top: -10%;
-            left: -10%;
-            width: 500px;
-            height: 500px;
-            background: var(--primary);
-          "
-        ></div>
-
-        <p
-          class="fade-in-up"
-          style="
-            letter-spacing: 0.2em;
-            color: var(--primary-light);
-            font-weight: bold;
-            margin-bottom: 1rem;
-          "
-        >
-          HAIR SALON DX PLATFORM
-        </p>
-        <h1 class="fade-in-up delay-100">
-          ハサミを置いた後の業務を、<br />ゼロにする。
-        </h1>
-        <p class="fade-in-up delay-200">
-          個人美容師のための、手のひら経営OS 「HairLink」
-        </p>
-
-        <div class="mockups fade-in-up delay-300">
-          <!-- 美容師画面 -->
-          <div class="phone" style="transform: translateY(20px)">
-            <div class="notch"></div>
-            <div
-              class="screen"
-              style="background: #1c1917; padding: 20px; color: white"
-            >
-              <div style="margin-top: 30px; font-weight: bold">Dashboard</div>
-              <div
-                style="
-                  background: #292524;
-                  padding: 15px;
-                  border-radius: 15px;
-                  margin-top: 20px;
-                "
-              >
-                <div style="font-size: 10px; color: #aaa">GROSS PROFIT</div>
-                <div style="font-size: 24px; font-weight: bold">¥845,000</div>
-              </div>
-              <div
-                style="
-                  margin-top: 20px;
-                  height: 100px;
-                  display: flex;
-                  align-items: flex-end;
-                  gap: 5px;
-                "
-              >
-                <div class="bar" style="height: 40%"></div>
-                <div class="bar" style="height: 60%"></div>
-                <div class="bar" style="height: 30%"></div>
-                <div class="bar" style="height: 80%"></div>
-                <div class="bar" style="height: 50%"></div>
-              </div>
-            </div>
-          </div>
-          <!-- 顧客画面 -->
-          <div
-            class="phone"
-            style="
-              transform: translate(-30px, -20px);
-              z-index: 3;
-              border-color: #eee;
-            "
-          >
-            <div class="notch" style="background: black"></div>
-            <div
-              class="screen"
-              style="background: #fff; padding: 20px; color: #333"
-            >
-              <div
-                style="margin-top: 30px; font-weight: bold; text-align: center"
-              >
-                MEMBER CARD
-              </div>
-              <div
-                style="
-                  background: linear-gradient(135deg, #333, #000);
-                  height: 160px;
-                  border-radius: 20px;
-                  margin-top: 20px;
-                  padding: 20px;
-                  color: white;
-                  display: flex;
-                  flex-direction: column;
-                  justify-content: space-between;
-                "
-              >
-                <div style="font-size: 10px; letter-spacing: 2px">
-                  MEMBER ID
-                </div>
-                <div
-                  style="
-                    font-size: 20px;
-                    letter-spacing: 3px;
-                    font-family: monospace;
-                  "
-                >
-                  8823-1192
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Slide 2: 課題 -->
-      <section id="s2">
-        <h2 class="fade-in-up">The Problem</h2>
-        <h1 class="fade-in-up delay-100" style="font-size: 3rem">
-          美容師の "見えない" 3つの負担
-        </h1>
-
-        <div class="problem-grid fade-in-up delay-200">
-          <div class="problem-card">
-            <span class="icon">💬</span>
-            <h3>予約調整の泥沼</h3>
-            <p style="font-size: 0.9rem">
-              施術中も鳴り止まないLINE。<br />ダブルブッキングの恐怖と、<br />深夜まで続く返信作業。
-            </p>
-          </div>
-          <div class="problem-card">
-            <span class="icon">📦</span>
-            <h3>在庫管理のストレス</h3>
-            <p style="font-size: 0.9rem">
-              「数えるのが面倒」<br />感覚で発注してミス発生。<br />お客様を断る最悪の事態に。
-            </p>
-          </div>
-          <div class="problem-card">
-            <span class="icon">💸</span>
-            <h3>ドンブリ勘定</h3>
-            <p style="font-size: 0.9rem">
-              売上はわかる。<br />でも「手元にいくら残るか」<br />利益が見えていない不安。
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <!-- Slide 3: 解決策 -->
-      <section id="s3">
-        <div
-          class="bg-blob"
-          style="
-            top: 50%;
-            right: -10%;
-            width: 600px;
-            height: 600px;
-            background: var(--accent);
-          "
-        ></div>
-
-        <h2 class="fade-in-up">Solution</h2>
-        <h1 class="fade-in-up delay-100">HairLinkがすべて解決します</h1>
-        <p class="fade-in-up delay-200">
-          必要な機能だけを、ひとつのアプリに統合しました。
-        </p>
-
-        <div class="solution-row fade-in-up delay-300">
-          <div class="feature-box">
-            <span class="icon" style="margin: 0">📅</span>
-            <span style="font-weight: bold; margin-top: 10px">WEB予約</span>
-          </div>
-          <div class="feature-box">
-            <span class="icon" style="margin: 0">📝</span>
-            <span style="font-weight: bold; margin-top: 10px">電子カルテ</span>
-          </div>
-          <div class="feature-box">
-            <span class="icon" style="margin: 0">📊</span>
-            <span style="font-weight: bold; margin-top: 10px">経営分析</span>
-          </div>
-          <div
-            class="feature-box"
-            style="
-              border-color: var(--primary);
-              box-shadow: 0 0 20px var(--primary);
-            "
-          >
-            <span class="icon" style="margin: 0">📷</span>
-            <span
-              style="
-                font-weight: bold;
-                margin-top: 10px;
-                color: var(--primary-light);
-              "
-              >在庫DX</span
-            >
-          </div>
-        </div>
-      </section>
-
-      <!-- Slide 4: 最大の強み -->
-      <section id="s4">
-        <h2 class="fade-in-up">Core Value</h2>
-        <h1 class="fade-in-up delay-100">
-          「ピッ」とするだけ。<br />在庫と利益を完全自動化。
-        </h1>
-
-        <div class="scan-flow fade-in-up delay-200">
-          <!-- Step 1 -->
-          <div
-            class="ui-card"
-            style="width: 220px; text-align: center; color: #333"
-          >
-            <div
-              style="
-                background: #f5f5f5;
-                height: 120px;
-                border-radius: 10px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                margin-bottom: 10px;
-              "
-            >
-              <span style="font-size: 3rem">📷</span>
-            </div>
-            <p style="font-weight: bold">バーコード読取</p>
-            <p style="font-size: 0.8rem; color: #666">施術ログ作成時に</p>
-          </div>
-
-          <div class="arrow">➡</div>
-
-          <!-- Step 2 -->
-          <div
-            class="ui-card"
-            style="width: 220px; text-align: center; color: #333"
-          >
-            <div
-              style="
-                font-size: 3rem;
-                font-weight: 900;
-                color: var(--accent);
-                height: 120px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-              "
-            >
-              -1
-            </div>
-            <p style="font-weight: bold">在庫自動減算</p>
-            <p style="font-size: 0.8rem; color: #666">棚卸し不要</p>
-          </div>
-
-          <div class="arrow">➡</div>
-
-          <!-- Step 3 -->
-          <div
-            class="ui-card"
-            style="
-              width: 220px;
-              text-align: center;
-              background: #1c1917;
-              color: white;
-            "
-          >
-            <div
-              style="
-                height: 120px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-              "
-            >
-              <span style="font-size: 0.8rem; color: #aaa">PROFIT</span>
-              <span
-                style="
-                  font-size: 2rem;
-                  font-weight: bold;
-                  color: var(--primary-light);
-                "
-                >¥Updated</span
-              >
-            </div>
-            <p style="font-weight: bold">粗利・原価計算</p>
-            <p style="font-size: 0.8rem; color: #aaa">経営状態が見える</p>
-          </div>
-        </div>
-
-        <p class="fade-in-up delay-300" style="margin-top: 40px">
-          HPBにはない「原価管理」機能で、手残りの利益を最大化します。
-        </p>
-      </section>
-
-      <!-- Slide 5: UX -->
-      <section id="s5">
-        <div
-          class="bg-blob"
-          style="
-            bottom: -10%;
-            left: -10%;
-            width: 500px;
-            height: 500px;
-            background: #fff;
-          "
-        ></div>
-
-        <h2 class="fade-in-up">User Experience</h2>
-        <h1
-          class="fade-in-up delay-100"
-          style="color: #333; text-shadow: 0 0 20px black"
-        >
-          お客様も喜ぶ、<br />プレミアムな体験
-        </h1>
-
-        <div class="ticket fade-in-up delay-200">
-          <div class="ticket-top">
-            <div style="font-size: 12px; opacity: 0.8; margin-bottom: 5px">
-              BOOKING CONFIRMED
-            </div>
-            <div style="font-size: 24px; font-weight: bold">HairLink Salon</div>
-          </div>
-          <div class="ticket-bottom">
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                margin-bottom: 15px;
-              "
-            >
-              <div>
-                <div style="font-size: 10px; color: #999">DATE</div>
-                <div style="font-size: 18px; font-weight: bold">12 / 24</div>
-              </div>
-              <div style="text-align: right">
-                <div style="font-size: 10px; color: #999">TIME</div>
-                <div style="font-size: 18px; font-weight: bold">14:00</div>
-              </div>
-            </div>
-            <div style="font-size: 10px; color: #999">MENU</div>
-            <div style="font-size: 14px; font-weight: bold">
-              Cut + Illumina Color
-            </div>
-          </div>
-        </div>
-
-        <p class="fade-in-up delay-300" style="margin-top: 30px">
-          「この美容師さん、最先端。」<br />
-          そう感じさせる洗練されたデザインが、あなたのブランディングになります。
-        </p>
-      </section>
-
-      <!-- Slide 6: オファー -->
-      <section id="s6">
-        <p style="color: var(--primary); font-weight: bold">START TODAY</p>
-        <h1>まずは無料で<br />体験してください</h1>
-
-        <div class="qr-box fade-in-up delay-200">
-          <img
-            src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://hair-link-app.web.app"
-            alt="QR Code"
-          />
-        </div>
-
-        <div class="fade-in-up delay-300">
-          <p>PRO PLAN</p>
-          <!-- 初月無料バッジ -->
-          <div
-            class="pulse-badge"
-            style="
-              background: var(--accent);
-              color: white;
-              display: inline-block;
-              padding: 6px 16px;
-              border-radius: 50px;
-              font-size: 0.8rem;
-              font-weight: bold;
-              margin-bottom: 10px;
-              box-shadow: 0 4px 10px rgba(244, 63, 94, 0.4);
-            "
-          >
-            🎉 初月無料キャンペーン中
-          </div>
-          <div class="offer-price">
-            ¥2,980<span
-              style="font-size: 1.5rem; font-weight: 400; color: #aaa"
-            >
-              / month</span
-            >
-          </div>
-          <p style="margin-top: 20px">
-            在庫管理スタッフと予約受付スタッフを雇うコストを、<br />
-            カラー剤たった3本分の価格で。
-          </p>
-        </div>
-
-        <p style="margin-top: 50px; font-size: 0.9rem; opacity: 0.5">
-          Designed by Takumi Yoshioka
-        </p>
-      </section>
-    </div>
-
-    <script>
-      // Intersection Observer for Animation
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              entry.target.classList.add("active");
-            } else {
-              entry.target.classList.remove("active");
-            }
-          });
-        },
-        { threshold: 0.3 }
-      );
-
-      document.querySelectorAll("section").forEach((section) => {
-        observer.observe(section);
-      });
-
-      // Keyboard Navigation
-      document.addEventListener("keydown", (e) => {
-        const container = document.getElementById("container");
-        if (e.key === "ArrowDown" || e.key === "ArrowRight" || e.key === " ") {
-          e.preventDefault();
-          container.scrollBy({ top: window.innerHeight, behavior: "smooth" });
-        } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
-          e.preventDefault();
-          container.scrollBy({ top: -window.innerHeight, behavior: "smooth" });
-        }
-      });
-    </script>
-  </body>
-</html>
 </file>
 
 <file path="src/components/NotificationBell/NotificationBell.vue">
@@ -2037,311 +2939,469 @@ const getTypeStyles = (type: string) => {
 </style>
 </file>
 
-<file path="src/uiParts/BaseButton/BaseButton.vue">
-<script setup lang="ts">
-interface Props {
-  variant?: "primary" | "secondary" | "danger" | "text";
-  block?: boolean;
-}
-withDefaults(defineProps<Props>(), {
-  variant: "primary",
-  block: false,
-});
-</script>
+<file path="src/composables/useMyBrain.ts">
+import { ref, computed } from "vue";
+import { db, auth } from "@/firebase";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  limit,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  updateDoc,
+  setDoc,
+  orderBy,
+  serverTimestamp,
+  where,
+} from "firebase/firestore";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-<template>
-  <button
-    :class="[
-      'font-bold py-2 px-4 rounded-lg transition duration-200 flex items-center justify-center gap-2 shadow-sm',
-      block ? 'w-full' : '',
-      variant === 'primary'
-        ? 'bg-rose-500 hover:bg-rose-600 text-white'
-        : variant === 'secondary'
-        ? 'bg-white border-2 border-rose-500 text-rose-600 hover:bg-rose-50'
-        : variant === 'danger'
-        ? 'bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-600'
-        : 'text-stone-500 hover:text-stone-700 hover:bg-stone-100',
-    ]"
-  >
-    <slot></slot>
-  </button>
-</template>
-</file>
-
-<file path="src/uiParts/BaseCard/BaseCard.vue">
-<template>
-  <div
-    class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 overflow-hidden relative"
-  >
-    <slot></slot>
-  </div>
-</template>
-</file>
-
-<file path="src/uiParts/BaseInput/BaseInput.vue">
-<script setup lang="ts">
-defineProps<{
-  modelValue: string | number;
-  label?: string;
-  type?: string;
-  placeholder?: string;
-}>();
-defineEmits(["update:modelValue"]);
-</script>
-
-<template>
-  <div class="w-full">
-    <label
-      v-if="label"
-      class="block text-xs font-bold text-stone-500 mb-1.5 ml-1"
-      >{{ label }}</label
-    >
-    <input
-      :type="type || 'text'"
-      :value="modelValue"
-      @input="
-        $emit('update:modelValue', ($event.target as HTMLInputElement).value)
-      "
-      :placeholder="placeholder"
-      class="w-full border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-rose-400 focus:border-rose-400 outline-none transition bg-white text-stone-700 placeholder-stone-300"
-    />
-  </div>
-</template>
-</file>
-
-<file path="src/uiParts/BaseModal/BaseModal.vue">
-<script setup lang="ts">
-import { ref } from "vue";
-
-const dialog = ref<HTMLDialogElement | null>(null);
-
-// ★重要: 親から show() と close() を呼べるようにする
-defineExpose({
-  show: () => dialog.value?.showModal(),
-  close: () => dialog.value?.close(),
-});
-</script>
-
-<template>
-  <dialog
-    ref="dialog"
-    class="modal p-0 rounded-xl shadow-2xl backdrop:bg-black/50"
-    @click.self="dialog?.close()"
-  >
-    <div class="bg-white p-6 w-80 md:w-96 max-h-[85vh] overflow-y-auto">
-      <slot></slot>
-    </div>
-  </dialog>
-</template>
-</file>
-
-<file path="src/env.d.ts">
-/// <reference types="vite/client" />
-
-declare module "*.vue" {
-  import type { DefineComponent } from "vue";
-  const component: DefineComponent<{}, {}, any>;
-  export default component;
-}
-</file>
-
-<file path="src/firebase.ts">
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-import { getMessaging } from "firebase/messaging"; // 追加
-
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
-};
-
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
-export const messaging = getMessaging(app); // 追加
-
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code == "failed-precondition") {
-    console.error("複数タブで開いているためオフライン機能が無効です");
-  } else if (err.code == "unimplemented") {
-    console.error("ブラウザが対応していません");
-  }
-});
-</file>
-
-<file path="src/main.ts">
-import { createApp } from "vue";
-import "./style.css";
-import App from "./App.vue";
-import router from "./router";
-
-const app = createApp(App);
-app.use(router);
-app.mount("#app");
-</file>
-
-<file path="src/style.css">
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-:root {
-  /* 影の質感をApple風に調整 */
-  --shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
-  --shadow-card: 0 10px 40px -10px rgba(0, 0, 0, 0.08);
+export interface Memory {
+  id: string;
+  userId: string;
+  text: string;
+  aiSummary?: string;
+  tags?: string[];
+  createdAt: any;
+  hasImage?: boolean;
+  fileType?: string;
+  embedding?: number[];
+  sourceUrl?: string;
 }
 
-body {
-  /* 真っ白(#ffffff)ではなく、目に優しいごく薄いグレー */
-  background-color: #f8fafc;
-  color: #1e293b;
-  /* iOSのような滑らかな文字レンダリング */
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  /* 日本語フォントの最適化 */
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans",
-    Meiryo, sans-serif;
+export interface ChatLog {
+  id: string;
+  userId: string;
+  question: string;
+  answer: string;
+  createdAt: any;
+  mermaidCode?: string;
+  action?: {
+    title: string;
+    date?: string;
+    url: string;
+  };
 }
 
-/* スクロールバーを隠してスタイリッシュに */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+export interface User {
+  uid: string;
+  email: string;
+  displayName?: string;
+  photoURL?: string | null;
 }
 
-/* グラスモーフィズム（すりガラス）効果 */
-.glass {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-}
+const currentUser = ref<User | null>(null);
+const memories = ref<Memory[]>([]);
+const chatLogs = ref<ChatLog[]>([]);
+const loading = ref(false);
+const isAiThinking = ref(false);
+const activeTag = ref<string | null>(null);
 
-/* 高級感のあるカード */
-.modern-card {
-  background: white;
-  border-radius: 24px;
-  box-shadow: var(--shadow-soft);
-  border: 1px solid rgba(241, 245, 249, 1);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.modern-card:active {
-  transform: scale(0.99);
-}
-
-/* アニメーション */
-@keyframes fadeInScale {
-  from {
-    opacity: 0;
-    transform: scale(0.98) translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-.animate-enter {
-  animation: fadeInScale 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-</file>
-
-<file path=".gitignore">
-node_modules
-.DS_Store
-dist
-dist-ssr
-*.local
-.vscode/
-.env
-</file>
-
-<file path="firebase.json">
-{
-  "hosting": {
-    "public": "dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  },
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "default",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local"
-      ],
-      "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]
-    }
-  ]
-}
-</file>
-
-<file path="postcss.config.js">
-export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-};
-</file>
-
-<file path="tailwind.config.js">
-/** @type {import('tailwindcss').Config} */
-export default {
-  content: ["./index.html", "./src/**/*.{vue,js,ts,jsx,tsx}"],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-};
-</file>
-
-<file path="tsconfig.json">
-{
-  "compilerOptions": {
-    "target": "ESNext",
-    "useDefineForClassFields": true,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "jsx": "preserve",
-    "sourceMap": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "esModuleInterop": true,
-    "lib": ["ESNext", "DOM"],
-    "skipLibCheck": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
+// 画像Base64変換
+const fileToGenerativePart = async (file: File) => {
+  return new Promise<{ inlineData: { data: string; mimeType: string } }>(
+    (resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = (reader.result as string).split(",")[1];
+        resolve({ inlineData: { data: base64String, mimeType: file.type } });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     },
-    "types": ["vite/client"]
-  },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"]
+  );
+};
+
+// コサイン類似度計算
+const cosineSimilarity = (vecA: number[], vecB: number[]) => {
+  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+};
+
+export function useMyBrain() {
+  const getEmbeddingModel = (apiKey: string) => {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    return genAI.getGenerativeModel({ model: "text-embedding-004" });
+  };
+
+  const getSmartModelName = async (apiKey: string): Promise<string> => {
+    try {
+      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+      const listResponse = await fetch(listUrl);
+      if (!listResponse.ok) return "gemini-1.5-flash";
+      const listData = await listResponse.json();
+      const generationModels = (listData.models || []).filter((m: any) =>
+        m.supportedGenerationMethods?.includes("generateContent"),
+      );
+      const flash = generationModels.find((m: any) =>
+        m.name.includes("gemini-1.5-flash"),
+      );
+      const targetModelObj = flash || generationModels[0];
+      return targetModelObj?.name.replace("models/", "") || "gemini-1.5-flash";
+    } catch (e) {
+      return "gemini-1.5-flash";
+    }
+  };
+
+  const initAuth = () => {
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          currentUser.value = {
+            uid: user.uid,
+            email: user.email || "",
+            displayName: data.displayName,
+            photoURL: user.photoURL || undefined,
+          };
+        } else {
+          const newUser = {
+            uid: user.uid,
+            email: user.email || "",
+            createdAt: serverTimestamp(),
+          };
+          await setDoc(doc(db, "users", user.uid), newUser);
+          currentUser.value = newUser;
+        }
+        await Promise.all([fetchMemories(), fetchChatLogs()]);
+      } else {
+        currentUser.value = null;
+        memories.value = [];
+        chatLogs.value = [];
+      }
+    });
+  };
+
+  const logout = async () => {
+    await signOut(auth);
+    window.location.reload();
+  };
+
+  // 2. データ取得
+  const fetchMemories = async () => {
+    if (!currentUser.value) return;
+    loading.value = true;
+    try {
+      // ★修正: limit(500) を削除し、全件取得するように変更
+      // ※件数が多い場合、初回の読み込みに少し時間がかかる可能性がありますが、
+      // 取得後はクライアント側でキャッシュされるため高速に動作します。
+      let q = query(
+        collection(db, "memories"),
+        where("userId", "==", currentUser.value.uid),
+        orderBy("createdAt", "desc"),
+      );
+      const snap = await getDocs(q);
+      memories.value = snap.docs.map(
+        (d) =>
+          ({
+            id: d.id,
+            ...d.data(),
+          }) as Memory,
+      );
+    } catch (e) {
+      console.error("Fetch memories error:", e);
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const fetchChatLogs = async () => {
+    if (!currentUser.value) return;
+    try {
+      const q = query(
+        collection(db, "chat_logs"),
+        where("userId", "==", currentUser.value.uid),
+        orderBy("createdAt", "desc"),
+        limit(50), // チャット履歴は表示用なので50件制限のままでOK
+      );
+      const snap = await getDocs(q);
+      chatLogs.value = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as ChatLog)
+        .reverse();
+    } catch (e) {
+      console.error("Fetch chat logs error:", e);
+    }
+  };
+
+  const selectTag = async (tag: string | null) => {
+    activeTag.value = tag;
+  };
+
+  const filteredMemories = computed(() => {
+    if (!activeTag.value) return memories.value;
+    return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
+  });
+
+  // 3. メモ追加
+  const addMemory = async (text: string, file?: File | null) => {
+    if (!currentUser.value) return;
+    isAiThinking.value = true;
+
+    try {
+      const isImage = file?.type.startsWith("image/");
+      const isPdf = file?.type === "application/pdf";
+      const fileTypeLabel = isImage ? "画像" : isPdf ? "PDF" : "ファイル";
+      const initialText = file ? `(${fileTypeLabel}解析中...) ${text}` : text;
+
+      const docRef = await addDoc(collection(db, "memories"), {
+        userId: currentUser.value.uid,
+        text: initialText,
+        createdAt: serverTimestamp(),
+        tags: [],
+        aiSummary: "AI処理中...",
+        hasImage: !!file,
+        fileType: file?.type || null,
+      });
+
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (apiKey) {
+        const targetModelName = await getSmartModelName(apiKey);
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: targetModelName,
+          generationConfig: { responseMimeType: "application/json" },
+        });
+
+        let promptParts: any[] = [];
+
+        if (file) {
+          const filePart = await fileToGenerativePart(file);
+          promptParts.push(filePart);
+          promptParts.push({
+            text: `
+            画像/資料を分析して記憶データを作成してください。
+            ユーザーメモ: ${text}
+            出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "全テキスト"}
+          `,
+          });
+        } else {
+          promptParts.push({
+            text: `
+            以下のテキストを分析して記憶データを作成してください。
+            内容: ${text}
+            出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "${text}"}
+          `,
+          });
+        }
+
+        const result = await model.generateContent(promptParts);
+        const aiData = JSON.parse(result.response.text());
+        const finalContent = file
+          ? `【${fileTypeLabel}】${text}\n\n${aiData.fullText}`
+          : text;
+
+        const embedModel = getEmbeddingModel(apiKey);
+        const embedResult = await embedModel.embedContent(finalContent);
+        const embedding = embedResult.embedding.values;
+
+        await updateDoc(docRef, {
+          text: finalContent,
+          aiSummary: aiData.summary,
+          tags: aiData.tags,
+          embedding: embedding,
+        });
+
+        const newMem: Memory = {
+          id: docRef.id,
+          userId: currentUser.value.uid,
+          text: finalContent,
+          aiSummary: aiData.summary,
+          tags: aiData.tags,
+          createdAt: new Date(),
+          hasImage: !!file,
+          fileType: file?.type,
+        };
+        memories.value.unshift(newMem);
+      }
+    } catch (e) {
+      console.error("Add memory error:", e);
+      alert("保存エラー");
+    } finally {
+      isAiThinking.value = false;
+    }
+  };
+
+  const addUrlMemory = async (url: string) => {
+    if (!currentUser.value) return;
+    isAiThinking.value = true;
+
+    try {
+      const functions = getFunctions();
+      const scrapeFunc = httpsCallable(functions, "scrapeUrl");
+      const result: any = await scrapeFunc({ url });
+
+      if (result.data.success) {
+        const { title, content } = result.data;
+        const fullText = `【WEB記事】${title}\nURL: ${url}\n\n${content}`;
+        await addMemory(fullText);
+      }
+    } catch (e: any) {
+      console.error("URL Add Error:", e);
+      alert("記事の読み込みに失敗しました: " + e.message);
+    } finally {
+      isAiThinking.value = false;
+    }
+  };
+
+  const updateMemory = async (id: string, newText: string) => {
+    if (!currentUser.value || !newText.trim()) return;
+    try {
+      await updateDoc(doc(db, "memories", id), { text: newText });
+      const target = memories.value.find((m) => m.id === id);
+      if (target) target.text = newText;
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const deleteMemory = async (id: string) => {
+    if (!confirm("削除しますか？")) return;
+    await deleteDoc(doc(db, "memories", id));
+    memories.value = memories.value.filter((m) => m.id !== id);
+  };
+
+  const deleteChatLog = async (id: string) => {
+    await deleteDoc(doc(db, "chat_logs", id));
+    chatLogs.value = chatLogs.value.filter((l) => l.id !== id);
+  };
+
+  // 4. チャット機能
+  const askBrain = async (question: string): Promise<string> => {
+    if (!question.trim() || !currentUser.value) return "";
+    isAiThinking.value = true;
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+      const embedModel = getEmbeddingModel(apiKey);
+      const qEmbed = await embedModel.embedContent(question);
+      const qVec = qEmbed.embedding.values;
+
+      const scoredMemories = memories.value
+        .map((m) => ({
+          ...m,
+          score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
+        }))
+        .sort((a, b) => b.score - a.score);
+
+      const contextMemories = scoredMemories.slice(0, 30);
+      const context = contextMemories
+        .map(
+          (m) =>
+            `- [${m.createdAt?.toDate ? m.createdAt.toDate().toLocaleDateString() : ""}] ${m.text.slice(0, 500)}`,
+        )
+        .join("\n\n");
+
+      const targetModelName = await getSmartModelName(apiKey);
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: targetModelName });
+
+      const prompt = `
+        あなたはユーザーの「第二の脳」です。以下の【記憶データ】を参考に質問に答えてください。
+        
+        【重要指示】
+        回答は必ず以下のJSON形式で行ってください。Markdownは不要です。
+        {
+          "answer": "質問への回答本文（丁寧な口調で）",
+          "mermaid": "関連性や構造を図解するためのMermaid記法コード（グラフやフローチャート）。不要な場合はnull",
+          "action": { "title": "カレンダー登録用の件名", "date": "YYYY-MM-DD HH:mm (推定日時)", "description": "詳細" } または null
+        }
+
+        【ユーザーの質問】${question}
+        【記憶データ(関連順)】${context}
+      `;
+
+      const result = await model.generateContent(prompt);
+      const rawText = result.response.text();
+
+      const cleanJson = rawText
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+      let data;
+      try {
+        data = JSON.parse(cleanJson);
+      } catch (e) {
+        data = { answer: rawText, mermaid: null, action: null };
+      }
+
+      let actionUrl = "";
+      if (data.action && data.action.title) {
+        const baseUrl =
+          "https://www.google.com/calendar/render?action=TEMPLATE";
+        const textParam = `&text=${encodeURIComponent(data.action.title)}`;
+        const detailsParam = `&details=${encodeURIComponent(data.action.description || "")}`;
+        actionUrl = `${baseUrl}${textParam}${detailsParam}`;
+      }
+
+      const logData = {
+        userId: currentUser.value.uid,
+        question: question,
+        answer: data.answer,
+        mermaidCode: data.mermaid || null,
+        action: actionUrl
+          ? { title: data.action.title, url: actionUrl, date: data.action.date }
+          : null,
+        createdAt: serverTimestamp(),
+      };
+
+      const logRef = await addDoc(collection(db, "chat_logs"), logData);
+
+      chatLogs.value.push({
+        id: logRef.id,
+        ...logData,
+        createdAt: new Date(),
+      } as any);
+
+      return data.answer;
+    } catch (e: any) {
+      return "エラー: " + e.message;
+    } finally {
+      isAiThinking.value = false;
+    }
+  };
+
+  const allTags = computed(() => {
+    const tags = new Set<string>();
+    memories.value.forEach((m) => {
+      if (m.tags) m.tags.forEach((t) => tags.add(t));
+    });
+    return Array.from(tags);
+  });
+
+  return {
+    currentUser,
+    memories,
+    filteredMemories,
+    chatLogs,
+    loading,
+    isAiThinking,
+    activeTag,
+    allTags,
+    initAuth,
+    logout,
+    addMemory,
+    addUrlMemory,
+    updateMemory,
+    deleteMemory,
+    askBrain,
+    deleteChatLog,
+    selectTag,
+  };
 }
 </file>
 
@@ -2494,396 +3554,327 @@ export function useNotifications() {
 }
 </file>
 
-<file path="src/views/HomeView/HomeView.ts">
-import { ref, onMounted, onUnmounted, computed, watch } from "vue";
-import { getAuth, signOut, onAuthStateChanged } from "firebase/auth";
-import { useHairLink } from "@/composables/useMyBrain";
+<file path="src/router/index.ts">
+import { createRouter, createWebHistory } from "vue-router";
+import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
+import HomeView from "../views/HomeView/HomeView.vue";
+import LoginView from "../views/LoginView/LoginView.vue";
+import VerifyEmailView from "../views/VerifyEmailView/VerifyEmailView.vue";
+import LandingView from "../views/LandingView/LandingView.vue";
 
-const THEMES: Record<string, any> = {
-  teal: {
-    name: "Teal (Default)",
-    primary: "teal",
-    bgSoft: "bg-teal-50",
-    textMain: "text-teal-600",
-    textDark: "text-teal-800",
-    border: "border-teal-100",
-    gradient: "from-teal-600 to-cyan-500",
-    shadow: "shadow-teal-200/50",
-    accent: "bg-teal-600",
-    button: "hover:bg-teal-100",
-  },
-  rose: {
-    name: "Rose Pink",
-    primary: "rose",
-    bgSoft: "bg-rose-50",
-    textMain: "text-rose-500",
-    textDark: "text-rose-800",
-    border: "border-rose-100",
-    gradient: "from-rose-500 to-orange-400",
-    shadow: "shadow-rose-200/50",
-    accent: "bg-rose-500",
-    button: "hover:bg-rose-100",
-  },
-  blue: {
-    name: "Ocean Blue",
-    primary: "blue",
-    bgSoft: "bg-blue-50",
-    textMain: "text-blue-600",
-    textDark: "text-blue-800",
-    border: "border-blue-100",
-    gradient: "from-blue-600 to-indigo-500",
-    shadow: "shadow-blue-200/50",
-    accent: "bg-blue-600",
-    button: "hover:bg-blue-100",
-  },
-  stone: {
-    name: "Monochrome",
-    primary: "stone",
-    bgSoft: "bg-stone-100",
-    textMain: "text-stone-600",
-    textDark: "text-stone-800",
-    border: "border-stone-200",
-    gradient: "from-stone-700 to-stone-500",
-    shadow: "shadow-stone-300/50",
-    accent: "bg-stone-700",
-    button: "hover:bg-stone-200",
-  },
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    {
+      path: "/",
+      name: "landing",
+      component: LandingView,
+      meta: { public: true }, // 誰でも見れる
+    },
+    {
+      path: "/app",
+      name: "home",
+      component: HomeView,
+      meta: { requiresAuth: true }, // ログイン必須
+    },
+    {
+      path: "/login",
+      name: "login",
+      component: LoginView,
+      meta: { public: true },
+    },
+    {
+      path: "/verify-email",
+      name: "verify-email",
+      component: VerifyEmailView,
+      meta: { requiresAuth: true },
+    },
+  ],
+});
+
+router.beforeEach(async (to, from, next) => {
+  const auth = getAuth();
+  // 認証状態の確定を待つ
+  const currentUser = await new Promise<User | null>((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
+
+  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
+
+  // 1. トップページ(LP)にアクセスした時
+  if (to.path === "/") {
+    if (currentUser) {
+      // ログイン済みならアプリへ転送
+      next("/app");
+      return;
+    } else {
+      // 未ログインならLPを表示
+      next();
+      return;
+    }
+  }
+
+  // 2. ログインが必要なページ (/appなど) に未ログインでアクセス
+  if (requiresAuth && !currentUser) {
+    next("/login");
+  }
+  // 3. ログイン画面 (/login) にログイン済みでアクセス
+  else if (to.path === "/login" && currentUser) {
+    next("/app");
+  }
+  // 4. それ以外
+  else {
+    next();
+  }
+});
+
+export default router;
+</file>
+
+<file path="src/types/index.ts">
+// 脳みそに保存するデータの型
+export interface Memory {
+  id: string;
+  userId: string;
+  text: string; // メモの内容
+  aiSummary?: string; // AIによる要約
+  tags?: string[]; // AIがつけたタグ
+  createdAt: any;
+}
+</file>
+
+<file path="src/uiParts/BaseButton/BaseButton.vue">
+<script setup lang="ts">
+interface Props {
+  variant?: "primary" | "secondary" | "danger" | "text";
+  block?: boolean;
+}
+withDefaults(defineProps<Props>(), {
+  variant: "primary",
+  block: false,
+});
+</script>
+
+<template>
+  <button
+    :class="[
+      'font-bold py-2 px-4 rounded-lg transition duration-200 flex items-center justify-center gap-2 shadow-sm',
+      block ? 'w-full' : '',
+      variant === 'primary'
+        ? 'bg-rose-500 hover:bg-rose-600 text-white'
+        : variant === 'secondary'
+        ? 'bg-white border-2 border-rose-500 text-rose-600 hover:bg-rose-50'
+        : variant === 'danger'
+        ? 'bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-600'
+        : 'text-stone-500 hover:text-stone-700 hover:bg-stone-100',
+    ]"
+  >
+    <slot></slot>
+  </button>
+</template>
+</file>
+
+<file path="src/uiParts/BaseCard/BaseCard.vue">
+<template>
+  <div
+    class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 overflow-hidden relative"
+  >
+    <slot></slot>
+  </div>
+</template>
+</file>
+
+<file path="src/uiParts/BaseInput/BaseInput.vue">
+<script setup lang="ts">
+defineProps<{
+  modelValue: string | number;
+  label?: string;
+  type?: string;
+  placeholder?: string;
+}>();
+defineEmits(["update:modelValue"]);
+</script>
+
+<template>
+  <div class="w-full">
+    <label
+      v-if="label"
+      class="block text-xs font-bold text-stone-500 mb-1.5 ml-1"
+      >{{ label }}</label
+    >
+    <input
+      :type="type || 'text'"
+      :value="modelValue"
+      @input="
+        $emit('update:modelValue', ($event.target as HTMLInputElement).value)
+      "
+      :placeholder="placeholder"
+      class="w-full border border-stone-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-rose-400 focus:border-rose-400 outline-none transition bg-white text-stone-700 placeholder-stone-300"
+    />
+  </div>
+</template>
+</file>
+
+<file path="src/uiParts/BaseModal/BaseModal.vue">
+<script setup lang="ts">
+import { ref } from "vue";
+
+const dialog = ref<HTMLDialogElement | null>(null);
+
+// ★重要: 親から show() と close() を呼べるようにする
+defineExpose({
+  show: () => dialog.value?.showModal(),
+  close: () => dialog.value?.close(),
+});
+</script>
+
+<template>
+  <dialog
+    ref="dialog"
+    class="modal p-0 rounded-xl shadow-2xl backdrop:bg-black/50"
+    @click.self="dialog?.close()"
+  >
+    <div class="bg-white p-6 w-80 md:w-96 max-h-[85vh] overflow-y-auto">
+      <slot></slot>
+    </div>
+  </dialog>
+</template>
+</file>
+
+<file path="src/views/HomeView/HomeView.vue">
+<script setup lang="ts">
+import { ref, onMounted, watch, nextTick } from "vue";
+import { useMyBrain, type Memory } from "@/composables/useMyBrain";
+import mermaid from "mermaid";
+
+import AppHeader from "@/components/AppHeader/AppHeader.vue";
+import TagFilter from "@/components/TagFilter/TagFilter.vue";
+import MemoList from "@/components/MemoList/MemoList.vue";
+import ChatList from "@/components/ChatList/ChatList.vue";
+import InputFooter from "@/components/InputFooter/InputFooter.vue";
+import MemoryModal from "@/components/MemoryModal/MemoryModal.vue";
+
+const { initAuth, chatLogs, isAiThinking } = useMyBrain();
+
+const inputMode = ref<"memo" | "chat" | "url">("memo");
+const editingMemory = ref<Memory | null>(null);
+const chatContainerRef = ref<HTMLElement | null>(null);
+
+onMounted(() => {
+  initAuth();
+  // エラー時に爆弾を表示しない設定
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: "dark",
+    securityLevel: "loose",
+    suppressErrorRendering: true, // ★重要: これで爆弾が出なくなります
+  });
+});
+
+const scrollToBottom = async () => {
+  await nextTick();
+  if (chatContainerRef.value) {
+    chatContainerRef.value.scrollTo({
+      top: chatContainerRef.value.scrollHeight,
+      behavior: "smooth",
+    });
+  }
 };
 
-export default function useHomeView() {
-  const auth = getAuth();
-  const {
-    currentUser,
-    logs,
-    allStylistLogs, // 1. ここで取得して
-    clients,
-    loading,
-    fetchUserProfile,
-    fetchLogs,
-    fetchAllStylistLogs,
-    fetchMyReservations,
-    fetchStylistReservations,
-    fetchMyReservation,
-    fetchClientReservations,
-    myReservations,
-    stylistReservations,
-    clientReservations,
-    myReservation,
-    addLog,
-    deleteLog,
-    connectUser,
-    fetchMyClients,
-    updateNextReservation,
-    updateUserProfile,
-    fetchInventory,
-    cancelReservation,
-  } = useHairLink();
-
-  const currentTab = ref("home");
-  const salesPeriod = ref("6m");
-  const activeClientId = ref<string | null>(null);
-  const activeConnectionId = ref<string | null>(null);
-  const showQR = ref(false);
-  const scanInput = ref("");
-  const currentLogTargetId = ref<string | null>(null);
-  const isSaving = ref(false);
-  const editName = ref("");
-  const editTheme = ref("teal");
-
-  // 美容師が顧客詳細を開いたときの顧客情報
-  const activeClientName = computed(() => {
-    const client = clients.value.find(
-      (c) => c.customerId === activeClientId.value,
-    );
-    return client ? client.customerName : "お客様";
-  });
-
-  let unsubscribe: any;
-
-  onMounted(() => {
-    unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        await fetchUserProfile(user.uid);
-      }
-    });
-  });
-
-  onUnmounted(() => {
-    if (unsubscribe) unsubscribe();
-  });
-
-  watch(
-    currentUser,
-    (user) => {
-      if (user && user.uid) {
-        editName.value = user.name || "";
-        editTheme.value = user.themeColor || "teal";
-
-        if (user.role === "customer") {
-          currentLogTargetId.value = user.uid;
-          fetchLogs(user.uid);
-          fetchMyReservations(user.uid);
-          fetchMyReservation(user.uid);
-        } else if (user.role === "stylist") {
-          fetchMyClients(user.uid);
-          fetchAllStylistLogs(user.uid);
-          fetchInventory();
-          fetchStylistReservations(user.uid);
-        }
-      }
-    },
-    { immediate: true },
-  );
-
-  const selectClient = (client: any) => {
-    activeClientId.value = client.customerId;
-    activeConnectionId.value = client.id;
-    currentLogTargetId.value = client.customerId;
-    fetchLogs(client.customerId);
-    fetchClientReservations(client.customerId);
-  };
-
-  const selectClientFromCalendar = (eventData: any) => {
-    if (currentUser.value?.role === "customer") return;
-
-    let customerId = "";
-    if (typeof eventData === "string") {
-      customerId = eventData;
-    } else if (eventData?.customerId) {
-      customerId = eventData.customerId;
-    } else if (eventData?.extendedProps?.customerId) {
-      customerId = eventData.extendedProps.customerId;
-    } else if (eventData?.event?.extendedProps?.customerId) {
-      customerId = eventData.event.extendedProps.customerId;
+// チャットログが増えたらスクロール（チャットモード時のみ）
+watch(
+  chatLogs,
+  () => {
+    if (inputMode.value === "chat") {
+      scrollToBottom();
     }
+  },
+  { deep: true },
+);
 
-    if (customerId) {
-      const client = clients.value.find((c) => c.customerId === customerId);
-      if (client) {
-        selectClient(client);
-        currentTab.value = "home";
-      } else {
-        console.warn("Client not found in list:", customerId);
-        alert(
-          "顧客データが見つかりません。リストが最新でない可能性があります。",
-        );
-      }
-    } else {
-      console.warn("No customer ID in event data");
-    }
-  };
+// AI思考開始/終了時もスクロール
+watch(isAiThinking, () => {
+  if (inputMode.value === "chat") {
+    scrollToBottom();
+  }
+});
 
-  const goHome = () => {
-    activeClientId.value = null;
-    currentTab.value = "home";
-  };
+// モード切替時もチャットなら最下部へ
+watch(inputMode, (newMode) => {
+  if (newMode === "chat") {
+    scrollToBottom();
+  }
+});
 
-  const handleDeleteLog = async (id: string) => {
-    await deleteLog(id);
-  };
+const onOpenDetail = (memo: Memory) => {
+  editingMemory.value = memo;
+};
 
-  const handleCancelReservation = async (id: string) => {
-    await cancelReservation(id);
-  };
+const onModeChange = (newMode: "memo" | "chat" | "url") => {
+  inputMode.value = newMode;
+};
+</script>
 
-  const handleConnect = async () => {
-    if (!scanInput.value) return;
-    const success = await connectUser(auth.currentUser!.uid, scanInput.value);
-    if (success) {
-      alert("顧客リストに追加しました！");
-      scanInput.value = "";
-    }
-  };
+<template>
+  <div class="h-screen flex flex-col bg-slate-950 text-slate-200 font-sans">
+    <AppHeader />
+    <TagFilter />
 
-  const handleQRDetect = async (decodedText: string) => {
-    if (!decodedText) return;
-    scanInput.value = decodedText;
-    const success = await connectUser(auth.currentUser!.uid, decodedText);
-    if (success) {
-      alert("顧客リストに追加しました！ (QR)");
-      scanInput.value = "";
-    }
-  };
+    <main
+      ref="chatContainerRef"
+      class="flex-1 overflow-y-auto p-4 space-y-6 pb-44 scrollbar-hide"
+    >
+      <MemoList
+        v-if="inputMode === 'memo' || inputMode === 'url'"
+        @openDetail="onOpenDetail"
+      />
 
-  const logout = async () => {
-    await signOut(auth);
-  };
+      <ChatList v-if="inputMode === 'chat'" />
+    </main>
 
-  const onNextDateChange = async (client: any, event: Event) => {
-    const input = event.target as HTMLInputElement;
-    if (input.value) {
-      await updateNextReservation(client.id, input.value);
-    }
-  };
+    <MemoryModal :memory="editingMemory" @close="editingMemory = null" />
 
-  const saveSettings = async () => {
-    if (!auth.currentUser) return;
-    isSaving.value = true;
-    try {
-      const success = await updateUserProfile(auth.currentUser.uid, {
-        name: editName.value,
-        themeColor: editTheme.value,
-      });
-      if (success) {
-        alert("設定を保存しました✨");
-        currentTab.value = "home";
-      }
-    } finally {
-      isSaving.value = false;
-    }
-  };
+    <InputFooter :modelValue="inputMode" @update:modelValue="onModeChange" />
+  </div>
+</template>
 
-  const currentTheme = computed(() => {
-    const themeKey = currentUser.value?.themeColor || "teal";
-    return THEMES[themeKey] || THEMES["teal"];
-  });
-
-  const currentMonthSales = computed(() => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
-    return allStylistLogs.value
-      .filter((log) => {
-        if (!log.date) return false;
-        const logDate = new Date(log.date);
-        return (
-          logDate.getFullYear() === currentYear &&
-          logDate.getMonth() + 1 === currentMonth
-        );
-      })
-      .reduce((sum, log) => sum + (Number(log.price) || 0), 0);
-  });
-
-  const monthlySalesData = computed(() => {
-    const sourceLogs =
-      allStylistLogs.value.length > 0 ? allStylistLogs.value : [];
-    const result = [];
-    const now = new Date();
-
-    if (salesPeriod.value === "1m") {
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const y = d.getFullYear();
-        const m = d.getMonth() + 1;
-        const dateStr = d.getDate();
-        const dailyTotal = sourceLogs
-          .filter((log) => {
-            if (!log.date) return false;
-            const logDate = new Date(log.date);
-            return (
-              logDate.getFullYear() === y &&
-              logDate.getMonth() + 1 === m &&
-              logDate.getDate() === d.getDate()
-            );
-          })
-          .reduce((sum, log) => sum + (Number(log.price) || 0), 0);
-        result.push({ label: `${dateStr}日`, amount: dailyTotal });
-      }
-    } else {
-      let monthsCount = 6;
-      if (salesPeriod.value === "3m") monthsCount = 3;
-      if (salesPeriod.value === "1y") monthsCount = 12;
-      if (salesPeriod.value === "3y") monthsCount = 36;
-      if (salesPeriod.value === "all") monthsCount = 60;
-
-      for (let i = monthsCount - 1; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const year = d.getFullYear();
-        const month = d.getMonth() + 1;
-        const monthlyTotal = sourceLogs
-          .filter((log) => {
-            if (!log.date) return false;
-            const logDate = new Date(log.date);
-            return (
-              logDate.getFullYear() === year && logDate.getMonth() + 1 === month
-            );
-          })
-          .reduce((sum, log) => sum + (Number(log.price) || 0), 0);
-        let label = `${month}月`;
-        if (month === 1 || i === monthsCount - 1) label = `${year}年${month}月`;
-        result.push({ label: label, amount: monthlyTotal });
-      }
-    }
-    return result;
-  });
-
-  const totalSales = computed(() => {
-    return logs.value.reduce((sum, log) => sum + (Number(log.price) || 0), 0);
-  });
-
-  const clientsWithSales = computed(() => {
-    return clients.value.map((client) => {
-      const clientLogs = allStylistLogs.value.filter(
-        (log) => log.customerId === client.customerId,
-      );
-      const ltv = clientLogs.reduce(
-        (sum, log) => sum + (Number(log.price) || 0),
-        0,
-      );
-      return { ...client, ltv };
-    });
-  });
-
-  const calendarEvents = computed(() => {
-    if (currentUser.value?.role === "stylist") {
-      return stylistReservations.value.map((r) => ({
-        date: r.date,
-        title: `【${r.customerName || "客"}】${r.time} ${r.menu || ""}`,
-        type: "reservation",
-        customerId: r.customerId,
-        extendedProps: {
-          customerId: r.customerId,
-        },
-      }));
-    } else {
-      return myReservations.value.map((r) => ({
-        date: r.date,
-        title: `${r.time} 美容室 (${r.menu || ""})`,
-        type: "reservation",
-      }));
-    }
-  });
-
-  return {
-    currentTab,
-    salesPeriod,
-    currentUser,
-    logs,
-    allStylistLogs, // ★ 2. ここでreturnしないとVue側で使えません！(修正済み)
-    clients,
-    clientsWithSales,
-    loading,
-    activeClientId,
-    activeConnectionId,
-    activeClientName,
-    clientReservations,
-    showQR,
-    scanInput,
-    isSaving,
-    fetchLogs,
-    handleDeleteLog,
-    handleConnect,
-    handleQRDetect,
-    logout,
-    currentLogTargetId,
-    selectClient,
-    selectClientFromCalendar,
-    goHome,
-    onNextDateChange,
-    totalSales,
-    monthlySalesData,
-    currentMonthSales,
-    calendarEvents,
-    myReservation,
-    editName,
-    editTheme,
-    saveSettings,
-    currentTheme,
-    THEMES,
-    handleCancelReservation,
-  };
+<style>
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-pulse-soft {
+  animation: pulse-soft 2s infinite;
+}
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+</style>
 </file>
 
 <file path="src/views/LoginView/LoginView.ts">
@@ -2984,9 +3975,13 @@ import {
   getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  sendEmailVerification,
 } from "firebase/auth";
-import { getFirestore, doc, setDoc } from "firebase/firestore";
+import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 import { useRouter } from "vue-router";
+import { googleProvider } from "@/../firebase"; // ★修正: 正しいパスに変更
 
 const router = useRouter();
 const isLoginMode = ref(true);
@@ -2994,30 +3989,88 @@ const email = ref("");
 const password = ref("");
 const loading = ref(false);
 
+const auth = getAuth();
+const db = getFirestore();
+
+// Googleログイン処理
+const handleGoogleLogin = async () => {
+  loading.value = true;
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+
+    const userRef = doc(db, "users", user.uid);
+    const userSnap = await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+      await setDoc(userRef, {
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        role: "student",
+        createdAt: new Date(),
+      });
+    }
+
+    router.push("/app");
+  } catch (e: any) {
+    console.error(e);
+    alert("Googleログインに失敗しました: " + e.message);
+  } finally {
+    loading.value = false;
+  }
+};
+
+// メールログイン処理
 const handleSubmit = async () => {
   if (!email.value || !password.value) return alert("入力してください");
   loading.value = true;
-  const auth = getAuth();
-  const db = getFirestore();
 
   try {
     if (isLoginMode.value) {
-      await signInWithEmailAndPassword(auth, email.value, password.value);
-      router.push("/");
+      // --- ログイン ---
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email.value,
+        password.value,
+      );
+      const user = userCredential.user;
+
+      if (!user.emailVerified) {
+        router.push("/verify-email");
+      } else {
+        router.push("/app");
+      }
     } else {
+      // --- 新規登録 ---
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email.value,
         password.value,
       );
-      await setDoc(doc(db, "users", userCredential.user.uid), {
+      const user = userCredential.user;
+
+      await setDoc(doc(db, "users", user.uid), {
         email: email.value,
+        role: "student",
         createdAt: new Date(),
       });
-      router.push("/");
+
+      await sendEmailVerification(user);
+      alert(
+        "確認メールを送信しました。\nメール内のリンクをクリックしてください。",
+      );
+      router.push("/verify-email");
     }
   } catch (e: any) {
-    alert(e.message);
+    let msg = "エラーが発生しました";
+    if (e.code === "auth/email-already-in-use")
+      msg = "このメールアドレスは既に登録されています";
+    if (e.code === "auth/weak-password")
+      msg = "パスワードは6文字以上にしてください";
+    if (e.code === "auth/invalid-credential")
+      msg = "メールアドレスまたはパスワードが間違っています";
+    alert(msg);
   } finally {
     loading.value = false;
   }
@@ -3043,6 +4096,25 @@ const handleSubmit = async () => {
       </div>
 
       <div class="space-y-4">
+        <button
+          @click="handleGoogleLogin"
+          :disabled="loading"
+          class="w-full bg-white text-slate-700 font-bold py-3 rounded-xl shadow-md hover:bg-slate-50 transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          <img
+            src="https://www.svgrepo.com/show/475656/google-color.svg"
+            class="w-5 h-5"
+            alt="Google"
+          />
+          Googleで{{ isLoginMode ? "ログイン" : "登録" }}
+        </button>
+
+        <div class="flex items-center gap-2 my-4">
+          <div class="h-px bg-slate-700 flex-1"></div>
+          <span class="text-slate-500 text-xs">または</span>
+          <div class="h-px bg-slate-700 flex-1"></div>
+        </div>
+
         <div>
           <label class="block text-xs font-bold text-slate-400 mb-1 ml-1"
             >Email</label
@@ -3073,8 +4145,8 @@ const handleSubmit = async () => {
             loading
               ? "処理中..."
               : isLoginMode
-                ? "脳に接続 (ログイン)"
-                : "脳を作成 (新規登録)"
+                ? "メールでログイン"
+                : "メールで登録"
           }}
         </button>
 
@@ -3122,7 +4194,7 @@ const resendEmail = async () => {
   }
 };
 
-// 「確認しました」ボタン（リロードして状態確認）
+// 「確認しました」ボタン
 const checkVerification = async () => {
   if (!user) return;
   loading.value = true;
@@ -3130,10 +4202,11 @@ const checkVerification = async () => {
     await user.reload(); // Firebaseの状態を最新に更新
     if (user.emailVerified) {
       alert("認証を確認しました！");
-      router.push("/");
+      // ★修正: アプリ画面へ
+      router.push("/app");
     } else {
       alert(
-        "まだ認証が完了していません。\nメールのリンクをクリックしましたか？"
+        "まだ認証が完了していません。\nメールのリンクをクリックしましたか？",
       );
     }
   } catch (e) {
@@ -3231,6 +4304,143 @@ onMounted(() => {
 </template>
 </file>
 
+<file path="src/env.d.ts">
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_FIREBASE_API_KEY: string;
+  readonly VITE_FIREBASE_AUTH_DOMAIN: string;
+  readonly VITE_FIREBASE_PROJECT_ID: string;
+  readonly VITE_FIREBASE_STORAGE_BUCKET: string;
+  readonly VITE_FIREBASE_MESSAGING_SENDER_ID: string;
+  readonly VITE_FIREBASE_APP_ID: string;
+  readonly VITE_FIREBASE_MEASUREMENT_ID: string;
+  readonly VITE_GEMINI_API_KEY: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
+declare module "*.vue" {
+  import type { DefineComponent } from "vue";
+  const component: DefineComponent<{}, {}, any>;
+  export default component;
+}
+</file>
+
+<file path="src/firebase.ts">
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+import { getMessaging } from "firebase/messaging"; // 追加
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+};
+
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
+export const messaging = getMessaging(app); // 追加
+
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code == "failed-precondition") {
+    console.error("複数タブで開いているためオフライン機能が無効です");
+  } else if (err.code == "unimplemented") {
+    console.error("ブラウザが対応していません");
+  }
+});
+</file>
+
+<file path="src/main.ts">
+import { createApp } from "vue";
+import "./style.css";
+import App from "./App.vue";
+import router from "./router";
+
+const app = createApp(App);
+app.use(router);
+app.mount("#app");
+</file>
+
+<file path="src/style.css">
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* 影の質感をApple風に調整 */
+  --shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+  --shadow-card: 0 10px 40px -10px rgba(0, 0, 0, 0.08);
+}
+
+body {
+  /* 真っ白(#ffffff)ではなく、目に優しいごく薄いグレー */
+  background-color: #f8fafc;
+  color: #1e293b;
+  /* iOSのような滑らかな文字レンダリング */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 日本語フォントの最適化 */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans",
+    Meiryo, sans-serif;
+}
+
+/* スクロールバーを隠してスタイリッシュに */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* グラスモーフィズム（すりガラス）効果 */
+.glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* 高級感のあるカード */
+.modern-card {
+  background: white;
+  border-radius: 24px;
+  box-shadow: var(--shadow-soft);
+  border: 1px solid rgba(241, 245, 249, 1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.modern-card:active {
+  transform: scale(0.99);
+}
+
+/* アニメーション */
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.animate-enter {
+  animation: fadeInScale 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+</file>
+
 <file path=".firebaserc">
 {
   "projects": {
@@ -3239,6 +4449,49 @@ onMounted(() => {
   },
   "targets": {},
   "etags": {}
+}
+</file>
+
+<file path=".gitignore">
+node_modules
+.DS_Store
+dist
+dist-ssr
+*.local
+.vscode/
+.env
+</file>
+
+<file path="firebase.json">
+{
+  "hosting": {
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]
+    }
+  ]
 }
 </file>
 
@@ -3278,9 +4531,187 @@ onMounted(() => {
 }
 </file>
 
+<file path="firestore.rules">
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ユーザー自身だけが読み書きできるようにする共通関数
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // 1. ユーザー情報
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // 2. メモ (My Brain)
+    match /memories/{memoryId} {
+      // 作成時は、自分のIDを入れているかチェック
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      // 読み取り・更新・削除は、自分のデータのみ許可
+      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // 3. チャットログ (My Brain)
+    match /chat_logs/{logId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+  }
+}
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/logo.png?v=3" />
+    <link rel="apple-touch-icon" href="/logo.png?v=3" />
+
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+
+    <title>My Brain</title>
+    <meta
+      name="description"
+      content="AIがあなたの記憶をサポートする、あなただけの第2の脳。"
+    />
+    <meta name="theme-color" content="#0f172a" />
+
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="My Brain" />
+
+    <meta property="og:title" content="My Brain - AI Knowledge Base" />
+    <meta
+      property="og:description"
+      content="あなただけの第2の脳。AIが記憶・検索・思考をサポートします。"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://my-brain-145b1.web.app/" />
+    <meta
+      property="og:image"
+      content="https://my-brain-145b1.web.app/logo.png?v=3"
+    />
+    <meta property="og:site_name" content="My Brain" />
+    <meta name="twitter:card" content="summary" />
+
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0f172a; /* Slate 950 */
+        height: 100vh; /* 100%ではなくvhを使う */
+        width: 100vw;
+        overflow: hidden;
+      }
+
+      #loading-screen {
+        position: fixed; /* 画面に固定 */
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center; /* 完全な中央揃え */
+        color: white;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        z-index: 9999;
+        /* 少しだけ上にずらすと視覚的に安定する */
+        padding-bottom: 50px;
+      }
+
+      .logo-container {
+        position: relative;
+        width: 120px;
+        height: 120px;
+        margin-bottom: 24px;
+        animation: float 3s ease-in-out infinite;
+      }
+
+      .app-logo {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        border-radius: 24px;
+        box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
+      }
+
+      .app-title {
+        font-size: 2rem;
+        font-weight: 900;
+        margin: 0 0 8px 0;
+        letter-spacing: -0.05em;
+        background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .app-desc {
+        color: #64748b;
+        font-size: 0.875rem;
+        font-weight: 700;
+        margin-bottom: 0;
+      }
+
+      .loader {
+        margin-top: 32px;
+        width: 32px;
+        height: 32px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        border-top-color: #3b82f6;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes float {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-10px);
+        }
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="loading-screen">
+        <div class="logo-container">
+          <img src="/logo.png?v=3" alt="My Brain Logo" class="app-logo" />
+        </div>
+        <h1 class="app-title">My Brain</h1>
+        <p class="app-desc">あなただけの第2の脳</p>
+        <div class="loader"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+</file>
+
 <file path="package.json">
 {
-  "name": "next-ns",
+  "name": "my-brain",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -3320,63 +4751,54 @@ onMounted(() => {
 }
 </file>
 
-<file path="firestore.rules">
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    
-    // ユーザー自身だけが読み書きできるようにする共通関数
-    function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
-    }
-
-    // 1. ユーザー情報
-    match /users/{userId} {
-      allow read, write: if isOwner(userId);
-    }
-
-    // 2. メモ (My Brain)
-    match /memories/{memoryId} {
-      // 作成時は、自分のIDを入れているかチェック
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      // 読み取り・更新・削除は、自分のデータのみ許可
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-    }
-
-    // 3. チャットログ (My Brain)
-    match /chat_logs/{logId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-    }
-  }
-}
+<file path="postcss.config.js">
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
 </file>
 
-<file path="index.html">
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" href="/logo.png?v=2" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
+<file path="README.md">
+# my-brain
+# my-brain
+</file>
 
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
+<file path="tailwind.config.js">
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ["./index.html", "./src/**/*.{vue,js,ts,jsx,tsx}"],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+};
+</file>
 
-    <meta name="theme-color" content="#ffffff" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-
-    <meta name="apple-mobile-web-app-title" content="NextNs" />
-    <title>NextNs</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "jsx": "preserve",
+    "sourceMap": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "lib": ["ESNext", "DOM"],
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "types": ["vite/client"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"]
+}
 </file>
 
 <file path="vite.config.ts">
@@ -3394,27 +4816,25 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "apple-touch-icon.png", "logo.png"],
       manifest: {
-        name: "NextNs - 看護師国家試験対策",
-        short_name: "NextNs",
-        // 内容を微修正してマニフェストの更新を促す
-        description:
-          "看護師国家試験対策のための学習支援アプリ。最新の過去問とAI解説を搭載。",
-        theme_color: "#ffffff",
-        background_color: "#ffffff",
+        name: "My Brain - AI Knowledge Base",
+        short_name: "My Brain",
+        description: "AIがあなたの記憶をサポートする、あなただけの第2の脳。",
+        theme_color: "#0f172a",
+        background_color: "#0f172a",
         display: "standalone",
         icons: [
           {
-            src: "logo.png",
+            src: "logo.png?v=3", // ★ここを変更
             sizes: "192x192",
             type: "image/png",
           },
           {
-            src: "logo.png",
+            src: "logo.png?v=3", // ★ここを変更
             sizes: "512x512",
             type: "image/png",
           },
           {
-            src: "logo.png",
+            src: "logo.png?v=3", // ★ここを変更
             sizes: "512x512",
             type: "image/png",
             purpose: "any maskable",
@@ -3429,781 +4849,6 @@ export default defineConfig({
     },
   },
 });
-</file>
-
-<file path="functions/lib/index.js">
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.scrapeUrl = void 0;
-const https_1 = require("firebase-functions/v2/https");
-const v2_1 = require("firebase-functions/v2");
-const admin = __importStar(require("firebase-admin"));
-const axios_1 = __importDefault(require("axios"));
-const cheerio = __importStar(require("cheerio"));
-// 初期化
-if (admin.apps.length === 0) {
-    admin.initializeApp();
-}
-// 日本リージョンに設定
-(0, v2_1.setGlobalOptions)({ region: "asia-northeast1", memory: "1GiB" });
-/**
- * URLを受け取り、Webページのタイトルと本文テキストを返す関数
- */
-exports.scrapeUrl = (0, https_1.onCall)(async (request) => {
-    // 認証チェック
-    if (!request.auth) {
-        throw new https_1.HttpsError("unauthenticated", "ログインが必要です");
-    }
-    const { url } = request.data;
-    if (!url) {
-        throw new https_1.HttpsError("invalid-argument", "URLが必要です");
-    }
-    try {
-        // 1. HTMLを取得
-        const response = await axios_1.default.get(url, {
-            headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            },
-            timeout: 10000, // 10秒タイムアウト
-        });
-        // 2. HTMLを解析 (cheerio)
-        const $ = cheerio.load(response.data);
-        // 不要な要素を削除
-        $("script").remove();
-        $("style").remove();
-        $("nav").remove();
-        $("footer").remove();
-        $("header").remove();
-        $("iframe").remove();
-        // タイトルと本文を取得
-        const title = $("title").text().trim() || "No Title";
-        // 本文抽出（pタグや記事本文と思われる箇所を優先）
-        let content = "";
-        $("p, h1, h2, h3, h4, li, article").each((_, el) => {
-            const text = $(el).text().trim();
-            if (text.length > 20) {
-                // 短すぎるゴミテキストを除外
-                content += text + "\n";
-            }
-        });
-        // 文字数制限（Geminiに渡すため長すぎると困る場合があるが、Flashならかなりいける）
-        const limitedContent = content.slice(0, 50000); // 5万文字でカット
-        return {
-            success: true,
-            title,
-            content: limitedContent,
-        };
-    }
-    catch (error) {
-        console.error("Scraping Error:", error);
-        throw new https_1.HttpsError("internal", `読み込みに失敗しました: ${error.message}`);
-    }
-});
-</file>
-
-<file path="functions/index.ts">
-import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { setGlobalOptions } from "firebase-functions/v2";
-import * as admin from "firebase-admin";
-import axios from "axios";
-import * as cheerio from "cheerio";
-
-// 初期化
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-}
-
-// 日本リージョンに設定
-setGlobalOptions({ region: "asia-northeast1", memory: "1GiB" });
-
-/**
- * URLを受け取り、Webページのタイトルと本文テキストを返す関数
- */
-export const scrapeUrl = onCall(async (request) => {
-  // 認証チェック
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "ログインが必要です");
-  }
-
-  const { url } = request.data;
-  if (!url) {
-    throw new HttpsError("invalid-argument", "URLが必要です");
-  }
-
-  try {
-    // 1. HTMLを取得
-    const response = await axios.get(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-      },
-      timeout: 10000, // 10秒タイムアウト
-    });
-
-    // 2. HTMLを解析 (cheerio)
-    const $ = cheerio.load(response.data);
-
-    // 不要な要素を削除
-    $("script").remove();
-    $("style").remove();
-    $("nav").remove();
-    $("footer").remove();
-    $("header").remove();
-    $("iframe").remove();
-
-    // タイトルと本文を取得
-    const title = $("title").text().trim() || "No Title";
-
-    // 本文抽出（pタグや記事本文と思われる箇所を優先）
-    let content = "";
-    $("p, h1, h2, h3, h4, li, article").each((_, el) => {
-      const text = $(el).text().trim();
-      if (text.length > 20) {
-        // 短すぎるゴミテキストを除外
-        content += text + "\n";
-      }
-    });
-
-    // 文字数制限（Geminiに渡すため長すぎると困る場合があるが、Flashならかなりいける）
-    const limitedContent = content.slice(0, 50000); // 5万文字でカット
-
-    return {
-      success: true,
-      title,
-      content: limitedContent,
-    };
-  } catch (error: any) {
-    console.error("Scraping Error:", error);
-    throw new HttpsError(
-      "internal",
-      `読み込みに失敗しました: ${error.message}`,
-    );
-  }
-});
-</file>
-
-<file path="src/router/index.ts">
-import { createRouter, createWebHistory } from "vue-router";
-import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
-import HomeView from "../views/HomeView/HomeView.vue";
-import LoginView from "../views/LoginView/LoginView.vue";
-import VerifyEmailView from "../views/VerifyEmailView/VerifyEmailView.vue";
-
-const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [
-    {
-      path: "/",
-      name: "home",
-      component: HomeView,
-      meta: { requiresAuth: true },
-    },
-    {
-      path: "/login",
-      name: "login",
-      component: LoginView,
-      meta: { public: true },
-    },
-    {
-      path: "/verify-email",
-      name: "verify-email",
-      component: VerifyEmailView,
-      meta: { requiresAuth: true },
-    },
-  ],
-});
-
-router.beforeEach(async (to, from, next) => {
-  const auth = getAuth();
-  const currentUser = await new Promise<User | null>((resolve) => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      unsubscribe();
-      resolve(user);
-    });
-  });
-
-  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
-
-  if (requiresAuth && !currentUser) {
-    next("/login");
-  } else if (to.path === "/login" && currentUser) {
-    next("/");
-  } else {
-    next();
-  }
-});
-
-export default router;
-</file>
-
-<file path="src/types/index.ts">
-// 脳みそに保存するデータの型
-export interface Memory {
-  id: string;
-  userId: string;
-  text: string; // メモの内容
-  aiSummary?: string; // AIによる要約
-  tags?: string[]; // AIがつけたタグ
-  createdAt: any;
-}
-</file>
-
-<file path="src/views/HomeView/HomeView.vue">
-<script setup lang="ts">
-import { ref, onMounted } from "vue";
-import { useMyBrain, type Memory } from "@/composables/useMyBrain";
-
-const {
-  currentUser,
-  memories,
-  chatLogs,
-  activeTag, // ★追加
-  allTags, // ★追加
-  selectTag, // ★追加
-  addMemory,
-  updateMemory,
-  deleteMemory,
-  deleteChatLog,
-  askBrain,
-  isAiThinking,
-  initAuth,
-  logout,
-  loading,
-} = useMyBrain();
-
-const inputMode = ref<"memo" | "chat">("memo");
-const inputText = ref("");
-const currentStreamingAnswer = ref("");
-const selectedFile = ref<File | null>(null); // ★変更: Image -> File
-const filePreview = ref<string | null>(null);
-const fileInputRef = ref<HTMLInputElement | null>(null);
-const chatContainerRef = ref<HTMLElement | null>(null);
-
-const editingMemory = ref<Memory | null>(null);
-const editContent = ref("");
-
-const isListening = ref(false);
-let recognition: any = null;
-
-onMounted(() => {
-  initAuth();
-
-  if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
-    const SpeechRecognition =
-      (window as any).webkitSpeechRecognition ||
-      (window as any).SpeechRecognition;
-    recognition = new SpeechRecognition();
-    recognition.lang = "ja-JP";
-    recognition.continuous = false;
-    recognition.interimResults = true;
-
-    recognition.onresult = (event: any) => {
-      const transcript = Array.from(event.results)
-        .map((result: any) => result[0].transcript)
-        .join("");
-      inputText.value = transcript;
-    };
-
-    recognition.onend = () => {
-      isListening.value = false;
-    };
-    recognition.onerror = () => {
-      isListening.value = false;
-    };
-  }
-});
-
-const toggleListening = () => {
-  if (!recognition) return alert("音声入力未対応ブラウザです");
-  if (isListening.value) recognition.stop();
-  else {
-    isListening.value = true;
-    recognition.start();
-  }
-};
-
-const handleFileSelect = (e: Event) => {
-  const target = e.target as HTMLInputElement;
-  if (target.files && target.files[0]) {
-    const file = target.files[0];
-    selectedFile.value = file;
-
-    // 画像ならプレビュー、それ以外はアイコン表示用ダミー
-    if (file.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        filePreview.value = e.target?.result as string;
-      };
-      reader.readAsDataURL(file);
-    } else {
-      filePreview.value = null; // 画像以外はプレビューなし
-    }
-  }
-};
-
-const clearFile = () => {
-  selectedFile.value = null;
-  filePreview.value = null;
-  if (fileInputRef.value) fileInputRef.value.value = "";
-};
-
-const handleSend = async () => {
-  if (!inputText.value.trim() && !selectedFile.value) return;
-
-  if (inputMode.value === "memo") {
-    const text = inputText.value;
-    const file = selectedFile.value;
-    inputText.value = "";
-    clearFile();
-    await addMemory(text, file);
-  } else {
-    const question = inputText.value;
-    inputText.value = "";
-    clearFile();
-
-    currentStreamingAnswer.value = "";
-    const answer = await askBrain(question);
-
-    const chars = answer.split("");
-    for (const char of chars) {
-      currentStreamingAnswer.value += char;
-      if (chatContainerRef.value) {
-        chatContainerRef.value.scrollTop = chatContainerRef.value.scrollHeight;
-      }
-      await new Promise((r) => setTimeout(r, 10));
-    }
-    currentStreamingAnswer.value = "";
-  }
-};
-
-const openDetail = (memo: Memory) => {
-  editingMemory.value = memo;
-  editContent.value = memo.text;
-};
-
-const saveUpdate = async () => {
-  if (editingMemory.value) {
-    await updateMemory(editingMemory.value.id, editContent.value);
-    editingMemory.value = null;
-  }
-};
-</script>
-
-<template>
-  <div class="h-screen flex flex-col bg-slate-950 text-slate-200 font-sans">
-    <header
-      class="h-14 px-4 flex items-center justify-between border-b border-slate-800 bg-slate-900/50 backdrop-blur z-20"
-    >
-      <div class="font-black text-lg tracking-tight">🧠 My Brain</div>
-      <button
-        @click="logout"
-        class="text-xs font-bold text-slate-500 hover:text-white transition"
-      >
-        ログアウト
-      </button>
-    </header>
-
-    <div
-      v-if="allTags.length > 0"
-      class="px-4 py-2 bg-slate-900/50 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-hide flex gap-2"
-    >
-      <button
-        @click="selectTag(null)"
-        class="text-[10px] font-bold px-3 py-1 rounded-full transition border"
-        :class="
-          !activeTag
-            ? 'bg-white text-slate-900 border-white'
-            : 'bg-slate-800 text-slate-400 border-slate-700'
-        "
-      >
-        すべて
-      </button>
-      <button
-        v-for="tag in allTags"
-        :key="tag"
-        @click="selectTag(tag)"
-        class="text-[10px] font-bold px-3 py-1 rounded-full transition border"
-        :class="
-          activeTag === tag
-            ? 'bg-blue-600 text-white border-blue-600'
-            : 'bg-slate-800 text-slate-400 border-slate-700'
-        "
-      >
-        #{{ tag }}
-      </button>
-    </div>
-
-    <main
-      ref="chatContainerRef"
-      class="flex-1 overflow-y-auto p-4 space-y-6 pb-44 scrollbar-hide"
-    >
-      <div v-if="inputMode === 'memo'" class="space-y-4">
-        <div
-          v-if="memories.length === 0 && !loading"
-          class="text-center py-20 opacity-30"
-        >
-          <div class="text-4xl mb-4">📝</div>
-          <p>表示できる記憶がありません。</p>
-        </div>
-
-        <div
-          v-for="memo in memories"
-          :key="memo.id"
-          @click="openDetail(memo)"
-          class="group relative bg-slate-900 border border-slate-800 p-4 rounded-2xl transition hover:border-slate-600 animate-fade-in cursor-pointer active:scale-[0.98]"
-        >
-          <div
-            class="absolute top-4 right-4 flex gap-3 opacity-0 group-hover:opacity-100 transition"
-          >
-            <span class="text-xs text-slate-500">詳細・編集</span>
-          </div>
-
-          <div
-            v-if="memo.hasImage"
-            class="mb-2 text-xs font-bold flex items-center gap-1"
-            :class="
-              memo.fileType?.includes('pdf') ? 'text-red-400' : 'text-blue-400'
-            "
-          >
-            <span v-if="memo.fileType?.includes('pdf')">📄 PDF資料</span>
-            <span v-else>📷 画像メモ</span>
-          </div>
-
-          <p
-            class="text-sm text-slate-300 whitespace-pre-wrap mb-3 line-clamp-3"
-          >
-            {{ memo.text }}
-          </p>
-
-          <div class="flex flex-wrap gap-2 items-center">
-            <div
-              v-if="memo.aiSummary"
-              class="text-[10px] bg-slate-800 px-2 py-1 rounded text-slate-400"
-            >
-              📝 {{ memo.aiSummary }}
-            </div>
-            <span
-              v-for="tag in memo.tags"
-              :key="tag"
-              class="text-[10px] font-bold text-blue-400"
-            >
-              #{{ tag }}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="inputMode === 'chat'" class="space-y-6">
-        <div
-          v-if="chatLogs.length === 0 && !isAiThinking"
-          class="text-center py-20 opacity-30"
-        >
-          <div class="text-4xl mb-4">💬</div>
-          <p>チャット履歴がありません。</p>
-        </div>
-
-        <div
-          v-if="isAiThinking || currentStreamingAnswer"
-          class="bg-blue-900/20 border border-blue-500/30 p-4 rounded-2xl animate-pulse-soft"
-        >
-          <div
-            class="flex items-center gap-2 mb-2 text-blue-400 font-bold text-xs"
-          >
-            <span>🤖</span> Thinking...
-          </div>
-          <p class="text-sm leading-relaxed whitespace-pre-wrap">
-            {{ currentStreamingAnswer }}<span class="animate-blink">|</span>
-          </p>
-        </div>
-
-        <div
-          v-for="log in chatLogs"
-          :key="log.id"
-          class="space-y-2 animate-fade-in group"
-        >
-          <div class="flex justify-end">
-            <div
-              class="bg-slate-800 text-white px-4 py-2 rounded-2xl rounded-tr-sm text-sm max-w-[80%]"
-            >
-              {{ log.question }}
-            </div>
-          </div>
-          <div class="flex justify-start relative">
-            <button
-              @click="deleteChatLog(log.id)"
-              class="absolute -left-6 top-2 text-slate-700 hover:text-red-500 opacity-0 group-hover:opacity-100 transition text-xs"
-            >
-              🗑️
-            </button>
-            <div
-              class="bg-indigo-900/40 border border-indigo-500/20 text-indigo-100 px-4 py-3 rounded-2xl rounded-tl-sm text-sm max-w-[90%] leading-relaxed whitespace-pre-wrap"
-            >
-              {{ log.answer }}
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-
-    <div
-      v-if="editingMemory"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-      @click.self="editingMemory = null"
-    >
-      <div
-        class="bg-slate-900 w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-slate-700 flex flex-col max-h-[80vh]"
-      >
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="font-bold text-lg">📝 メモ詳細・編集</h3>
-          <button
-            @click="
-              deleteMemory(editingMemory.id);
-              editingMemory = null;
-            "
-            class="text-xs text-red-400 hover:text-red-300 font-bold"
-          >
-            削除
-          </button>
-        </div>
-
-        <textarea
-          v-model="editContent"
-          class="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-300 outline-none focus:border-blue-500 mb-4 resize-none leading-relaxed"
-        ></textarea>
-
-        <div class="flex gap-3">
-          <button
-            @click="editingMemory = null"
-            class="flex-1 py-3 rounded-xl font-bold text-slate-400 hover:bg-slate-800"
-          >
-            閉じる
-          </button>
-          <button
-            @click="saveUpdate"
-            class="flex-1 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-500"
-          >
-            保存する
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <footer
-      class="fixed bottom-0 w-full bg-slate-900/90 backdrop-blur border-t border-slate-800 p-4 pb-8 z-30 transition-all"
-    >
-      <div class="max-w-md mx-auto">
-        <div
-          class="flex gap-2 mb-4 justify-center bg-slate-800 p-1 rounded-full w-fit mx-auto"
-        >
-          <button
-            @click="inputMode = 'memo'"
-            class="text-xs font-bold px-6 py-2 rounded-full transition flex items-center gap-2"
-            :class="
-              inputMode === 'memo'
-                ? 'bg-white text-slate-900 shadow-md'
-                : 'text-slate-400 hover:text-white'
-            "
-          >
-            <span>📝</span> 記憶する
-          </button>
-          <button
-            @click="inputMode = 'chat'"
-            class="text-xs font-bold px-6 py-2 rounded-full transition flex items-center gap-2"
-            :class="
-              inputMode === 'chat'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
-            "
-          >
-            <span>🔍</span> 思い出す
-          </button>
-        </div>
-
-        <div
-          v-if="selectedFile"
-          class="relative mb-2 inline-block animate-fade-in"
-        >
-          <img
-            v-if="filePreview"
-            :src="filePreview"
-            class="h-20 rounded-lg border border-slate-600"
-          />
-          <div
-            v-else
-            class="h-20 w-20 bg-slate-800 rounded-lg border border-slate-600 flex flex-col items-center justify-center p-2"
-          >
-            <span class="text-2xl">📄</span>
-            <span
-              class="text-[8px] text-slate-400 truncate w-full text-center mt-1"
-              >{{ selectedFile.name }}</span
-            >
-          </div>
-          <button
-            @click="clearFile"
-            class="absolute -top-2 -right-2 bg-slate-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-500"
-          >
-            ×
-          </button>
-        </div>
-
-        <div class="relative flex items-end gap-2">
-          <button
-            @click="toggleListening"
-            class="w-10 h-10 flex items-center justify-center rounded-xl transition shadow-lg relative overflow-hidden"
-            :class="
-              isListening
-                ? 'bg-red-500 text-white animate-pulse'
-                : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
-            "
-          >
-            <span class="relative z-10">{{ isListening ? "■" : "🎙️" }}</span>
-            <div
-              v-if="isListening"
-              class="absolute inset-0 bg-red-600 animate-ping opacity-75"
-            ></div>
-          </button>
-
-          <div v-if="inputMode === 'memo'">
-            <input
-              type="file"
-              ref="fileInputRef"
-              accept="image/*, application/pdf, text/plain, .csv"
-              class="hidden"
-              @change="handleFileSelect"
-            />
-            <button
-              @click="fileInputRef?.click()"
-              class="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 transition"
-            >
-              📎
-            </button>
-          </div>
-
-          <textarea
-            v-model="inputText"
-            rows="1"
-            class="flex-1 bg-slate-800 border border-slate-700 text-white rounded-2xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden"
-            :placeholder="
-              isListening
-                ? '聞いています...'
-                : inputMode === 'memo'
-                  ? '記憶する内容...'
-                  : '質問を入力...'
-            "
-            @keydown.enter.prevent="handleSend"
-          ></textarea>
-
-          <button
-            @click="handleSend"
-            :disabled="(!inputText && !selectedFile) || isAiThinking"
-            class="w-10 h-10 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg shadow-blue-900/50"
-          >
-            ↑
-          </button>
-        </div>
-      </div>
-    </footer>
-  </div>
-</template>
-
-<style>
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
-}
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.animate-pulse-soft {
-  animation: pulse-soft 2s infinite;
-}
-@keyframes pulse-soft {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-.animate-blink {
-  animation: blink 1s infinite;
-}
-@keyframes blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
-  }
-}
-</style>
-</file>
-
-<file path=".firebase/hosting.ZGlzdA.cache">
-sw.js,1768626163656,18788d6aea83581d333c6349bb7a8d659d50f1735cb99270be021df786732cdf
-registerSW.js,1768626163037,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-workbox-8c29f6e4.js,1768626163656,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-manifest.webmanifest,1768626163037,e23c66a17eae9a20ef9043e61f89a8261cc0022c603416c0dee217ad5189f7e6
-index.html,1768626163037,32dbb46a651d62dfa17f2550f042cff401bfb835ed5251d8e93aa59a6917717b
-firebase-messaging-sw.js,1768626162921,8d8cf84c873b19b20b1328e697daeb3ef8d264cfe3e53683cd4da02a30ee90b1
-assets/index-JRqLppNC.css,1768626163037,bb665714a89b22af86d5be99a51945acba1bc619f84d650835540a42e6c0e842
-presentation.html,1768626162922,ae3b4772b21fdc1fc26348c7df9444275707a36e81107e5ccf9737ca72ec523d
-pwa-192x192.png,1768626162922,121b31ad4cdaa0c40de36dfa9392079ab01285a12f2c6db18bfc5b935cefa843
-pwa-512x512.png,1768626162923,121b31ad4cdaa0c40de36dfa9392079ab01285a12f2c6db18bfc5b935cefa843
-apple-touch-icon.png,1768626162921,121b31ad4cdaa0c40de36dfa9392079ab01285a12f2c6db18bfc5b935cefa843
-logo.png,1768626162921,121b31ad4cdaa0c40de36dfa9392079ab01285a12f2c6db18bfc5b935cefa843
-assets/index-CvErrxRj.js,1768626163037,3a1cb74279815820d098961a4d072f54bff09c6f91763ab7b107547514f1bdc2
 </file>
 
 </files>

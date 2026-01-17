@@ -27,7 +27,7 @@ const resendEmail = async () => {
   }
 };
 
-// 「確認しました」ボタン（リロードして状態確認）
+// 「確認しました」ボタン
 const checkVerification = async () => {
   if (!user) return;
   loading.value = true;
@@ -35,10 +35,11 @@ const checkVerification = async () => {
     await user.reload(); // Firebaseの状態を最新に更新
     if (user.emailVerified) {
       alert("認証を確認しました！");
-      router.push("/");
+      // ★修正: アプリ画面へ
+      router.push("/app");
     } else {
       alert(
-        "まだ認証が完了していません。\nメールのリンクをクリックしましたか？"
+        "まだ認証が完了していません。\nメールのリンクをクリックしましたか？",
       );
     }
   } catch (e) {
