@@ -3,10 +3,7 @@ import { computed } from "vue";
 import { useInputFooter } from "./useInputFooter";
 import { useMyBrain } from "@/composables/useMyBrain";
 
-const props = defineProps<{
-  modelValue: "memo" | "chat" | "url";
-}>();
-
+const props = defineProps<{ modelValue: "memo" | "chat" | "url" }>();
 const emit = defineEmits<{
   (e: "update:modelValue", val: "memo" | "chat" | "url"): void;
 }>();
@@ -22,84 +19,109 @@ const {
   filePreview,
   fileInputRef,
   isListening,
-  isAiThinking,
   toggleListening,
   handleFileSelect,
   clearFile,
   handleSend,
 } = useInputFooter(props.modelValue);
+const { currentUser, startSubscription, isSaving, isAiThinking } = useMyBrain(); // ★isSaving追加
 
-// ▼ 課金ステータス表示用
-const { currentUser, startSubscription } = useMyBrain();
-
-const remainingCount = computed(() => {
-  if (currentUser.value?.isPro) return 9999;
-  return 5 - (currentUser.value?.dailyUsage || 0);
-});
+const remainingCount = computed(() =>
+  currentUser.value?.isPro ? 9999 : 5 - (currentUser.value?.dailyUsage || 0),
+);
 </script>
 
 <template>
   <footer
-    class="fixed bottom-0 w-full bg-slate-900/90 backdrop-blur border-t border-slate-800 p-4 pb-8 z-30 transition-all"
+    class="fixed bottom-0 w-full bg-slate-900/95 backdrop-blur-md border-t border-slate-800 p-4 pb-8 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.3)]"
   >
-    <div class="max-w-md mx-auto">
-      <div class="flex items-center justify-between px-4 mb-2">
+    <div class="max-w-md mx-auto relative">
+      <div
+        v-if="isSaving || isAiThinking"
+        class="absolute -top-16 left-0 right-0 flex justify-center"
+      >
+        <div
+          class="bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg font-bold text-xs flex items-center gap-2 animate-pulse"
+        >
+          <span class="text-lg">{{ isSaving ? "🧠" : "🤖" }}</span>
+          {{ isSaving ? "脳に書き込み中..." : "AIが思考中..." }}
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between px-2 mb-3">
         <div class="text-[10px] font-bold text-slate-400">
-          <span v-if="currentUser?.isPro" class="text-yellow-400"
-            >★ PRO Plan</span
+          <span
+            v-if="currentUser?.isPro"
+            class="text-yellow-400 flex items-center gap-1"
+            >👑 PRO Plan</span
           >
-          <span v-else>
-            Free: 残り
+          <span v-else
+            >Free: 残り
             <span
               :class="remainingCount === 0 ? 'text-red-500' : 'text-white'"
               >{{ remainingCount }}</span
             >
-            / 5回
-          </span>
+            / 5回</span
+          >
         </div>
 
-        <button
-          v-if="!currentUser?.isPro"
-          @click="startSubscription"
-          class="text-[10px] bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 py-1 rounded-full font-bold shadow-lg hover:opacity-90 transition"
-        >
-          🚀 PROにアップグレード (¥1,000/月)
-        </button>
+        <div class="flex flex-col items-end gap-1">
+          <button
+            v-if="!currentUser?.isPro"
+            @click="startSubscription"
+            class="text-[10px] bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-3 py-1 rounded-full font-bold shadow hover:opacity-90 transition"
+          >
+            🚀 PROへ (¥1,000)
+          </button>
+
+          <router-link
+            to="/legal"
+            class="text-[9px] text-slate-500 hover:text-slate-300 transition underline"
+          >
+            特定商取引法に基づく表記
+          </router-link>
+        </div>
       </div>
 
       <div
-        class="flex gap-2 mb-4 justify-center bg-slate-800 p-1 rounded-full w-fit mx-auto"
+        class="flex bg-slate-800 p-1 rounded-xl mb-3 relative overflow-hidden"
       >
+        <div
+          class="absolute top-1 bottom-1 bg-white/10 rounded-lg transition-all duration-300 ease-out"
+          :style="{
+            left:
+              inputMode === 'memo'
+                ? '4px'
+                : inputMode === 'url'
+                  ? '33.3%'
+                  : '66.6%',
+            width: 'calc(33.3% - 5px)',
+          }"
+        ></div>
         <button
           @click="inputMode = 'memo'"
-          class="text-xs font-bold px-4 py-2 rounded-full transition"
-          :class="
-            inputMode === 'memo'
-              ? 'bg-white text-slate-900'
-              : 'text-slate-400 hover:text-white'
-          "
+          :class="[
+            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
+            inputMode === 'memo' ? 'text-white' : 'text-slate-400',
+          ]"
         >
           📝 メモ
         </button>
         <button
           @click="inputMode = 'url'"
-          class="text-xs font-bold px-4 py-2 rounded-full transition"
-          :class="
-            inputMode === 'url'
-              ? 'bg-green-500 text-white'
-              : 'text-slate-400 hover:text-white'
-          "
+          :class="[
+            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
+            inputMode === 'url' ? 'text-green-400' : 'text-slate-400',
+          ]"
         >
           🌐 URL
         </button>
         <button
           @click="inputMode = 'chat'"
-          class="text-xs font-bold px-4 py-2 rounded-full transition"
-          :class="
-            inputMode === 'chat'
-              ? 'bg-blue-600 text-white'
-              : 'text-slate-400 hover:text-white'
-          "
+          :class="[
+            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
+            inputMode === 'chat' ? 'text-blue-400' : 'text-slate-400',
+          ]"
         >
           🔍 会話
         </button>
@@ -112,14 +134,14 @@ const remainingCount = computed(() => {
         <img
           v-if="filePreview"
           :src="filePreview"
-          class="h-20 rounded-lg border border-slate-600"
+          class="h-20 rounded-lg border border-slate-600 object-cover"
         />
         <div
           v-else
           class="h-20 w-20 bg-slate-800 rounded-lg border border-slate-600 flex flex-col items-center justify-center p-2"
         >
-          <span class="text-2xl">📄</span>
-          <span
+          <span class="text-2xl">📄</span
+          ><span
             class="text-[8px] text-slate-400 truncate w-full text-center mt-1"
             >{{ selectedFile.name }}</span
           >
@@ -135,12 +157,12 @@ const remainingCount = computed(() => {
       <div class="relative flex items-end gap-2">
         <button
           @click="toggleListening"
-          class="w-10 h-10 flex items-center justify-center rounded-xl transition shadow-lg relative overflow-hidden"
-          :class="
+          :class="[
+            'w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl transition shadow-lg relative overflow-hidden',
             isListening
-              ? 'bg-red-500 text-white animate-pulse'
-              : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
-          "
+              ? 'bg-red-500 text-white'
+              : 'bg-slate-800 text-slate-400',
+          ]"
         >
           <span class="relative z-10">{{ isListening ? "■" : "🎙️" }}</span>
           <div
@@ -149,17 +171,17 @@ const remainingCount = computed(() => {
           ></div>
         </button>
 
-        <div v-if="inputMode === 'memo'">
+        <div v-if="inputMode === 'memo'" class="flex-shrink-0">
           <input
             type="file"
             ref="fileInputRef"
-            accept="image/*, application/pdf, text/plain, audio/*"
+            accept="image/*,application/pdf,text/plain,audio/*"
             class="hidden"
             @change="handleFileSelect"
           />
           <button
             @click="fileInputRef?.click()"
-            class="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 transition"
+            class="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-xl text-slate-400 hover:text-white transition"
           >
             📎
           </button>
@@ -167,22 +189,22 @@ const remainingCount = computed(() => {
 
         <textarea
           v-model="inputText"
-          rows="1"
-          class="flex-1 bg-slate-800 border border-slate-700 text-white rounded-2xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden"
+          rows="3"
+          class="flex-1 bg-slate-800 border border-slate-700 text-white rounded-2xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 resize-none leading-relaxed text-sm"
           :placeholder="
             inputMode === 'url'
-              ? 'URLを入力...'
+              ? 'https://...'
               : inputMode === 'memo'
-                ? '記憶/画像/音声を...'
-                : '質問...'
+                ? '何を記憶しますか？'
+                : 'AIに質問...'
           "
-          @keydown.enter.prevent="handleSend(inputMode)"
+          @keydown.enter.ctrl="handleSend(inputMode)"
         ></textarea>
 
         <button
           @click="handleSend(inputMode)"
-          :disabled="(!inputText && !selectedFile) || isAiThinking"
-          class="w-10 h-10 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg"
+          :disabled="(!inputText && !selectedFile) || isSaving || isAiThinking"
+          class="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg self-end mb-1"
         >
           ↑
         </button>

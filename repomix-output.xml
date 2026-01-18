@@ -130,257 +130,6 @@ vite.config.ts
 <files>
 This section contains the contents of the repository's files.
 
-<file path="src/views/LegalView/LegalView.vue">
-<script setup lang="ts">
-import { useRouter } from "vue-router";
-const router = useRouter();
-</script>
-
-<template>
-  <div
-    class="min-h-screen bg-slate-950 text-slate-300 p-6 md:p-12 font-sans overflow-y-auto"
-  >
-    <div class="max-w-3xl mx-auto pb-20">
-      <button
-        @click="router.back()"
-        class="mb-6 text-sm text-slate-500 hover:text-white transition"
-      >
-        ← 戻る
-      </button>
-
-      <h1 class="text-2xl font-bold text-white mb-8">
-        特定商取引法に基づく表記
-      </h1>
-
-      <div class="space-y-8 text-sm leading-relaxed">
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
-          <p>（あなたの氏名または屋号）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">所在地</h2>
-          <p>（あなたの住所またはバーチャルオフィスの住所）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
-          <p>（電話番号）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">メールアドレス</h2>
-          <p>support@mybrain-app.com</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">販売価格</h2>
-          <p>PROプラン: 月額1,000円（税込）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">支払方法と時期</h2>
-          <p>
-            クレジットカード決済（Stripe）。初回申込時に決済され、以降毎月同日に自動更新されます。
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">キャンセル・解約</h2>
-          <p>
-            アプリ内の設定、またはStripeのカスタマーポータルよりいつでも解約可能です。次回更新日の前日までに手続きを行ってください。
-          </p>
-        </section>
-      </div>
-    </div>
-  </div>
-</template>
-</file>
-
-<file path="functions/lib/index.js">
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.lineWebhook = exports.scrapeUrl = void 0;
-const https_1 = require("firebase-functions/v2/https");
-const v2_1 = require("firebase-functions/v2");
-const params_1 = require("firebase-functions/params");
-const admin = __importStar(require("firebase-admin"));
-const axios_1 = __importDefault(require("axios"));
-const cheerio = __importStar(require("cheerio"));
-const line = __importStar(require("@line/bot-sdk"));
-const generative_ai_1 = require("@google/generative-ai");
-if (admin.apps.length === 0) {
-    admin.initializeApp();
-}
-const db = admin.firestore();
-(0, v2_1.setGlobalOptions)({ region: "asia-northeast1", memory: "1GiB" });
-const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN");
-const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET");
-const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
-// 1. URLスクレイピング
-exports.scrapeUrl = (0, https_1.onCall)(async (request) => {
-    if (!request.auth) {
-        throw new https_1.HttpsError("unauthenticated", "Login required");
-    }
-    const { url } = request.data;
-    try {
-        const response = await axios_1.default.get(url, {
-            headers: { "User-Agent": "Mozilla/5.0..." },
-            timeout: 10000,
-        });
-        const $ = cheerio.load(response.data);
-        $("script").remove();
-        $("style").remove();
-        const title = $("title").text().trim() || "No Title";
-        let content = "";
-        $("p, h1, h2, article").each((_, el) => {
-            const text = $(el).text().trim();
-            if (text.length > 20)
-                content += text + "\n";
-        });
-        return { success: true, title, content: content.slice(0, 50000) };
-    }
-    catch (error) {
-        throw new https_1.HttpsError("internal", error.message);
-    }
-});
-// 2. LINE Webhook (最強の差別化機能)
-exports.lineWebhook = (0, https_1.onRequest)({ secrets: [lineBotToken, lineBotSecret, geminiApiKey] }, async (req, res) => {
-    // 署名検証は省略（本番では推奨）
-    const events = req.body.events;
-    const token = lineBotToken.value();
-    const client = new line.Client({ channelAccessToken: token });
-    for (const event of events) {
-        if (event.type !== "message")
-            continue;
-        const lineUserId = event.source.userId;
-        if (!lineUserId)
-            continue;
-        // LINE IDと紐づくユーザーを探す
-        const usersSnap = await db
-            .collection("users")
-            .where("lineUserId", "==", lineUserId)
-            .limit(1)
-            .get();
-        if (usersSnap.empty) {
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: "My Brainと連携されていません。アプリ設定から連携してください🙇‍♂️",
-            });
-            continue;
-        }
-        const userDoc = usersSnap.docs[0];
-        const uid = userDoc.id;
-        try {
-            if (event.message.type === "text") {
-                const text = event.message.text;
-                await saveMemoryFromLine(uid, text, null);
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "📝 メモを脳に保存しました！",
-                });
-            }
-            else if (event.message.type === "image") {
-                const stream = await client.getMessageContent(event.message.id);
-                const chunks = [];
-                for await (const chunk of stream)
-                    chunks.push(chunk);
-                const buffer = Buffer.concat(chunks);
-                const base64 = buffer.toString("base64");
-                await saveMemoryFromLine(uid, "LINEからの画像", {
-                    data: base64,
-                    mimeType: "image/jpeg",
-                });
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "📷 画像を解析して保存しました！",
-                });
-            }
-        }
-        catch (err) {
-            console.error("LINE Error:", err);
-        }
-    }
-    res.json({ success: true });
-});
-// サーバー側でのAI保存ロジック
-async function saveMemoryFromLine(uid, text, image) {
-    const apiKey = geminiApiKey.value();
-    const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    let promptParts = [];
-    if (image) {
-        promptParts.push({ inlineData: image });
-        promptParts.push({ text: "画像を分析し記憶データを作成。出力: JSON" });
-    }
-    else {
-        promptParts.push({ text: `テキストを整理。内容: ${text} 出力: JSON` });
-    }
-    // ※簡略化のためプロンプト詳細は省略。実際はアプリ側と同じ詳細なJSON指示を入れる
-    const result = await model.generateContent(promptParts);
-    const responseText = result.response.text();
-    const cleanJson = responseText
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
-    let aiData;
-    try {
-        aiData = JSON.parse(cleanJson);
-    }
-    catch (_a) {
-        aiData = { fullText: text, summary: text.slice(0, 20), tags: [] };
-    }
-    const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
-    const embedRes = await embedModel.embedContent(aiData.fullText || text);
-    await db.collection("memories").add({
-        userId: uid,
-        text: aiData.fullText || text,
-        aiSummary: aiData.summary,
-        tags: aiData.tags,
-        embedding: embedRes.embedding.values,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        hasImage: !!image,
-        source: "LINE",
-    });
-}
-</file>
-
 <file path="functions/.gitignore">
 node_modules/
 *.local
@@ -748,167 +497,6 @@ exports.sendDailyReminders = (0, scheduler_1.onSchedule)("every day 09:00", asyn
         await sendPushNotification(data.customerId, "ご予約のリマインダー", msg);
     });
 });
-</file>
-
-<file path="functions/index.ts">
-import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
-import { setGlobalOptions } from "firebase-functions/v2";
-import { defineSecret } from "firebase-functions/params";
-import * as admin from "firebase-admin";
-import axios from "axios";
-import * as cheerio from "cheerio";
-import * as line from "@line/bot-sdk";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-}
-
-const db = admin.firestore();
-setGlobalOptions({ region: "asia-northeast1", memory: "1GiB" });
-
-const lineBotToken = defineSecret("LINE_BOT_TOKEN");
-const lineBotSecret = defineSecret("LINE_BOT_SECRET");
-const geminiApiKey = defineSecret("GEMINI_API_KEY");
-
-// 1. URLスクレイピング
-export const scrapeUrl = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Login required");
-  }
-  const { url } = request.data;
-  try {
-    const response = await axios.get(url, {
-      headers: { "User-Agent": "Mozilla/5.0..." },
-      timeout: 10000,
-    });
-    const $ = cheerio.load(response.data);
-    $("script").remove();
-    $("style").remove();
-    const title = $("title").text().trim() || "No Title";
-    let content = "";
-    $("p, h1, h2, article").each((_, el) => {
-      const text = $(el).text().trim();
-      if (text.length > 20) content += text + "\n";
-    });
-    return { success: true, title, content: content.slice(0, 50000) };
-  } catch (error: any) {
-    throw new HttpsError("internal", error.message);
-  }
-});
-
-// 2. LINE Webhook (最強の差別化機能)
-export const lineWebhook = onRequest(
-  { secrets: [lineBotToken, lineBotSecret, geminiApiKey] },
-  async (req, res) => {
-    // 署名検証は省略（本番では推奨）
-    const events = req.body.events;
-    const token = lineBotToken.value();
-    const client = new line.Client({ channelAccessToken: token });
-
-    for (const event of events) {
-      if (event.type !== "message") continue;
-
-      const lineUserId = event.source.userId;
-      if (!lineUserId) continue;
-
-      // LINE IDと紐づくユーザーを探す
-      const usersSnap = await db
-        .collection("users")
-        .where("lineUserId", "==", lineUserId)
-        .limit(1)
-        .get();
-
-      if (usersSnap.empty) {
-        await client.replyMessage(event.replyToken, {
-          type: "text",
-          text: "My Brainと連携されていません。アプリ設定から連携してください🙇‍♂️",
-        });
-        continue;
-      }
-
-      const userDoc = usersSnap.docs[0];
-      const uid = userDoc.id;
-
-      try {
-        if (event.message.type === "text") {
-          const text = event.message.text;
-          await saveMemoryFromLine(uid, text, null);
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: "📝 メモを脳に保存しました！",
-          });
-        } else if (event.message.type === "image") {
-          const stream = await client.getMessageContent(event.message.id);
-          const chunks: any[] = [];
-          for await (const chunk of stream) chunks.push(chunk);
-          const buffer = Buffer.concat(chunks);
-          const base64 = buffer.toString("base64");
-
-          await saveMemoryFromLine(uid, "LINEからの画像", {
-            data: base64,
-            mimeType: "image/jpeg",
-          });
-
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: "📷 画像を解析して保存しました！",
-          });
-        }
-      } catch (err) {
-        console.error("LINE Error:", err);
-      }
-    }
-    res.json({ success: true });
-  },
-);
-
-// サーバー側でのAI保存ロジック
-async function saveMemoryFromLine(
-  uid: string,
-  text: string,
-  image: { data: string; mimeType: string } | null,
-) {
-  const apiKey = geminiApiKey.value();
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-  let promptParts: any[] = [];
-  if (image) {
-    promptParts.push({ inlineData: image });
-    promptParts.push({ text: "画像を分析し記憶データを作成。出力: JSON" });
-  } else {
-    promptParts.push({ text: `テキストを整理。内容: ${text} 出力: JSON` });
-  }
-  // ※簡略化のためプロンプト詳細は省略。実際はアプリ側と同じ詳細なJSON指示を入れる
-
-  const result = await model.generateContent(promptParts);
-  const responseText = result.response.text();
-  const cleanJson = responseText
-    .replace(/```json/g, "")
-    .replace(/```/g, "")
-    .trim();
-  let aiData;
-  try {
-    aiData = JSON.parse(cleanJson);
-  } catch {
-    aiData = { fullText: text, summary: text.slice(0, 20), tags: [] };
-  }
-
-  const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
-  const embedRes = await embedModel.embedContent(aiData.fullText || text);
-
-  await db.collection("memories").add({
-    userId: uid,
-    text: aiData.fullText || text,
-    aiSummary: aiData.summary,
-    tags: aiData.tags,
-    embedding: embedRes.embedding.values,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    hasImage: !!image,
-    source: "LINE",
-  });
-}
 </file>
 
 <file path="functions/package.json">
@@ -1544,48 +1132,6 @@ async function saveMemoryFromLine(
 </html>
 </file>
 
-<file path="src/components/AppHeader/AppHeader.vue">
-<script setup lang="ts">
-import { useAppHeader } from "./useAppHeader";
-
-// ★あなたのLINEログインチャンネルIDを入れてください
-const LINE_LOGIN_CHANNEL_ID = "2008915242";
-const REDIRECT_URI = window.location.origin + "/app";
-
-const startLineLogin = () => {
-  // LINEの認証画面へ飛ばすURL
-  const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${LINE_LOGIN_CHANNEL_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=randomstate123&scope=profile%20openid`;
-  window.location.href = url;
-};
-
-const { logout } = useAppHeader();
-</script>
-
-<template>
-  <header
-    class="h-14 px-4 flex items-center justify-between border-b border-slate-800 bg-slate-900/50 backdrop-blur z-20"
-  >
-    <div class="font-black text-lg tracking-tight">🧠 My Brain</div>
-
-    <div class="flex items-center gap-3">
-      <button
-        @click="startLineLogin"
-        class="text-[10px] bg-[#06C755] text-white px-3 py-1.5 rounded-full font-bold hover:opacity-90 transition flex items-center gap-1"
-      >
-        <span>💬</span> LINE連携
-      </button>
-
-      <button
-        @click="logout"
-        class="text-xs font-bold text-slate-500 hover:text-white transition"
-      >
-        ログアウト
-      </button>
-    </div>
-  </header>
-</template>
-</file>
-
 <file path="src/components/AppHeader/useAppHeader.ts">
 import { useMyBrain } from "@/composables/useMyBrain";
 
@@ -1595,314 +1141,6 @@ export function useAppHeader() {
 
   return {
     logout, // 画面で使えるようにする
-  };
-}
-</file>
-
-<file path="src/components/InputFooter/InputFooter.vue">
-<script setup lang="ts">
-import { computed } from "vue";
-import { useInputFooter } from "./useInputFooter";
-import { useMyBrain } from "@/composables/useMyBrain";
-
-const props = defineProps<{
-  modelValue: "memo" | "chat" | "url";
-}>();
-
-const emit = defineEmits<{
-  (e: "update:modelValue", val: "memo" | "chat" | "url"): void;
-}>();
-
-const inputMode = computed({
-  get: () => props.modelValue,
-  set: (val) => emit("update:modelValue", val),
-});
-
-const {
-  inputText,
-  selectedFile,
-  filePreview,
-  fileInputRef,
-  isListening,
-  isAiThinking,
-  toggleListening,
-  handleFileSelect,
-  clearFile,
-  handleSend,
-} = useInputFooter(props.modelValue);
-
-// ▼ 課金ステータス表示用
-const { currentUser, startSubscription } = useMyBrain();
-
-const remainingCount = computed(() => {
-  if (currentUser.value?.isPro) return 9999;
-  return 5 - (currentUser.value?.dailyUsage || 0);
-});
-</script>
-
-<template>
-  <footer
-    class="fixed bottom-0 w-full bg-slate-900/90 backdrop-blur border-t border-slate-800 p-4 pb-8 z-30 transition-all"
-  >
-    <div class="max-w-md mx-auto">
-      <div class="flex items-center justify-between px-4 mb-2">
-        <div class="text-[10px] font-bold text-slate-400">
-          <span v-if="currentUser?.isPro" class="text-yellow-400"
-            >★ PRO Plan</span
-          >
-          <span v-else>
-            Free: 残り
-            <span
-              :class="remainingCount === 0 ? 'text-red-500' : 'text-white'"
-              >{{ remainingCount }}</span
-            >
-            / 5回
-          </span>
-        </div>
-
-        <button
-          v-if="!currentUser?.isPro"
-          @click="startSubscription"
-          class="text-[10px] bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 py-1 rounded-full font-bold shadow-lg hover:opacity-90 transition"
-        >
-          🚀 PROにアップグレード (¥1,000/月)
-        </button>
-      </div>
-
-      <div
-        class="flex gap-2 mb-4 justify-center bg-slate-800 p-1 rounded-full w-fit mx-auto"
-      >
-        <button
-          @click="inputMode = 'memo'"
-          class="text-xs font-bold px-4 py-2 rounded-full transition"
-          :class="
-            inputMode === 'memo'
-              ? 'bg-white text-slate-900'
-              : 'text-slate-400 hover:text-white'
-          "
-        >
-          📝 メモ
-        </button>
-        <button
-          @click="inputMode = 'url'"
-          class="text-xs font-bold px-4 py-2 rounded-full transition"
-          :class="
-            inputMode === 'url'
-              ? 'bg-green-500 text-white'
-              : 'text-slate-400 hover:text-white'
-          "
-        >
-          🌐 URL
-        </button>
-        <button
-          @click="inputMode = 'chat'"
-          class="text-xs font-bold px-4 py-2 rounded-full transition"
-          :class="
-            inputMode === 'chat'
-              ? 'bg-blue-600 text-white'
-              : 'text-slate-400 hover:text-white'
-          "
-        >
-          🔍 会話
-        </button>
-      </div>
-
-      <div
-        v-if="selectedFile"
-        class="relative mb-2 inline-block animate-fade-in"
-      >
-        <img
-          v-if="filePreview"
-          :src="filePreview"
-          class="h-20 rounded-lg border border-slate-600"
-        />
-        <div
-          v-else
-          class="h-20 w-20 bg-slate-800 rounded-lg border border-slate-600 flex flex-col items-center justify-center p-2"
-        >
-          <span class="text-2xl">📄</span>
-          <span
-            class="text-[8px] text-slate-400 truncate w-full text-center mt-1"
-            >{{ selectedFile.name }}</span
-          >
-        </div>
-        <button
-          @click="clearFile"
-          class="absolute -top-2 -right-2 bg-slate-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-500"
-        >
-          ×
-        </button>
-      </div>
-
-      <div class="relative flex items-end gap-2">
-        <button
-          @click="toggleListening"
-          class="w-10 h-10 flex items-center justify-center rounded-xl transition shadow-lg relative overflow-hidden"
-          :class="
-            isListening
-              ? 'bg-red-500 text-white animate-pulse'
-              : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
-          "
-        >
-          <span class="relative z-10">{{ isListening ? "■" : "🎙️" }}</span>
-          <div
-            v-if="isListening"
-            class="absolute inset-0 bg-red-600 animate-ping opacity-75"
-          ></div>
-        </button>
-
-        <div v-if="inputMode === 'memo'">
-          <input
-            type="file"
-            ref="fileInputRef"
-            accept="image/*, application/pdf, text/plain, audio/*"
-            class="hidden"
-            @change="handleFileSelect"
-          />
-          <button
-            @click="fileInputRef?.click()"
-            class="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 transition"
-          >
-            📎
-          </button>
-        </div>
-
-        <textarea
-          v-model="inputText"
-          rows="1"
-          class="flex-1 bg-slate-800 border border-slate-700 text-white rounded-2xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden"
-          :placeholder="
-            inputMode === 'url'
-              ? 'URLを入力...'
-              : inputMode === 'memo'
-                ? '記憶/画像/音声を...'
-                : '質問...'
-          "
-          @keydown.enter.prevent="handleSend(inputMode)"
-        ></textarea>
-
-        <button
-          @click="handleSend(inputMode)"
-          :disabled="(!inputText && !selectedFile) || isAiThinking"
-          class="w-10 h-10 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg"
-        >
-          ↑
-        </button>
-      </div>
-    </div>
-  </footer>
-</template>
-</file>
-
-<file path="src/components/InputFooter/useInputFooter.ts">
-import { ref, onMounted } from "vue";
-import { useMyBrain } from "@/composables/useMyBrain";
-
-type InputMode = "memo" | "chat" | "url";
-
-export function useInputFooter(inputMode: InputMode) {
-  const { addMemory, addUrlMemory, askBrain, isAiThinking } = useMyBrain();
-
-  const inputText = ref("");
-  const selectedFile = ref<File | null>(null);
-  const filePreview = ref<string | null>(null);
-  const fileInputRef = ref<HTMLInputElement | null>(null);
-  const isListening = ref(false);
-  let recognition: any = null;
-
-  onMounted(() => {
-    if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
-      const SpeechRecognition =
-        (window as any).webkitSpeechRecognition ||
-        (window as any).SpeechRecognition;
-      recognition = new SpeechRecognition();
-      recognition.lang = "ja-JP";
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.onresult = (event: any) => {
-        inputText.value = Array.from(event.results)
-          .map((r: any) => r[0].transcript)
-          .join("");
-      };
-      recognition.onend = () => {
-        isListening.value = false;
-      };
-    }
-  });
-
-  const toggleListening = () => {
-    if (!recognition) return alert("音声入力未対応ブラウザです");
-    if (isListening.value) recognition.stop();
-    else {
-      isListening.value = true;
-      recognition.start();
-    }
-  };
-
-  const handleFileSelect = (e: Event) => {
-    const target = e.target as HTMLInputElement;
-    if (target.files && target.files[0]) {
-      const file = target.files[0];
-      selectedFile.value = file;
-      if (file.type.startsWith("image/")) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          filePreview.value = e.target?.result as string;
-        };
-        reader.readAsDataURL(file);
-      } else {
-        filePreview.value = null;
-      }
-    }
-  };
-
-  const clearFile = () => {
-    selectedFile.value = null;
-    filePreview.value = null;
-    if (fileInputRef.value) fileInputRef.value.value = "";
-  };
-
-  const handleSend = async (mode: InputMode) => {
-    const text = inputText.value.trim();
-    if (!text && !selectedFile.value) return;
-
-    if (mode === "memo") {
-      inputText.value = "";
-      const file = selectedFile.value;
-      clearFile();
-
-      // リコメンドを受け取る
-      const related = await addMemory(text, file);
-
-      if (related && related.length > 0) {
-        const summaries = related.map((m) => `・${m.aiSummary}`).join("\n");
-        alert(`保存しました！\n\n💡 関連する過去の記憶:\n${summaries}`);
-      } else if (related !== null) {
-        // nullでなければ保存成功（リコメンドなし）
-        // 特に何も出さないか、軽くトーストを出すなど
-      }
-    } else if (mode === "url") {
-      inputText.value = "";
-      await addUrlMemory(text);
-    } else {
-      // チャットモード
-      inputText.value = "";
-      clearFile();
-      await askBrain(text);
-    }
-  };
-
-  return {
-    inputText,
-    selectedFile,
-    filePreview,
-    fileInputRef,
-    isListening,
-    isAiThinking,
-    toggleListening,
-    handleFileSelect,
-    clearFile,
-    handleSend,
   };
 }
 </file>
@@ -3177,6 +2415,73 @@ p {
 </style>
 </file>
 
+<file path="src/views/LegalView/LegalView.vue">
+<script setup lang="ts">
+import { useRouter } from "vue-router";
+const router = useRouter();
+</script>
+
+<template>
+  <div
+    class="min-h-screen bg-slate-950 text-slate-300 p-6 md:p-12 font-sans overflow-y-auto"
+  >
+    <div class="max-w-3xl mx-auto pb-20">
+      <button
+        @click="router.back()"
+        class="mb-6 text-sm text-slate-500 hover:text-white transition"
+      >
+        ← 戻る
+      </button>
+
+      <h1 class="text-2xl font-bold text-white mb-8">
+        特定商取引法に基づく表記
+      </h1>
+
+      <div class="space-y-8 text-sm leading-relaxed">
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
+          <p>（あなたの氏名または屋号）</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">所在地</h2>
+          <p>（あなたの住所またはバーチャルオフィスの住所）</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
+          <p>（電話番号）</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">メールアドレス</h2>
+          <p>support@mybrain-app.com</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">販売価格</h2>
+          <p>PROプラン: 月額1,000円（税込）</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">支払方法と時期</h2>
+          <p>
+            クレジットカード決済（Stripe）。初回申込時に決済され、以降毎月同日に自動更新されます。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">キャンセル・解約</h2>
+          <p>
+            アプリ内の設定、またはStripeのカスタマーポータルよりいつでも解約可能です。次回更新日の前日までに手続きを行ってください。
+          </p>
+        </section>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
 <file path="src/views/LoginView/LoginView.ts">
 import { ref } from "vue";
 import {
@@ -3315,28 +2620,6 @@ enableIndexedDbPersistence(db).catch((err) => {
     console.error("ブラウザが対応していません");
   }
 });
-</file>
-
-<file path="src/main.ts">
-import { createApp } from "vue";
-import "./style.css";
-import App from "./App.vue";
-import router from "./router";
-
-const app = createApp(App);
-app.use(router);
-app.mount("#app");
-
-// マウント後にローディング画面を消す
-const loader = document.getElementById("loading-screen");
-if (loader) {
-  setTimeout(() => {
-    loader.style.opacity = "0";
-    setTimeout(() => {
-      loader.remove();
-    }, 500);
-  }, 500);
-}
 </file>
 
 <file path="src/style.css">
@@ -3627,6 +2910,502 @@ export default {
 }
 </file>
 
+<file path="functions/lib/index.js">
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.lineWebhook = exports.linkLineAccount = exports.scrapeUrl = void 0;
+const https_1 = require("firebase-functions/v2/https");
+const v2_1 = require("firebase-functions/v2");
+const params_1 = require("firebase-functions/params");
+const admin = __importStar(require("firebase-admin"));
+const axios_1 = __importDefault(require("axios"));
+const cheerio = __importStar(require("cheerio"));
+const line = __importStar(require("@line/bot-sdk"));
+const generative_ai_1 = require("@google/generative-ai");
+// 初期化
+if (admin.apps.length === 0) {
+    admin.initializeApp();
+}
+const db = admin.firestore();
+// 日本リージョンに設定
+(0, v2_1.setGlobalOptions)({ region: "asia-northeast1", memory: "1GiB" });
+// 秘密鍵の定義
+const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN");
+const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET");
+const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID");
+const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET");
+const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
+// ---------------------------------------------------------
+// 1. URLスクレイピング
+// ---------------------------------------------------------
+exports.scrapeUrl = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    }
+    const { url } = request.data;
+    try {
+        const response = await axios_1.default.get(url, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            },
+            timeout: 10000,
+        });
+        const $ = cheerio.load(response.data);
+        $("script").remove();
+        $("style").remove();
+        const title = $("title").text().trim() || "No Title";
+        let content = "";
+        $("p, h1, h2, article").each((_, el) => {
+            const text = $(el).text().trim();
+            if (text.length > 20)
+                content += text + "\n";
+        });
+        return { success: true, title, content: content.slice(0, 50000) };
+    }
+    catch (error) {
+        throw new https_1.HttpsError("internal", error.message);
+    }
+});
+// ---------------------------------------------------------
+// 2. LINE連携 (アカウント紐付け) ★これが抜けていました！
+// ---------------------------------------------------------
+exports.linkLineAccount = (0, https_1.onCall)({
+    secrets: [
+        lineLoginChannelId,
+        lineLoginChannelSecret,
+        lineBotToken,
+        lineBotSecret,
+    ],
+}, async (request) => {
+    var _a;
+    // ログインチェック
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "ログインが必要です");
+    }
+    const { code, redirectUri } = request.data;
+    try {
+        // 1. LINEからアクセストークンを取得
+        const params = new URLSearchParams();
+        params.append("grant_type", "authorization_code");
+        params.append("code", code);
+        params.append("redirect_uri", redirectUri);
+        params.append("client_id", lineLoginChannelId.value());
+        params.append("client_secret", lineLoginChannelSecret.value());
+        const tokenResponse = await axios_1.default.post("https://api.line.me/oauth2/v2.1/token", params);
+        const { access_token } = tokenResponse.data;
+        // 2. アクセストークンを使ってプロフィール(LINE UserID)を取得
+        const profileResponse = await axios_1.default.get("https://api.line.me/v2/profile", { headers: { Authorization: `Bearer ${access_token}` } });
+        const lineUserId = profileResponse.data.userId;
+        const lineDisplayName = profileResponse.data.displayName;
+        // 3. Firestoreのユーザー情報にLINE IDを書き込む
+        await db.collection("users").doc(request.auth.uid).set({
+            isLineLinked: true,
+            lineUserId: lineUserId,
+            lineDisplayName: lineDisplayName,
+        }, { merge: true });
+        return { success: true };
+    }
+    catch (error) {
+        console.error("LINE Link Error:", ((_a = error.response) === null || _a === void 0 ? void 0 : _a.data) || error);
+        throw new https_1.HttpsError("internal", "LINE連携に失敗しました");
+    }
+});
+// ---------------------------------------------------------
+// 3. LINE Webhook (ボット機能)
+// ---------------------------------------------------------
+exports.lineWebhook = (0, https_1.onRequest)({ secrets: [lineBotToken, lineBotSecret, geminiApiKey] }, async (req, res) => {
+    const events = req.body.events;
+    const token = lineBotToken.value();
+    const client = new line.Client({ channelAccessToken: token });
+    for (const event of events) {
+        if (event.type !== "message")
+            continue;
+        const lineUserId = event.source.userId;
+        if (!lineUserId)
+            continue;
+        // LINE IDと紐づくユーザーを探す
+        const usersSnap = await db
+            .collection("users")
+            .where("lineUserId", "==", lineUserId)
+            .limit(1)
+            .get();
+        if (usersSnap.empty) {
+            await client.replyMessage(event.replyToken, {
+                type: "text",
+                text: "My Brainと連携されていません。アプリ設定から連携してください🙇‍♂️",
+            });
+            continue;
+        }
+        const userDoc = usersSnap.docs[0];
+        const uid = userDoc.id;
+        try {
+            if (event.message.type === "text") {
+                const text = event.message.text;
+                await saveMemoryFromLine(uid, text, null);
+                await client.replyMessage(event.replyToken, {
+                    type: "text",
+                    text: "📝 メモを脳に保存しました！",
+                });
+            }
+            else if (event.message.type === "image") {
+                const stream = await client.getMessageContent(event.message.id);
+                const chunks = [];
+                for await (const chunk of stream)
+                    chunks.push(chunk);
+                const buffer = Buffer.concat(chunks);
+                const base64 = buffer.toString("base64");
+                await saveMemoryFromLine(uid, "LINEからの画像", {
+                    data: base64,
+                    mimeType: "image/jpeg",
+                });
+                await client.replyMessage(event.replyToken, {
+                    type: "text",
+                    text: "📷 画像を解析して保存しました！",
+                });
+            }
+        }
+        catch (err) {
+            console.error("LINE Error:", err);
+        }
+    }
+    res.json({ success: true });
+});
+// サーバー側でのAI保存ヘルパー関数
+async function saveMemoryFromLine(uid, text, image) {
+    const apiKey = geminiApiKey.value();
+    const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    let promptParts = [];
+    if (image) {
+        promptParts.push({ inlineData: image });
+        promptParts.push({
+            text: 'この画像を分析して記憶データを作成してください。出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "詳細な内容"}',
+        });
+    }
+    else {
+        promptParts.push({
+            text: `以下のテキストを記憶データとして整理してください。\n${text}\n出力形式: JSON {\"summary\": \"20字要約\", \"tags\": [\"タグ\"], \"fullText\": \"${text}\"}`,
+        });
+    }
+    try {
+        const result = await model.generateContent(promptParts);
+        const responseText = result.response.text();
+        const cleanJson = responseText
+            .replace(/```json/g, "")
+            .replace(/```/g, "")
+            .trim();
+        let aiData;
+        try {
+            aiData = JSON.parse(cleanJson);
+        }
+        catch (_a) {
+            aiData = {
+                fullText: text,
+                summary: text.slice(0, 20) + "...",
+                tags: ["LINE"],
+            };
+        }
+        const embedModel = genAI.getGenerativeModel({
+            model: "text-embedding-004",
+        });
+        const embedRes = await embedModel.embedContent(aiData.fullText || text);
+        await db.collection("memories").add({
+            userId: uid,
+            text: aiData.fullText || text,
+            aiSummary: aiData.summary,
+            tags: aiData.tags,
+            embedding: embedRes.embedding.values,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            hasImage: !!image,
+            source: "LINE",
+        });
+    }
+    catch (e) {
+        console.error("Save Memory Error:", e);
+    }
+}
+</file>
+
+<file path="functions/index.ts">
+import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
+import { setGlobalOptions } from "firebase-functions/v2";
+import { defineSecret } from "firebase-functions/params";
+import * as admin from "firebase-admin";
+import axios from "axios";
+import * as cheerio from "cheerio";
+import * as line from "@line/bot-sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// 初期化
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
+
+const db = admin.firestore();
+// 日本リージョンに設定
+setGlobalOptions({ region: "asia-northeast1", memory: "1GiB" });
+
+// 秘密鍵の定義
+const lineBotToken = defineSecret("LINE_BOT_TOKEN");
+const lineBotSecret = defineSecret("LINE_BOT_SECRET");
+const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
+const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
+
+// ---------------------------------------------------------
+// 1. URLスクレイピング
+// ---------------------------------------------------------
+export const scrapeUrl = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Login required");
+  }
+  const { url } = request.data;
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      },
+      timeout: 10000,
+    });
+    const $ = cheerio.load(response.data);
+    $("script").remove();
+    $("style").remove();
+    const title = $("title").text().trim() || "No Title";
+    let content = "";
+    $("p, h1, h2, article").each((_, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 20) content += text + "\n";
+    });
+    return { success: true, title, content: content.slice(0, 50000) };
+  } catch (error: any) {
+    throw new HttpsError("internal", error.message);
+  }
+});
+
+// ---------------------------------------------------------
+// 2. LINE連携 (アカウント紐付け)
+// ---------------------------------------------------------
+export const linkLineAccount = onCall(
+  {
+    secrets: [
+      lineLoginChannelId,
+      lineLoginChannelSecret,
+      lineBotToken,
+      lineBotSecret,
+    ],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "ログインが必要です");
+    }
+
+    const { code, redirectUri } = request.data;
+
+    try {
+      const params = new URLSearchParams();
+      params.append("grant_type", "authorization_code");
+      params.append("code", code);
+      params.append("redirect_uri", redirectUri);
+      params.append("client_id", lineLoginChannelId.value());
+      params.append("client_secret", lineLoginChannelSecret.value());
+
+      const tokenResponse = await axios.post(
+        "https://api.line.me/oauth2/v2.1/token",
+        params,
+      );
+      const { access_token } = tokenResponse.data;
+
+      const profileResponse = await axios.get(
+        "https://api.line.me/v2/profile",
+        { headers: { Authorization: `Bearer ${access_token}` } },
+      );
+
+      const lineUserId = profileResponse.data.userId;
+      const lineDisplayName = profileResponse.data.displayName;
+
+      await db.collection("users").doc(request.auth.uid).set(
+        {
+          isLineLinked: true,
+          lineUserId: lineUserId,
+          lineDisplayName: lineDisplayName,
+        },
+        { merge: true },
+      );
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("LINE Link Error:", error.response?.data || error);
+      throw new HttpsError("internal", "LINE連携に失敗しました");
+    }
+  },
+);
+
+// ---------------------------------------------------------
+// 3. LINE Webhook (ボット機能: ここで保存処理を行う)
+// ---------------------------------------------------------
+export const lineWebhook = onRequest(
+  { secrets: [lineBotToken, lineBotSecret, geminiApiKey] },
+  async (req, res) => {
+    const events = req.body.events;
+    const token = lineBotToken.value();
+    const client = new line.Client({ channelAccessToken: token });
+
+    for (const event of events) {
+      if (event.type !== "message") continue;
+
+      const lineUserId = event.source.userId;
+      if (!lineUserId) continue;
+
+      // LINE IDと紐づくユーザーを探す
+      const usersSnap = await db
+        .collection("users")
+        .where("lineUserId", "==", lineUserId)
+        .limit(1)
+        .get();
+
+      if (usersSnap.empty) {
+        await client.replyMessage(event.replyToken, {
+          type: "text",
+          text: "My Brainと連携されていません。アプリ設定から連携してください🙇‍♂️",
+        });
+        continue;
+      }
+
+      const userDoc = usersSnap.docs[0];
+      const uid = userDoc.id;
+
+      try {
+        if (event.message.type === "text") {
+          const text = event.message.text;
+          await saveMemoryFromLine(uid, text, null);
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: "📝 メモを脳に保存しました！",
+          });
+        } else if (event.message.type === "image") {
+          const stream = await client.getMessageContent(event.message.id);
+          const chunks: any[] = [];
+          for await (const chunk of stream) chunks.push(chunk);
+          const buffer = Buffer.concat(chunks);
+          const base64 = buffer.toString("base64");
+
+          await saveMemoryFromLine(uid, "LINEからの画像", {
+            data: base64,
+            mimeType: "image/jpeg",
+          });
+
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: "📷 画像を解析して保存しました！",
+          });
+        }
+      } catch (err) {
+        console.error("LINE Error:", err);
+      }
+    }
+    res.json({ success: true });
+  },
+);
+
+// サーバー側でのAI保存ヘルパー関数
+async function saveMemoryFromLine(
+  uid: string,
+  text: string,
+  image: { data: string; mimeType: string } | null,
+) {
+  const apiKey = geminiApiKey.value();
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  let promptParts: any[] = [];
+  if (image) {
+    promptParts.push({ inlineData: image });
+    promptParts.push({
+      text: 'この画像を分析して記憶データを作成してください。出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "詳細な内容"}',
+    });
+  } else {
+    promptParts.push({
+      text: `以下のテキストを記憶データとして整理してください。\n${text}\n出力形式: JSON {\"summary\": \"20字要約\", \"tags\": [\"タグ\"], \"fullText\": \"${text}\"}`,
+    });
+  }
+
+  try {
+    const result = await model.generateContent(promptParts);
+    const responseText = result.response.text();
+    const cleanJson = responseText
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
+    let aiData;
+    try {
+      aiData = JSON.parse(cleanJson);
+    } catch {
+      aiData = {
+        fullText: text,
+        summary: text.slice(0, 20) + "...",
+        tags: ["LINE"],
+      };
+    }
+
+    const embedModel = genAI.getGenerativeModel({
+      model: "text-embedding-004",
+    });
+    const embedRes = await embedModel.embedContent(aiData.fullText || text);
+
+    await db.collection("memories").add({
+      userId: uid,
+      text: aiData.fullText || text,
+      aiSummary: aiData.summary,
+      tags: aiData.tags,
+      embedding: embedRes.embedding.values,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      hasImage: !!image,
+      source: "LINE",
+    });
+  } catch (e) {
+    console.error("Save Memory Error:", e);
+  }
+}
+</file>
+
 <file path="public/firebase-messaging-sw.js">
 // public/firebase-messaging-sw.js
 importScripts(
@@ -3668,6 +3447,48 @@ messaging.onBackgroundMessage((payload) => {
 
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
+</file>
+
+<file path="src/components/AppHeader/AppHeader.vue">
+<script setup lang="ts">
+import { useAppHeader } from "./useAppHeader";
+
+// ★あなたのLINEログインチャンネルIDを入れてください
+const LINE_LOGIN_CHANNEL_ID = "2008915242";
+const REDIRECT_URI = window.location.origin + "/app";
+
+const startLineLogin = () => {
+  // LINEの認証画面へ飛ばすURL
+  const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${LINE_LOGIN_CHANNEL_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=randomstate123&scope=profile%20openid`;
+  window.location.href = url;
+};
+
+const { logout } = useAppHeader();
+</script>
+
+<template>
+  <header
+    class="h-14 px-4 flex items-center justify-between border-b border-slate-800 bg-slate-900/50 backdrop-blur z-20"
+  >
+    <div class="font-black text-lg tracking-tight">🧠 My Brain</div>
+
+    <div class="flex items-center gap-3">
+      <button
+        @click="startLineLogin"
+        class="text-[10px] bg-[#06C755] text-white px-3 py-1.5 rounded-full font-bold hover:opacity-90 transition flex items-center gap-1"
+      >
+        <span>💬</span> LINE連携
+      </button>
+
+      <button
+        @click="logout"
+        class="text-xs font-bold text-slate-500 hover:text-white transition"
+      >
+        ログアウト
+      </button>
+    </div>
+  </header>
+</template>
 </file>
 
 <file path="src/components/ChatList/ChatList.vue">
@@ -3826,6 +3647,772 @@ export function useChatList() {
     deleteChatLog,
   };
 }
+</file>
+
+<file path="src/components/InputFooter/InputFooter.vue">
+<script setup lang="ts">
+import { computed } from "vue";
+import { useInputFooter } from "./useInputFooter";
+import { useMyBrain } from "@/composables/useMyBrain";
+
+const props = defineProps<{
+  modelValue: "memo" | "chat" | "url";
+}>();
+
+const emit = defineEmits<{
+  (e: "update:modelValue", val: "memo" | "chat" | "url"): void;
+}>();
+
+const inputMode = computed({
+  get: () => props.modelValue,
+  set: (val) => emit("update:modelValue", val),
+});
+
+const {
+  inputText,
+  selectedFile,
+  filePreview,
+  fileInputRef,
+  isListening,
+  isAiThinking,
+  toggleListening,
+  handleFileSelect,
+  clearFile,
+  handleSend,
+} = useInputFooter(props.modelValue);
+
+// ▼ 課金ステータス表示用
+const { currentUser, startSubscription } = useMyBrain();
+
+const remainingCount = computed(() => {
+  if (currentUser.value?.isPro) return 9999;
+  return 5 - (currentUser.value?.dailyUsage || 0);
+});
+</script>
+
+<template>
+  <footer
+    class="fixed bottom-0 w-full bg-slate-900/90 backdrop-blur border-t border-slate-800 p-4 pb-8 z-30 transition-all"
+  >
+    <div class="max-w-md mx-auto">
+      <div class="flex items-center justify-between px-4 mb-2">
+        <div class="text-[10px] font-bold text-slate-400">
+          <span v-if="currentUser?.isPro" class="text-yellow-400"
+            >★ PRO Plan</span
+          >
+          <span v-else>
+            Free: 残り
+            <span
+              :class="remainingCount === 0 ? 'text-red-500' : 'text-white'"
+              >{{ remainingCount }}</span
+            >
+            / 5回
+          </span>
+        </div>
+
+        <button
+          v-if="!currentUser?.isPro"
+          @click="startSubscription"
+          class="text-[10px] bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 py-1 rounded-full font-bold shadow-lg hover:opacity-90 transition"
+        >
+          🚀 PROにアップグレード (¥1,000/月)
+        </button>
+      </div>
+
+      <div
+        class="flex gap-2 mb-4 justify-center bg-slate-800 p-1 rounded-full w-fit mx-auto"
+      >
+        <button
+          @click="inputMode = 'memo'"
+          class="text-xs font-bold px-4 py-2 rounded-full transition"
+          :class="
+            inputMode === 'memo'
+              ? 'bg-white text-slate-900'
+              : 'text-slate-400 hover:text-white'
+          "
+        >
+          📝 メモ
+        </button>
+        <button
+          @click="inputMode = 'url'"
+          class="text-xs font-bold px-4 py-2 rounded-full transition"
+          :class="
+            inputMode === 'url'
+              ? 'bg-green-500 text-white'
+              : 'text-slate-400 hover:text-white'
+          "
+        >
+          🌐 URL
+        </button>
+        <button
+          @click="inputMode = 'chat'"
+          class="text-xs font-bold px-4 py-2 rounded-full transition"
+          :class="
+            inputMode === 'chat'
+              ? 'bg-blue-600 text-white'
+              : 'text-slate-400 hover:text-white'
+          "
+        >
+          🔍 会話
+        </button>
+      </div>
+
+      <div
+        v-if="selectedFile"
+        class="relative mb-2 inline-block animate-fade-in"
+      >
+        <img
+          v-if="filePreview"
+          :src="filePreview"
+          class="h-20 rounded-lg border border-slate-600"
+        />
+        <div
+          v-else
+          class="h-20 w-20 bg-slate-800 rounded-lg border border-slate-600 flex flex-col items-center justify-center p-2"
+        >
+          <span class="text-2xl">📄</span>
+          <span
+            class="text-[8px] text-slate-400 truncate w-full text-center mt-1"
+            >{{ selectedFile.name }}</span
+          >
+        </div>
+        <button
+          @click="clearFile"
+          class="absolute -top-2 -right-2 bg-slate-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-500"
+        >
+          ×
+        </button>
+      </div>
+
+      <div class="relative flex items-end gap-2">
+        <button
+          @click="toggleListening"
+          class="w-10 h-10 flex items-center justify-center rounded-xl transition shadow-lg relative overflow-hidden"
+          :class="
+            isListening
+              ? 'bg-red-500 text-white animate-pulse'
+              : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+          "
+        >
+          <span class="relative z-10">{{ isListening ? "■" : "🎙️" }}</span>
+          <div
+            v-if="isListening"
+            class="absolute inset-0 bg-red-600 animate-ping opacity-75"
+          ></div>
+        </button>
+
+        <div v-if="inputMode === 'memo'">
+          <input
+            type="file"
+            ref="fileInputRef"
+            accept="image/*, application/pdf, text/plain, audio/*"
+            class="hidden"
+            @change="handleFileSelect"
+          />
+          <button
+            @click="fileInputRef?.click()"
+            class="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 transition"
+          >
+            📎
+          </button>
+        </div>
+
+        <textarea
+          v-model="inputText"
+          rows="1"
+          class="flex-1 bg-slate-800 border border-slate-700 text-white rounded-2xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden"
+          :placeholder="
+            inputMode === 'url'
+              ? 'URLを入力...'
+              : inputMode === 'memo'
+                ? '記憶/画像/音声を...'
+                : '質問...'
+          "
+          @keydown.enter.prevent="handleSend(inputMode)"
+        ></textarea>
+
+        <button
+          @click="handleSend(inputMode)"
+          :disabled="(!inputText && !selectedFile) || isAiThinking"
+          class="w-10 h-10 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg"
+        >
+          ↑
+        </button>
+      </div>
+    </div>
+  </footer>
+</template>
+</file>
+
+<file path="src/components/InputFooter/useInputFooter.ts">
+import { ref, onMounted } from "vue";
+import { useMyBrain } from "@/composables/useMyBrain";
+
+type InputMode = "memo" | "chat" | "url";
+
+export function useInputFooter(inputMode: InputMode) {
+  const { addMemory, addUrlMemory, askBrain, isAiThinking } = useMyBrain();
+
+  const inputText = ref("");
+  const selectedFile = ref<File | null>(null);
+  const filePreview = ref<string | null>(null);
+  const fileInputRef = ref<HTMLInputElement | null>(null);
+  const isListening = ref(false);
+  let recognition: any = null;
+
+  onMounted(() => {
+    if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+      const SpeechRecognition =
+        (window as any).webkitSpeechRecognition ||
+        (window as any).SpeechRecognition;
+      recognition = new SpeechRecognition();
+      recognition.lang = "ja-JP";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.onresult = (event: any) => {
+        inputText.value = Array.from(event.results)
+          .map((r: any) => r[0].transcript)
+          .join("");
+      };
+      recognition.onend = () => {
+        isListening.value = false;
+      };
+    }
+  });
+
+  const toggleListening = () => {
+    if (!recognition) return alert("音声入力未対応ブラウザです");
+    if (isListening.value) recognition.stop();
+    else {
+      isListening.value = true;
+      recognition.start();
+    }
+  };
+
+  const handleFileSelect = (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    if (target.files && target.files[0]) {
+      const file = target.files[0];
+      selectedFile.value = file;
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          filePreview.value = e.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+      } else {
+        filePreview.value = null;
+      }
+    }
+  };
+
+  const clearFile = () => {
+    selectedFile.value = null;
+    filePreview.value = null;
+    if (fileInputRef.value) fileInputRef.value.value = "";
+  };
+
+  const handleSend = async (mode: InputMode) => {
+    const text = inputText.value.trim();
+    if (!text && !selectedFile.value) return;
+
+    if (mode === "memo") {
+      inputText.value = "";
+      const file = selectedFile.value;
+      clearFile();
+
+      // リコメンドを受け取る
+      const related = await addMemory(text, file);
+
+      if (related && related.length > 0) {
+        const summaries = related.map((m) => `・${m.aiSummary}`).join("\n");
+        alert(`保存しました！\n\n💡 関連する過去の記憶:\n${summaries}`);
+      } else if (related !== null) {
+        // nullでなければ保存成功（リコメンドなし）
+        // 特に何も出さないか、軽くトーストを出すなど
+      }
+    } else if (mode === "url") {
+      inputText.value = "";
+      await addUrlMemory(text);
+    } else {
+      // チャットモード
+      inputText.value = "";
+      clearFile();
+      await askBrain(text);
+    }
+  };
+
+  return {
+    inputText,
+    selectedFile,
+    filePreview,
+    fileInputRef,
+    isListening,
+    isAiThinking,
+    toggleListening,
+    handleFileSelect,
+    clearFile,
+    handleSend,
+  };
+}
+</file>
+
+<file path="src/views/LoginView/LoginView.vue">
+<script setup lang="ts">
+import { ref } from "vue";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  sendEmailVerification,
+} from "firebase/auth";
+import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
+import { useRouter } from "vue-router";
+import { googleProvider } from "@/../firebase"; // ★修正: 正しいパスに変更
+
+const router = useRouter();
+const isLoginMode = ref(true);
+const email = ref("");
+const password = ref("");
+const loading = ref(false);
+
+const auth = getAuth();
+const db = getFirestore();
+
+// Googleログイン処理
+const handleGoogleLogin = async () => {
+  loading.value = true;
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+
+    const userRef = doc(db, "users", user.uid);
+    const userSnap = await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+      await setDoc(userRef, {
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        role: "student",
+        createdAt: new Date(),
+      });
+    }
+
+    router.push("/app");
+  } catch (e: any) {
+    console.error(e);
+    alert("Googleログインに失敗しました: " + e.message);
+  } finally {
+    loading.value = false;
+  }
+};
+
+// メールログイン処理
+const handleSubmit = async () => {
+  if (!email.value || !password.value) return alert("入力してください");
+  loading.value = true;
+
+  try {
+    if (isLoginMode.value) {
+      // --- ログイン ---
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email.value,
+        password.value,
+      );
+      const user = userCredential.user;
+
+      if (!user.emailVerified) {
+        router.push("/verify-email");
+      } else {
+        router.push("/app");
+      }
+    } else {
+      // --- 新規登録 ---
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email.value,
+        password.value,
+      );
+      const user = userCredential.user;
+
+      await setDoc(doc(db, "users", user.uid), {
+        email: email.value,
+        role: "student",
+        createdAt: new Date(),
+      });
+
+      await sendEmailVerification(user);
+      alert(
+        "確認メールを送信しました。\nメール内のリンクをクリックしてください。",
+      );
+      router.push("/verify-email");
+    }
+  } catch (e: any) {
+    let msg = "エラーが発生しました";
+    if (e.code === "auth/email-already-in-use")
+      msg = "このメールアドレスは既に登録されています";
+    if (e.code === "auth/weak-password")
+      msg = "パスワードは6文字以上にしてください";
+    if (e.code === "auth/invalid-credential")
+      msg = "メールアドレスまたはパスワードが間違っています";
+    alert(msg);
+  } finally {
+    loading.value = false;
+  }
+};
+</script>
+
+<template>
+  <div
+    class="min-h-[100dvh] w-full bg-slate-900 flex items-center justify-center p-6"
+  >
+    <div
+      class="w-full max-w-md bg-white/10 backdrop-blur-md rounded-3xl p-8 shadow-2xl border border-white/20"
+    >
+      <div class="text-center mb-8">
+        <h1
+          class="text-4xl font-black text-white mb-2 flex justify-center items-center gap-2"
+        >
+          🧠 My Brain
+        </h1>
+        <p class="text-slate-400 text-xs font-bold tracking-wider">
+          あなただけの第2の脳
+        </p>
+      </div>
+
+      <div class="space-y-4">
+        <button
+          @click="handleGoogleLogin"
+          :disabled="loading"
+          class="w-full bg-white text-slate-700 font-bold py-3 rounded-xl shadow-md hover:bg-slate-50 transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          <img
+            src="https://www.svgrepo.com/show/475656/google-color.svg"
+            class="w-5 h-5"
+            alt="Google"
+          />
+          Googleで{{ isLoginMode ? "ログイン" : "登録" }}
+        </button>
+
+        <div class="flex items-center gap-2 my-4">
+          <div class="h-px bg-slate-700 flex-1"></div>
+          <span class="text-slate-500 text-xs">または</span>
+          <div class="h-px bg-slate-700 flex-1"></div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1 ml-1"
+            >Email</label
+          >
+          <input
+            v-model="email"
+            type="email"
+            class="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 font-bold text-white outline-none focus:ring-2 focus:ring-blue-500 transition"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1 ml-1"
+            >Password</label
+          >
+          <input
+            v-model="password"
+            type="password"
+            class="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 font-bold text-white outline-none focus:ring-2 focus:ring-blue-500 transition"
+          />
+        </div>
+
+        <button
+          @click="handleSubmit"
+          :disabled="loading"
+          class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-500 transition active:scale-95 disabled:opacity-50 mt-4"
+        >
+          {{
+            loading
+              ? "処理中..."
+              : isLoginMode
+                ? "メールでログイン"
+                : "メールで登録"
+          }}
+        </button>
+
+        <div class="text-center mt-6">
+          <button
+            @click="isLoginMode = !isLoginMode"
+            class="text-xs font-bold text-slate-400 hover:text-white transition"
+          >
+            {{ isLoginMode ? "アカウント作成はこちら" : "ログインはこちら" }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
+<file path="src/views/VerifyEmailView/VerifyEmailView.vue">
+<script setup lang="ts">
+import { ref } from "vue";
+import { getAuth, sendEmailVerification, signOut } from "firebase/auth";
+import { useRouter } from "vue-router";
+
+const auth = getAuth();
+const router = useRouter();
+const user = auth.currentUser;
+const loading = ref(false);
+const message = ref("");
+
+// 再送信処理
+const resendEmail = async () => {
+  if (!user) return;
+  loading.value = true;
+  try {
+    await sendEmailVerification(user);
+    message.value = "確認メールを再送信しました。";
+  } catch (e: any) {
+    if (e.code === "auth/too-many-requests") {
+      message.value = "少し時間を置いてから再試行してください。";
+    } else {
+      message.value = "送信に失敗しました。";
+    }
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 「確認しました」ボタン
+const checkVerification = async () => {
+  if (!user) return;
+  loading.value = true;
+  try {
+    await user.reload(); // Firebaseの状態を最新に更新
+    if (user.emailVerified) {
+      alert("認証を確認しました！");
+      // ★修正: アプリ画面へ
+      router.push("/app");
+    } else {
+      alert(
+        "まだ認証が完了していません。\nメールのリンクをクリックしましたか？",
+      );
+    }
+  } catch (e) {
+    console.error(e);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const handleLogout = async () => {
+  await signOut(auth);
+  router.push("/login");
+};
+</script>
+
+<template>
+  <div
+    class="min-h-screen bg-slate-50 flex items-center justify-center p-6 font-sans"
+  >
+    <div
+      class="max-w-md w-full bg-white rounded-3xl p-8 shadow-sm border border-slate-100 text-center"
+    >
+      <div
+        class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-6"
+      >
+        ✉️
+      </div>
+
+      <h2 class="text-xl font-bold text-slate-800 mb-4">
+        メールアドレスの確認
+      </h2>
+
+      <p class="text-sm text-slate-600 mb-6 leading-relaxed">
+        <strong>{{ user?.email }}</strong> 宛に確認メールを送信しました。<br />
+        メール内のリンクをクリックして、アカウントを有効化してください。
+      </p>
+
+      <div class="space-y-3">
+        <button
+          @click="checkVerification"
+          :disabled="loading"
+          class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition shadow-lg shadow-blue-200"
+        >
+          {{ loading ? "確認中..." : "認証完了 (アプリへ進む)" }}
+        </button>
+
+        <button
+          @click="resendEmail"
+          :disabled="loading"
+          class="w-full py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition"
+        >
+          メールを再送信
+        </button>
+      </div>
+
+      <p
+        v-if="message"
+        class="mt-4 text-xs text-blue-600 font-bold animate-pulse"
+      >
+        {{ message }}
+      </p>
+
+      <div class="mt-8 pt-6 border-t border-slate-100">
+        <p class="text-xs text-slate-400 mb-2">メールが届かない場合</p>
+        <p class="text-[10px] text-slate-400">
+          ・迷惑メールフォルダをご確認ください<br />
+          ・メールアドレスが間違っている場合はログアウトしてやり直してください
+        </p>
+        <button
+          @click="handleLogout"
+          class="mt-4 text-xs text-slate-500 underline hover:text-slate-800"
+        >
+          ログアウト / アドレス変更
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
+<file path="src/env.d.ts">
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_FIREBASE_API_KEY: string;
+  readonly VITE_FIREBASE_AUTH_DOMAIN: string;
+  readonly VITE_FIREBASE_PROJECT_ID: string;
+  readonly VITE_FIREBASE_STORAGE_BUCKET: string;
+  readonly VITE_FIREBASE_MESSAGING_SENDER_ID: string;
+  readonly VITE_FIREBASE_APP_ID: string;
+  readonly VITE_FIREBASE_MEASUREMENT_ID: string;
+  readonly VITE_GEMINI_API_KEY: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
+declare module "*.vue" {
+  import type { DefineComponent } from "vue";
+  const component: DefineComponent<{}, {}, any>;
+  export default component;
+}
+</file>
+
+<file path="src/main.ts">
+import { createApp } from "vue";
+import "./style.css";
+import App from "./App.vue";
+import router from "./router";
+
+const app = createApp(App);
+app.use(router);
+app.mount("#app");
+
+// マウント後にローディング画面を消す
+const loader = document.getElementById("loading-screen");
+if (loader) {
+  setTimeout(() => {
+    loader.style.opacity = "0";
+    setTimeout(() => {
+      loader.remove();
+    }, 500);
+  }, 500);
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "my-brain",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && firebase deploy"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@line/bot-sdk": "^10.5.0",
+    "axios": "^1.13.2",
+    "chart.js": "^4.5.1",
+    "firebase": "^10.14.1",
+    "html5-qrcode": "^2.3.8",
+    "mathjs": "^15.1.0",
+    "mermaid": "^11.12.2",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "vue": "^3.4.0",
+    "vue-chartjs": "^5.3.3",
+    "vue-router": "^4.6.3"
+  },
+  "devDependencies": {
+    "@types/google-apps-script": "^2.0.8",
+    "@types/react": "^19.2.7",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.18",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0",
+    "vite-plugin-pwa": "^1.2.0",
+    "vue-tsc": "^1.8.25"
+  }
+}
+</file>
+
+<file path="vite.config.ts">
+import { fileURLToPath, URL } from "node:url";
+
+import { defineConfig } from "vite";
+import vue from "@vitejs/plugin-vue";
+import { VitePWA } from "vite-plugin-pwa";
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [
+    vue(),
+    VitePWA({
+      registerType: "autoUpdate",
+      includeAssets: ["favicon.ico", "apple-touch-icon.png", "logo.png"],
+      manifest: {
+        name: "My Brain - AI Knowledge Base",
+        short_name: "My Brain",
+        description: "AIがあなたの記憶をサポートする、あなただけの第2の脳。",
+        theme_color: "#0f172a",
+        background_color: "#0f172a",
+        display: "standalone",
+        icons: [
+          {
+            src: "logo.png?v=3", // ★ここを変更
+            sizes: "192x192",
+            type: "image/png",
+          },
+          {
+            src: "logo.png?v=3", // ★ここを変更
+            sizes: "512x512",
+            type: "image/png",
+          },
+          {
+            src: "logo.png?v=3", // ★ここを変更
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any maskable",
+          },
+        ],
+      },
+    }),
+  ],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
+});
 </file>
 
 <file path="src/composables/useMyBrain.ts">
@@ -4536,350 +5123,6 @@ router.beforeEach(async (to, from, next) => {
 export default router;
 </file>
 
-<file path="src/views/LoginView/LoginView.vue">
-<script setup lang="ts">
-import { ref } from "vue";
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
-  sendEmailVerification,
-} from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
-import { useRouter } from "vue-router";
-import { googleProvider } from "@/../firebase"; // ★修正: 正しいパスに変更
-
-const router = useRouter();
-const isLoginMode = ref(true);
-const email = ref("");
-const password = ref("");
-const loading = ref(false);
-
-const auth = getAuth();
-const db = getFirestore();
-
-// Googleログイン処理
-const handleGoogleLogin = async () => {
-  loading.value = true;
-  try {
-    const result = await signInWithPopup(auth, googleProvider);
-    const user = result.user;
-
-    const userRef = doc(db, "users", user.uid);
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists()) {
-      await setDoc(userRef, {
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        role: "student",
-        createdAt: new Date(),
-      });
-    }
-
-    router.push("/app");
-  } catch (e: any) {
-    console.error(e);
-    alert("Googleログインに失敗しました: " + e.message);
-  } finally {
-    loading.value = false;
-  }
-};
-
-// メールログイン処理
-const handleSubmit = async () => {
-  if (!email.value || !password.value) return alert("入力してください");
-  loading.value = true;
-
-  try {
-    if (isLoginMode.value) {
-      // --- ログイン ---
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email.value,
-        password.value,
-      );
-      const user = userCredential.user;
-
-      if (!user.emailVerified) {
-        router.push("/verify-email");
-      } else {
-        router.push("/app");
-      }
-    } else {
-      // --- 新規登録 ---
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        email.value,
-        password.value,
-      );
-      const user = userCredential.user;
-
-      await setDoc(doc(db, "users", user.uid), {
-        email: email.value,
-        role: "student",
-        createdAt: new Date(),
-      });
-
-      await sendEmailVerification(user);
-      alert(
-        "確認メールを送信しました。\nメール内のリンクをクリックしてください。",
-      );
-      router.push("/verify-email");
-    }
-  } catch (e: any) {
-    let msg = "エラーが発生しました";
-    if (e.code === "auth/email-already-in-use")
-      msg = "このメールアドレスは既に登録されています";
-    if (e.code === "auth/weak-password")
-      msg = "パスワードは6文字以上にしてください";
-    if (e.code === "auth/invalid-credential")
-      msg = "メールアドレスまたはパスワードが間違っています";
-    alert(msg);
-  } finally {
-    loading.value = false;
-  }
-};
-</script>
-
-<template>
-  <div
-    class="min-h-[100dvh] w-full bg-slate-900 flex items-center justify-center p-6"
-  >
-    <div
-      class="w-full max-w-md bg-white/10 backdrop-blur-md rounded-3xl p-8 shadow-2xl border border-white/20"
-    >
-      <div class="text-center mb-8">
-        <h1
-          class="text-4xl font-black text-white mb-2 flex justify-center items-center gap-2"
-        >
-          🧠 My Brain
-        </h1>
-        <p class="text-slate-400 text-xs font-bold tracking-wider">
-          あなただけの第2の脳
-        </p>
-      </div>
-
-      <div class="space-y-4">
-        <button
-          @click="handleGoogleLogin"
-          :disabled="loading"
-          class="w-full bg-white text-slate-700 font-bold py-3 rounded-xl shadow-md hover:bg-slate-50 transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          <img
-            src="https://www.svgrepo.com/show/475656/google-color.svg"
-            class="w-5 h-5"
-            alt="Google"
-          />
-          Googleで{{ isLoginMode ? "ログイン" : "登録" }}
-        </button>
-
-        <div class="flex items-center gap-2 my-4">
-          <div class="h-px bg-slate-700 flex-1"></div>
-          <span class="text-slate-500 text-xs">または</span>
-          <div class="h-px bg-slate-700 flex-1"></div>
-        </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-400 mb-1 ml-1"
-            >Email</label
-          >
-          <input
-            v-model="email"
-            type="email"
-            class="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 font-bold text-white outline-none focus:ring-2 focus:ring-blue-500 transition"
-          />
-        </div>
-        <div>
-          <label class="block text-xs font-bold text-slate-400 mb-1 ml-1"
-            >Password</label
-          >
-          <input
-            v-model="password"
-            type="password"
-            class="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 font-bold text-white outline-none focus:ring-2 focus:ring-blue-500 transition"
-          />
-        </div>
-
-        <button
-          @click="handleSubmit"
-          :disabled="loading"
-          class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-500 transition active:scale-95 disabled:opacity-50 mt-4"
-        >
-          {{
-            loading
-              ? "処理中..."
-              : isLoginMode
-                ? "メールでログイン"
-                : "メールで登録"
-          }}
-        </button>
-
-        <div class="text-center mt-6">
-          <button
-            @click="isLoginMode = !isLoginMode"
-            class="text-xs font-bold text-slate-400 hover:text-white transition"
-          >
-            {{ isLoginMode ? "アカウント作成はこちら" : "ログインはこちら" }}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-</file>
-
-<file path="src/views/VerifyEmailView/VerifyEmailView.vue">
-<script setup lang="ts">
-import { ref } from "vue";
-import { getAuth, sendEmailVerification, signOut } from "firebase/auth";
-import { useRouter } from "vue-router";
-
-const auth = getAuth();
-const router = useRouter();
-const user = auth.currentUser;
-const loading = ref(false);
-const message = ref("");
-
-// 再送信処理
-const resendEmail = async () => {
-  if (!user) return;
-  loading.value = true;
-  try {
-    await sendEmailVerification(user);
-    message.value = "確認メールを再送信しました。";
-  } catch (e: any) {
-    if (e.code === "auth/too-many-requests") {
-      message.value = "少し時間を置いてから再試行してください。";
-    } else {
-      message.value = "送信に失敗しました。";
-    }
-  } finally {
-    loading.value = false;
-  }
-};
-
-// 「確認しました」ボタン
-const checkVerification = async () => {
-  if (!user) return;
-  loading.value = true;
-  try {
-    await user.reload(); // Firebaseの状態を最新に更新
-    if (user.emailVerified) {
-      alert("認証を確認しました！");
-      // ★修正: アプリ画面へ
-      router.push("/app");
-    } else {
-      alert(
-        "まだ認証が完了していません。\nメールのリンクをクリックしましたか？",
-      );
-    }
-  } catch (e) {
-    console.error(e);
-  } finally {
-    loading.value = false;
-  }
-};
-
-const handleLogout = async () => {
-  await signOut(auth);
-  router.push("/login");
-};
-</script>
-
-<template>
-  <div
-    class="min-h-screen bg-slate-50 flex items-center justify-center p-6 font-sans"
-  >
-    <div
-      class="max-w-md w-full bg-white rounded-3xl p-8 shadow-sm border border-slate-100 text-center"
-    >
-      <div
-        class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-6"
-      >
-        ✉️
-      </div>
-
-      <h2 class="text-xl font-bold text-slate-800 mb-4">
-        メールアドレスの確認
-      </h2>
-
-      <p class="text-sm text-slate-600 mb-6 leading-relaxed">
-        <strong>{{ user?.email }}</strong> 宛に確認メールを送信しました。<br />
-        メール内のリンクをクリックして、アカウントを有効化してください。
-      </p>
-
-      <div class="space-y-3">
-        <button
-          @click="checkVerification"
-          :disabled="loading"
-          class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition shadow-lg shadow-blue-200"
-        >
-          {{ loading ? "確認中..." : "認証完了 (アプリへ進む)" }}
-        </button>
-
-        <button
-          @click="resendEmail"
-          :disabled="loading"
-          class="w-full py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition"
-        >
-          メールを再送信
-        </button>
-      </div>
-
-      <p
-        v-if="message"
-        class="mt-4 text-xs text-blue-600 font-bold animate-pulse"
-      >
-        {{ message }}
-      </p>
-
-      <div class="mt-8 pt-6 border-t border-slate-100">
-        <p class="text-xs text-slate-400 mb-2">メールが届かない場合</p>
-        <p class="text-[10px] text-slate-400">
-          ・迷惑メールフォルダをご確認ください<br />
-          ・メールアドレスが間違っている場合はログアウトしてやり直してください
-        </p>
-        <button
-          @click="handleLogout"
-          class="mt-4 text-xs text-slate-500 underline hover:text-slate-800"
-        >
-          ログアウト / アドレス変更
-        </button>
-      </div>
-    </div>
-  </div>
-</template>
-</file>
-
-<file path="src/env.d.ts">
-/// <reference types="vite/client" />
-
-interface ImportMetaEnv {
-  readonly VITE_FIREBASE_API_KEY: string;
-  readonly VITE_FIREBASE_AUTH_DOMAIN: string;
-  readonly VITE_FIREBASE_PROJECT_ID: string;
-  readonly VITE_FIREBASE_STORAGE_BUCKET: string;
-  readonly VITE_FIREBASE_MESSAGING_SENDER_ID: string;
-  readonly VITE_FIREBASE_APP_ID: string;
-  readonly VITE_FIREBASE_MEASUREMENT_ID: string;
-  readonly VITE_GEMINI_API_KEY: string;
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
-
-declare module "*.vue" {
-  import type { DefineComponent } from "vue";
-  const component: DefineComponent<{}, {}, any>;
-  export default component;
-}
-</file>
-
 <file path="index.html">
 <!doctype html>
 <html lang="ja">
@@ -4946,161 +5189,69 @@ declare module "*.vue" {
 </html>
 </file>
 
-<file path="package.json">
-{
-  "name": "my-brain",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "deploy": "vite build && firebase deploy"
-  },
-  "dependencies": {
-    "@google/generative-ai": "^0.24.1",
-    "@line/bot-sdk": "^10.5.0",
-    "axios": "^1.13.2",
-    "chart.js": "^4.5.1",
-    "firebase": "^10.14.1",
-    "html5-qrcode": "^2.3.8",
-    "mathjs": "^15.1.0",
-    "mermaid": "^11.12.2",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "vue": "^3.4.0",
-    "vue-chartjs": "^5.3.3",
-    "vue-router": "^4.6.3"
-  },
-  "devDependencies": {
-    "@types/google-apps-script": "^2.0.8",
-    "@types/react": "^19.2.7",
-    "@vitejs/plugin-vue": "^5.0.0",
-    "autoprefixer": "^10.4.22",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^3.4.18",
-    "typescript": "^5.2.2",
-    "vite": "^5.0.0",
-    "vite-plugin-pwa": "^1.2.0",
-    "vue-tsc": "^1.8.25"
-  }
-}
-</file>
-
-<file path="vite.config.ts">
-import { fileURLToPath, URL } from "node:url";
-
-import { defineConfig } from "vite";
-import vue from "@vitejs/plugin-vue";
-import { VitePWA } from "vite-plugin-pwa";
-
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [
-    vue(),
-    VitePWA({
-      registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "apple-touch-icon.png", "logo.png"],
-      manifest: {
-        name: "My Brain - AI Knowledge Base",
-        short_name: "My Brain",
-        description: "AIがあなたの記憶をサポートする、あなただけの第2の脳。",
-        theme_color: "#0f172a",
-        background_color: "#0f172a",
-        display: "standalone",
-        icons: [
-          {
-            src: "logo.png?v=3", // ★ここを変更
-            sizes: "192x192",
-            type: "image/png",
-          },
-          {
-            src: "logo.png?v=3", // ★ここを変更
-            sizes: "512x512",
-            type: "image/png",
-          },
-          {
-            src: "logo.png?v=3", // ★ここを変更
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "any maskable",
-          },
-        ],
-      },
-    }),
-  ],
-  resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-    },
-  },
-});
-</file>
-
 <file path=".firebase/hosting.ZGlzdA.cache">
-manifest.webmanifest,1768723003263,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-sw.js,1768723004195,d3e59fbe87535938cd82e244d6414351e0ac3220d85c6760d2744700a07987bd
-registerSW.js,1768723003263,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-index.html,1768723003263,905ab7800b5b4c754d69f6765a9b7da04d6529ca924cd27e0a04ef75f2236a90
-workbox-8c29f6e4.js,1768723004195,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-firebase-messaging-sw.js,1768723002844,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-lp.html,1768723002849,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/stateDiagram-v2-4FDKWEC3-BVQpxb0X.js,1768723003262,6c28d4ddaf8a92ceb8c8f947e76ad6052a115937b556d8543c1570b0fd55772c
-assets/stateDiagram-FKZM4ZOC-C807FRVQ.js,1768723003262,b23a2dcb15ba769bcda08832ce6ea3f959233de59084f3d3eaf4bf26ccaba60e
-assets/timeline-definition-IT6M3QCI-DcFByw1z.js,1768723003262,ce3ebec692571488fcda49a920252f7e2bc947e70751d41b2803de1b996bbc28
-assets/sankeyDiagram-TZEHDZUN-CoFDn-so.js,1768723003262,90d6afe786d4991001a91c4c78fdda23ec4da7e416edf2ec60b8fac1af7dc971
-assets/xychartDiagram-PRI3JC2R-CalftRkM.js,1768723003262,b729ca954c57db765e58eba650775aafe2f7a273741d0b68a674dff9731f155b
-assets/pieDiagram-ADFJNKIX-CXAO3vj8.js,1768723003262,71373d41ffa4303d21d4076cceb76070f8b3e8f417f822ff1aec0e85ac782803
-assets/min-EnIEAL66.js,1768723003262,9034db3cebbecf7fc09ba9b2491342ad4695d20d0635f202ac94c31b69415f04
-assets/ordinal-Cboi1Yqb.js,1768723003262,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/requirementDiagram-UZGBJVZJ-CZ-l24yk.js,1768723003262,bd3726a2a4d98288aaf325e34fcfebc36a226212b639c7736aa3a4317b5d1e57
-assets/quadrantDiagram-AYHSOK5B-CB-vXRJN.js,1768723003262,90f556c92cae643b7701aa8174a2e7007170ad13e43b901c854bcc78ed491f02
-assets/mindmap-definition-VGOIOE7T-Brr_CpGJ.js,1768723003262,858f93895694b0e73a518315611d2d475fe010e2d0823cc97e37f78101e2cb29
-assets/linear-lMG5JQsQ.js,1768723003262,9711136ba13ec5f9353162040a5a467bd76158e5f0951234147333394f50a06a
-assets/layout-DZOLcGIf.js,1768723003262,86da5aba308b59cbb7a96ea5ba319bf5fcf38f57b458ad69b819d842853a5e0e
-assets/init-Gi6I4Gst.js,1768723003262,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/infoDiagram-WHAUD3N6-N8zaq8ut.js,1768723003262,2a7988b978318d53a6847c10c34e777930934abbb54d83c9b94462c1acfb3c0c
-assets/kanban-definition-3W4ZIXB7-BKCBsRAH.js,1768723003262,5cfe431edf3bc15b3b5ca553a538c8632d6f899c4c9eaf1843b7d97fe18bbebd
-assets/journeyDiagram-XKPGCS4Q-_iFaFmU0.js,1768723003262,1c993cb26100615bdb18ffc6065464b56f0abc4b118262eadbc3f7315b662ba7
-assets/graph-CwCYdRLA.js,1768723003262,6f98ac396029f6ced614072ad66d5479ae2e22a94591b48c79ce63eda1b7e1f0
-assets/gitGraphDiagram-NY62KEGX-Dp4xgRrl.js,1768723003262,4d11185093567cd07aab72293d2db32fc51e5eb8bef561a9e1f69a2c38187253
-assets/index-B3aPHOXo.css,1768723003262,f98da1a1024d42f6b1a5448f0c38903dc5f994b9e1aa07cd036e929a5769f646
-assets/diagram-S2PKOQOG-BuhCFgsY.js,1768723003262,bfd28348943a2a9e05adbc55dda9ff31c1df7337521fd674d77644987b41a016
-assets/diagram-QEK2KX5R-P60oqAiC.js,1768723003262,eeaa63189bd3c2ad787a0043a3e429bde54ce574a977abcf928413cc4531132e
-assets/diagram-PSM6KHXK-Bj6i18rt.js,1768723003262,d1c69f422c43eaca37c68e8c81b41a0a9cb75a789461d759cedfbf5aeb705e0c
-assets/clone-BnfgSuDU.js,1768723003262,f733dde7da0b703700c33af4dccfa926d285939f4f1b879c8b781f7e22e10eb4
-assets/defaultLocale-DX6XiGOO.js,1768723003262,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/erDiagram-Q2GNP2WA-DD_7Bez4.js,1768723003262,6753e663612db097be95b5169bd3e0a04da12c4bd244f9dd204f40943b4b7729
-assets/classDiagram-v2-WZHVMYZB-DjCLJGyu.js,1768723003262,275fabbe079ad28d71a842e3402dd7eb6aefc48bca31063df653436db4d03940
-assets/classDiagram-2ON5EDUG-DjCLJGyu.js,1768723003262,275fabbe079ad28d71a842e3402dd7eb6aefc48bca31063df653436db4d03940
-assets/chunk-QZHKN3VN-CiZsr3mH.js,1768723003262,c1a6f8e5779a72789cf31189fa03c119875390179a87dfaa6a1a7ce4332a1d77
-assets/chunk-TZMSLE5B-UKMsAhU4.js,1768723003262,aca9aeb2ff83f5e0a1f830cb63e55c5f0878edd40b4a7c4e68cde26e559c4b33
-assets/dagre-6UL2VRFP-DAEXZqPQ.js,1768723003262,82512f88b3cecc958c9263b66435ba9e1ad33ce2b9b4a60cbadd287738d1c202
-assets/flowDiagram-NV44I4VS-CnTBWoTW.js,1768723003262,e9a10630a79ed7d1e0ba32da25ee84982e707b14d4bfcb79d0a9cd26824c5f88
-assets/sequenceDiagram-WL72ISMW-BeIfA4WP.js,1768723003262,08978a12ca40e6882b6c3754fe1ad3fa7f6b3823e55febaf14bde2488c9b33be
-assets/ganttDiagram-JELNMOA3-CH7oklFY.js,1768723003263,a6f74eea1f33d61936b79c2f7456a248df5d1b5bf6d85bd4a350b3e3305d72ed
-assets/chunk-QN33PNHL-CdpIvmq4.js,1768723003262,513618104ce633cc22a82abcfcde47fb16931345794057698663ac82eb9d57cd
-assets/chunk-FMBD7UC4-B8xRO36Z.js,1768723003262,3c9d22c413d5ffe1958aa50f019f8a1165f79bcaa09b7f1b43edc883f53c358e
-assets/cose-bilkent-S5V4N54A-BhUPrZeK.js,1768723003262,eee6f4317cda8b816b6a75926d5b1540d8da4c8ab74079bb986268ce07096442
-assets/chunk-4BX2VUAB--485wSvD.js,1768723003262,5836a7558045e155198f819f0c5ab5ef2757553b9bdad509dd4233e1f1f93488
-assets/chunk-55IACEB6-Dqwdtc9d.js,1768723003262,ddb3cbabbcbabc47b16658fdb620c54b9e3bb8427512618d4c524dfad37ef7ad
-assets/channel-tccxyA9F.js,1768723003262,c6f0cc2639f8d012451e4ae3ba1815e27ac77c32b2b3905abdff3d907607711a
-assets/chunk-DI55MBZ5-D4xOzLop.js,1768723003262,d947fae817cad4b32c81f26d16ea9f7a29c7159899e09181f9a5a77926d6a824
-assets/chunk-B4BG7PRW-COG7EFkD.js,1768723003262,36e22e37a0f2a63cb9a531d72657780972dbcf0fa5a56ed49420e133b079c074
-assets/arc-Cpb3RVBd.js,1768723003262,08e74321ec77a48ff359dec0d217b78a4bd3c3e4f5e5c3e2222b4e04f6754660
-assets/_baseUniq-BxS8wOqV.js,1768723003263,efee02ff667482b847ddd240ecf11149cd7dc7432946dfbcaf4ea8e135c47117
-assets/c4Diagram-YG6GDRKO-BuUFW_sI.js,1768723003262,376b0f81a2c43173067423e4ed8d918908de0e9fc710862940aae117746094f9
-assets/blockDiagram-VD42YOAC-yDotKaDc.js,1768723003262,be3e57e0b13ac12221f3d5c15c101efdf292c3ebaa3802ec71cc2a57c600a212
-assets/architectureDiagram-VXUJARFQ-LvMpFZB9.js,1768723003262,53236d8d5176a56b6d34dd108b1264072c36f9ca5ba7ef7f7f7886e0b5ec1567
-assets/katex-Cu_Erd72.js,1768723003262,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-DUKjx7bA.js,1768723003263,fafa207b6b8ea0eecf2447b5737d6b1a2088fadc01c32992a76c23ae8e42e305
-assets/cytoscape.esm-CyJtwmzi.js,1768723003262,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-Bfyw0cgF.js,1768723003263,08c22188be8cc31c72c6c26648cf1ad7009af688d244acfd42d6211b531c19b5
-logo.png,1768723002848,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-apple-touch-icon.png,1768723002844,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-192x192.png,1768723002856,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1768723002866,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+sw.js,1768725278318,49577705aaa89e37823047e5aa6a06dae2fa54ae5bd175e800452b290b22ab2f
+registerSW.js,1768725277580,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+manifest.webmanifest,1768725277578,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+workbox-8c29f6e4.js,1768725278319,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+index.html,1768725277580,3bda019a9221ed99a5b7c6c5bac81d22ed7da499022d93c17cc1a0b5db449dea
+firebase-messaging-sw.js,1768725277181,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+lp.html,1768725277183,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/stateDiagram-v2-4FDKWEC3-STih6-AR.js,1768725277578,8d1981906c8192e9c08f8b64c5f3cb9367cee115f1a7f728b3dd3e2af41a26f0
+assets/stateDiagram-FKZM4ZOC-NsNNOrtR.js,1768725277578,09937c2ead99f5c4ca1e93e8cdd4f2f616eed8069cf86468b5a6c00881e3edd1
+assets/timeline-definition-IT6M3QCI-PrQRipWR.js,1768725277578,2c81cde84c5651017ab4d6a062b87b4808de231121b3a60cbddafaf5e5e897e6
+assets/ordinal-Cboi1Yqb.js,1768725277578,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/sankeyDiagram-TZEHDZUN-DKPoqrGU.js,1768725277578,23c894c23b037c41eb2230edd2b0ae214781428ff2ee0f171634072124df804b
+assets/pieDiagram-ADFJNKIX-Dxvzw10A.js,1768725277578,5adb3530fd57bd4497ec0c0b8b26bf3ccbe42e22aa2607e70afd21faa2398374
+assets/xychartDiagram-PRI3JC2R-6ZJqErp_.js,1768725277578,172e266fbb2a0a0f2bb2606056595c1edae5c9cd21498341ff49aa5df2d95253
+assets/min-C7t9U-en.js,1768725277578,45007581649c5cf5d775e7e216409a59119ba79bd9f2c9fd9fbe923b86ffda90
+assets/requirementDiagram-UZGBJVZJ-BA174Yqv.js,1768725277577,d85a17fe7e2a43e7783b86e2ab97406a84368a263f55f3bc2a95dffa50aec44b
+assets/quadrantDiagram-AYHSOK5B-DD-IbPNp.js,1768725277577,1a5156dff0d3dbbb5754e6ec49f52c42b3d287f4ca5f2734df3a6b5704c09e0c
+assets/linear-KdIUKbtX.js,1768725277578,503ef4c0c618c58967c76f1047c38ae72fc1a8e7e04238243d6733ef9c61d7e2
+assets/kanban-definition-3W4ZIXB7-Bpt0y2tq.js,1768725277578,4e863b3b91e6ae861543f6c2d6ea5437fd0a95f4af0bb7df73388f4973edb73f
+assets/init-Gi6I4Gst.js,1768725277578,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/infoDiagram-WHAUD3N6-v0EJ1XgO.js,1768725277578,515c6a1f1392d9498ade0b4358efaf40ce2006bca9536fc06e6bb70da4cb9132
+assets/layout-D7IKigxY.js,1768725277579,0a8c187f1803cc623fcdb53903678eca7f412b4fa209bfcdb20323a4b09361a0
+assets/mindmap-definition-VGOIOE7T-CKf-j7gR.js,1768725277578,0f56f381aa74e6a33c002321eaf938e973d4d8a27d76ff56cd4600a47e84c575
+assets/index-CwiKJ89y.css,1768725277577,adeebf48e7f41d2291b9558ecefd791718a65560424afff22eeb090cd2202b26
+assets/graph-_hxnuo0P.js,1768725277578,4d2e1f866c7136d65e43fa64b96bec79452761f71a3b2ba73072cefc9ec04e4c
+assets/gitGraphDiagram-NY62KEGX-CSdOJl1G.js,1768725277577,172d68edfbdcf50737d0c43ab6b533a5d26d802d851d30ea63b3146c5302053f
+assets/diagram-S2PKOQOG-BoejZ_xk.js,1768725277578,0178d0e94a6bb4aa2228b971e4c9613d84e158ba78d4a1afaf5c4d8e95519067
+assets/erDiagram-Q2GNP2WA-B27Unlet.js,1768725277577,4884fa307141459600adca7e8f98569ed09e13157dd0de463743a6342013e3e9
+assets/diagram-PSM6KHXK-BMfM2nIT.js,1768725277578,58a79196c93c8cfca065c67b2494ebb8a8bf546ca1a6fc483e60271a650a554b
+assets/diagram-QEK2KX5R-BN4Rg2Xi.js,1768725277578,cb0248c1e04de8a24aa568cdbf11f4c9b3529da60bbbd1b24882c36b556588ea
+assets/defaultLocale-DX6XiGOO.js,1768725277578,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/journeyDiagram-XKPGCS4Q-DD-T9HCn.js,1768725277578,a2699a5bc05555460b0329a81a5b0abb94751c00be9e075c47731aad218c31a8
+assets/dagre-6UL2VRFP-BvGR6EBR.js,1768725277578,b9b15201a29d1532f8909f393fc6b4447c4febb08dc5842e8432f23a9273cecf
+assets/clone-BUM223jV.js,1768725277578,5589dad434310f1dfcaf103cc5f9671127912db408568b0b66f09aeebf63479d
+assets/classDiagram-v2-WZHVMYZB-D9816fWX.js,1768725277577,f5f61e2f8877a5db02ebcf27b56f87a7a50b4e6c269a4f26ec72412835d80d66
+assets/classDiagram-2ON5EDUG-D9816fWX.js,1768725277577,f5f61e2f8877a5db02ebcf27b56f87a7a50b4e6c269a4f26ec72412835d80d66
+assets/chunk-TZMSLE5B-BqJzYrut.js,1768725277578,72278f7bb309d61e3dd7561d1c4172992d332089118625f3168d0685902b804f
+assets/chunk-QZHKN3VN-D2DjA74P.js,1768725277577,89d34bea10f257e96e5ac92cf0607c71a020248e8534e5bb7a370ee3bdac3c85
+assets/flowDiagram-NV44I4VS-B9uS86au.js,1768725277577,55873dba6625a6d5b1a72e26e9f08404f14f7eaaf1b519fd7728a94573b45686
+assets/sequenceDiagram-WL72ISMW-BwdXQzI7.js,1768725277577,3ce2a6b653dcbe2f6764b61580db8ea767444f2d2ace285345617b7ce6bca60a
+assets/ganttDiagram-JELNMOA3-CYCn1Nnr.js,1768725277578,e1ddb966fb3e7562682822f37169909f54302f06ca4f23615ab642d83cd6e2cb
+assets/cose-bilkent-S5V4N54A-C14yuHcv.js,1768725277578,86a0f17334a672bd3a0c7e91a24b9925625a529634807d6dd4651fc4090e474d
+assets/chunk-QN33PNHL-JOyMDW46.js,1768725277578,0d53dd5fdf29a2869dafe0b6a5b7f633104182792dc5503d7080056c3534f1d5
+assets/chunk-FMBD7UC4-DogsVtcU.js,1768725277578,cca5decdb8cf7113ca5f8a9ce0bfc152ad3b482f5c1c70b048285d14cc637590
+assets/chunk-4BX2VUAB-DvTzZOdh.js,1768725277578,cdd05dac2be58eda19c21a9530e9f807660c491ead6480b46d6ccf95eeba53ba
+assets/chunk-55IACEB6-CruZhEOa.js,1768725277578,16ff9aa194e479823833a969eda951e8fbd029830b75ab606e444397bdbde350
+assets/chunk-DI55MBZ5-CC7B1yLp.js,1768725277578,05c3334d416b880ceb39bb8d571c26510aa30729e60517337dc4b83e8a672e2e
+assets/channel-CbcRdrbm.js,1768725277578,1371b961e66d472e9e8b639636ec40fc7f22d49a6704e65339be202771b754dc
+assets/chunk-B4BG7PRW-CcwkCoa2.js,1768725277578,5297adbf21fa63289c5dfb94351d170bcde2cd04eb78dd14ebe914c028570ce1
+assets/arc-DQ3lqqNM.js,1768725277578,a69e60a1e13cb99c32c6691988074222515558b0d3edecab19f61fc803ed86f2
+assets/_baseUniq-BrPbc2D5.js,1768725277578,81cb6916e25e5bf3a13eeae78ea6502efdd066c4faf62eae1f18f08d49c40af2
+assets/c4Diagram-YG6GDRKO-Cvb-HFLV.js,1768725277574,2ab0ebedc782b7840391a0987de1cc582b842bd5f17cf4d8c639ba9d48310eb5
+assets/blockDiagram-VD42YOAC-D3AAEvuD.js,1768725277578,0eaa27c39eb267f69a5ab57b514d55caee4618b748461f3db4b275140f008de4
+assets/architectureDiagram-VXUJARFQ-CSnTPJ1w.js,1768725277578,b72d7f95c178ab772e503ff690b4d15f0824c372eefb9a1c34294ca51b77c909
+assets/katex-Cu_Erd72.js,1768725277578,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-C8O4osaw.js,1768725277578,ec447b49b60a6ac7489b4b735a756cdfcfa7fb52b2f185bd949952e1f8201f71
+assets/cytoscape.esm-CyJtwmzi.js,1768725277578,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-CDVFGndu.js,1768725277580,766b613cb83b7fd961728a356dc9a5637c55a78a629aa215da883ecdc0d10e94
+logo.png,1768725277182,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1768725277200,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1768725277180,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-192x192.png,1768725277192,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 <file path="src/views/HomeView/HomeView.vue">
@@ -5108,8 +5259,9 @@ pwa-512x512.png,1768723002866,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032
 import { ref, onMounted, watch, nextTick } from "vue";
 import { useMyBrain, type Memory } from "@/composables/useMyBrain";
 import mermaid from "mermaid";
-import { httpsCallable, getFunctions } from "firebase/functions"; // 追加
-import { useRouter, useRoute } from "vue-router"; // 追加
+import { httpsCallable, getFunctions } from "firebase/functions";
+import { getApp } from "firebase/app"; // ★追加: アプリ取得用
+import { useRouter, useRoute } from "vue-router";
 
 import AppHeader from "@/components/AppHeader/AppHeader.vue";
 import TagFilter from "@/components/TagFilter/TagFilter.vue";
@@ -5122,6 +5274,9 @@ const { initAuth, chatLogs, isAiThinking } = useMyBrain();
 const inputMode = ref<"memo" | "chat" | "url">("memo");
 const editingMemory = ref<Memory | null>(null);
 const chatContainerRef = ref<HTMLElement | null>(null);
+
+// 通知表示用のフラグ
+const showSuccessToast = ref(false);
 
 const route = useRoute();
 const router = useRouter();
@@ -5138,20 +5293,29 @@ onMounted(async () => {
   // ▼ LINEログインからのコールバック処理
   const code = route.query.code as string;
   if (code) {
+    // URLをクリーンにする
     window.history.replaceState({}, document.title, "/app");
+
     try {
-      const functions = getFunctions();
+      // ★修正: ここでリージョン "asia-northeast1" を指定する！
+      const functions = getFunctions(getApp(), "asia-northeast1");
       const linkFunc = httpsCallable(functions, "linkLineAccount");
+
+      // バックエンド連携
       await linkFunc({
         code,
         redirectUri: window.location.origin + "/app",
       });
-      alert(
-        "LINE連携が完了しました！\n公式アカウントにメッセージを送ってみてください。",
-      );
+
+      showSuccessToast.value = true;
+      setTimeout(() => {
+        showSuccessToast.value = false;
+      }, 5000);
     } catch (e) {
       console.error(e);
-      alert("連携に失敗しました。");
+      alert(
+        "連携に失敗しました。\n(開発者用メモ: Cloud Functionsのログを確認してください)",
+      );
     }
   }
 });
@@ -5192,7 +5356,24 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
 </script>
 
 <template>
-  <div class="h-screen flex flex-col bg-slate-950 text-slate-200 font-sans">
+  <div
+    class="h-screen flex flex-col bg-slate-950 text-slate-200 font-sans relative"
+  >
+    <Transition name="toast">
+      <div
+        v-if="showSuccessToast"
+        class="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-green-500 text-white px-6 py-4 rounded-full shadow-2xl flex items-center gap-3 border-2 border-green-400 w-[90%] max-w-sm"
+      >
+        <span class="text-2xl">✅</span>
+        <div>
+          <p class="font-bold text-sm">LINE連携に成功しました！</p>
+          <p class="text-xs opacity-90">
+            公式アカウントにメッセージを送ってみましょう
+          </p>
+        </div>
+      </div>
+    </Transition>
+
     <AppHeader />
     <TagFilter />
 
@@ -5246,6 +5427,17 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
   50% {
     opacity: 0.7;
   }
+}
+
+/* トーストのアニメーション */
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -20px);
 }
 </style>
 </file>

@@ -22,27 +22,27 @@ const router = useRouter();
       <div class="space-y-8 text-sm leading-relaxed">
         <section>
           <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
-          <p>（あなたの氏名または屋号）</p>
+          <p>BlueCode</p>
         </section>
 
         <section>
           <h2 class="font-bold text-slate-100 mb-2">所在地</h2>
-          <p>（あなたの住所またはバーチャルオフィスの住所）</p>
+          <p>福岡県福岡市南区野間1丁目19-1</p>
         </section>
 
         <section>
           <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
-          <p>（電話番号）</p>
+          <p>080-6423-6435</p>
         </section>
 
         <section>
           <h2 class="font-bold text-slate-100 mb-2">メールアドレス</h2>
-          <p>support@mybrain-app.com</p>
+          <p>gongedonghuam@gmail.com</p>
         </section>
 
         <section>
           <h2 class="font-bold text-slate-100 mb-2">販売価格</h2>
-          <p>PROプラン: 月額1,000円（税込）</p>
+          <p>PROプラン: 月額980円（税込）</p>
         </section>
 
         <section>

@@ -3,9 +3,8 @@ import { ref, onMounted, watch, nextTick } from "vue";
 import { useMyBrain, type Memory } from "@/composables/useMyBrain";
 import mermaid from "mermaid";
 import { httpsCallable, getFunctions } from "firebase/functions";
-import { getApp } from "firebase/app"; // ★追加: アプリ取得用
+import { getApp } from "firebase/app";
 import { useRouter, useRoute } from "vue-router";
-
 import AppHeader from "@/components/AppHeader/AppHeader.vue";
 import TagFilter from "@/components/TagFilter/TagFilter.vue";
 import MemoList from "@/components/MemoList/MemoList.vue";
@@ -17,10 +16,7 @@ const { initAuth, chatLogs, isAiThinking } = useMyBrain();
 const inputMode = ref<"memo" | "chat" | "url">("memo");
 const editingMemory = ref<Memory | null>(null);
 const chatContainerRef = ref<HTMLElement | null>(null);
-
-// 通知表示用のフラグ
 const showSuccessToast = ref(false);
-
 const route = useRoute();
 const router = useRouter();
 
@@ -33,32 +29,18 @@ onMounted(async () => {
     suppressErrorRendering: true,
   });
 
-  // ▼ LINEログインからのコールバック処理
   const code = route.query.code as string;
   if (code) {
-    // URLをクリーンにする
     window.history.replaceState({}, document.title, "/app");
-
     try {
-      // ★修正: ここでリージョン "asia-northeast1" を指定する！
-      const functions = getFunctions(getApp(), "asia-northeast1");
+      const functions = getFunctions(getApp(), "asia-northeast1"); // ★リージョン指定
       const linkFunc = httpsCallable(functions, "linkLineAccount");
-
-      // バックエンド連携
-      await linkFunc({
-        code,
-        redirectUri: window.location.origin + "/app",
-      });
-
+      await linkFunc({ code, redirectUri: window.location.origin + "/app" });
       showSuccessToast.value = true;
-      setTimeout(() => {
-        showSuccessToast.value = false;
-      }, 5000);
+      setTimeout(() => (showSuccessToast.value = false), 5000);
     } catch (e) {
       console.error(e);
-      alert(
-        "連携に失敗しました。\n(開発者用メモ: Cloud Functionsのログを確認してください)",
-      );
+      alert("LINE連携に失敗しました");
     }
   }
 });
@@ -67,12 +49,11 @@ const scrollToBottom = async () => {
   if (inputMode.value !== "chat") return;
   await nextTick();
   setTimeout(() => {
-    if (chatContainerRef.value) {
+    if (chatContainerRef.value)
       chatContainerRef.value.scrollTo({
         top: chatContainerRef.value.scrollHeight,
         behavior: "smooth",
       });
-    }
   }, 100);
 };
 
@@ -81,18 +62,15 @@ watch(isAiThinking, scrollToBottom);
 watch(inputMode, (newMode) => {
   if (newMode === "chat") {
     nextTick(() => {
-      if (chatContainerRef.value) {
+      if (chatContainerRef.value)
         chatContainerRef.value.scrollTop = chatContainerRef.value.scrollHeight;
-      }
     });
     scrollToBottom();
   }
 });
-
 const onOpenDetail = (memo: Memory) => {
   editingMemory.value = memo;
 };
-
 const onModeChange = (newMode: "memo" | "chat" | "url") => {
   inputMode.value = newMode;
 };
@@ -109,7 +87,7 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
       >
         <span class="text-2xl">✅</span>
         <div>
-          <p class="font-bold text-sm">LINE連携に成功しました！</p>
+          <p class="font-bold text-sm">LINE連携完了！</p>
           <p class="text-xs opacity-90">
             公式アカウントにメッセージを送ってみましょう
           </p>
@@ -122,18 +100,16 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
 
     <main
       ref="chatContainerRef"
-      class="flex-1 overflow-y-auto p-4 space-y-6 pb-44 scrollbar-hide"
+      class="flex-1 overflow-y-auto p-4 space-y-6 pb-60 scrollbar-hide"
     >
       <MemoList
         v-if="inputMode === 'memo' || inputMode === 'url'"
         @openDetail="onOpenDetail"
       />
-
       <ChatList v-if="inputMode === 'chat'" />
     </main>
 
     <MemoryModal :memory="editingMemory" @close="editingMemory = null" />
-
     <InputFooter :modelValue="inputMode" @update:modelValue="onModeChange" />
   </div>
 </template>
@@ -146,33 +122,6 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
-}
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.animate-pulse-soft {
-  animation: pulse-soft 2s infinite;
-}
-@keyframes pulse-soft {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
-/* トーストのアニメーション */
 .toast-enter-active,
 .toast-leave-active {
   transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
