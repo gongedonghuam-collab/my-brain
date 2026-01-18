@@ -4,7 +4,6 @@ import { useRouter } from "vue-router";
 const router = useRouter();
 
 const goToLogin = () => {
-  // ログイン画面へ遷移
   router.push("/login");
 };
 </script>
@@ -20,8 +19,8 @@ const goToLogin = () => {
         <div class="logo-wrapper">
           <img
             src="/logo.png?v=3"
-            width="80"
-            height="80"
+            width="50"
+            height="50"
             class="lp-logo fade-in-up"
           />
         </div>
@@ -202,24 +201,25 @@ const goToLogin = () => {
 section {
   width: 100vw;
   height: 100vh;
+  min-height: 550px; /* 最小高さをさらに縮小 */
   scroll-snap-align: start;
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 2rem;
+  padding: 0.5rem; /* パディングを極限まで減らす */
   overflow: hidden;
 }
 
 .bg-blob {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px);
+  filter: blur(80px);
   opacity: 0.2;
   z-index: 0;
-  width: 600px;
-  height: 600px;
+  width: 500px;
+  height: 500px;
 }
 .primary-blob {
   top: -10%;
@@ -233,18 +233,19 @@ section {
 }
 
 .logo-wrapper {
-  margin-bottom: 20px;
+  margin-bottom: 5px; /* マージン極小 */
 }
 .lp-logo {
-  border-radius: 20px;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
 }
 
 h1 {
-  font-size: clamp(2.5rem, 6vw, 5rem);
+  /* フォントサイズを縮小して1行に収まりやすくする */
+  font-size: clamp(1.8rem, 4vw, 3rem);
   font-weight: 900;
   line-height: 1.1;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.5rem;
   background: linear-gradient(135deg, #fff 0%, var(--primary-light) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -253,63 +254,65 @@ h1 {
 }
 
 h2 {
-  font-size: clamp(1.5rem, 4vw, 3rem);
+  font-size: clamp(1rem, 2.5vw, 1.5rem);
   color: var(--primary);
   text-transform: uppercase;
   letter-spacing: 0.2em;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
   text-align: center;
   z-index: 1;
 }
 
 h3 {
-  font-size: 1.5rem;
+  font-size: 1.1rem;
   font-weight: 700;
-  margin-bottom: 1rem;
+  margin-bottom: 0.3rem;
   color: white;
 }
 
 p {
-  font-size: 1.2rem;
+  font-size: 0.9rem;
   color: var(--text-gray);
   max-width: 800px;
   text-align: center;
-  line-height: 1.8;
+  line-height: 1.5;
   z-index: 1;
 }
 
 .subtitle {
-  letter-spacing: 0.2em;
+  letter-spacing: 0.15em;
   color: var(--primary-light);
   font-weight: bold;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.7rem;
 }
 .description {
-  font-size: 1.2rem;
+  font-size: 0.9rem;
   color: var(--text-gray);
 }
 .section-title {
-  font-size: 2.5rem;
-  margin-bottom: 3rem;
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
+  margin-bottom: 1.5rem;
 }
 .primary-text {
   color: var(--primary);
   font-weight: bold;
 }
+
 /* フッター調整 */
 .footer-container {
-  margin-top: 60px;
+  margin-top: 30px;
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 5px;
 }
 .legal-links {
-  margin-bottom: 10px;
+  margin-bottom: 5px;
 }
 .legal-link {
   color: var(--text-gray);
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   text-decoration: underline;
   transition: color 0.3s;
 }
@@ -317,7 +320,7 @@ p {
   color: white;
 }
 .footer-text {
-  font-size: 0.7rem;
+  font-size: 0.6rem;
   opacity: 0.4;
 }
 
@@ -352,33 +355,34 @@ p {
 
 /* スマホモック */
 .mock-wrapper {
-  margin-top: 40px;
+  margin-top: 20px;
   position: relative;
 }
 .phone {
-  width: 280px;
-  height: 580px;
+  /* スマホサイズを大幅に縮小 */
+  width: 180px;
+  height: 380px;
   background: #0f172a;
-  border-radius: 40px;
-  border: 8px solid #334155;
+  border-radius: 24px;
+  border: 5px solid #334155;
   position: relative;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   z-index: 2;
-  transform: rotate(-5deg) translateY(20px);
+  transform: rotate(-3deg) translateY(0px); /* 傾きと位置調整 */
 }
 .notch {
   position: absolute;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 120px;
-  height: 25px;
+  width: 80px;
+  height: 18px;
   background: #334155;
-  border-bottom-left-radius: 16px;
-  border-bottom-right-radius: 16px;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
   z-index: 10;
 }
 .screen {
@@ -389,24 +393,24 @@ p {
   display: flex;
   flex-direction: column;
   color: white;
-  padding: 20px;
+  padding: 10px;
 }
 .screen-header {
-  margin-top: 40px;
+  margin-top: 25px;
   font-weight: 900;
-  font-size: 1.2rem;
+  font-size: 0.9rem;
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 
 /* チャット */
 .chat-bubble {
-  padding: 12px 16px;
-  border-radius: 16px;
-  font-size: 0.8rem;
-  margin-bottom: 10px;
-  max-width: 85%;
-  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 0.6rem;
+  margin-bottom: 6px;
+  max-width: 90%;
+  line-height: 1.4;
   text-align: left;
 }
 .chat-user {
@@ -425,19 +429,19 @@ p {
 /* カード類 */
 .problem-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
   width: 100%;
-  max-width: 1000px;
-  margin-top: 40px;
+  max-width: 800px;
+  margin-top: 20px;
   z-index: 2;
 }
 .problem-card {
   background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 30px;
-  border-radius: 20px;
+  padding: 15px;
+  border-radius: 16px;
   text-align: center;
   transition: transform 0.3s;
 }
@@ -446,8 +450,8 @@ p {
   background: rgba(255, 255, 255, 0.05);
 }
 .icon {
-  font-size: 3rem;
-  margin-bottom: 1rem;
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
   display: block;
 }
 
@@ -455,34 +459,35 @@ p {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 24px;
-  margin-top: 40px;
+  gap: 15px;
+  margin-top: 20px;
   z-index: 2;
 }
 .feature-box {
-  width: 160px;
-  height: 160px;
+  width: 110px;
+  height: 110px;
   background: linear-gradient(145deg, #1e293b, #0f172a);
-  border-radius: 24px;
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 5px 10px -3px rgba(0, 0, 0, 0.5);
 }
 .feature-title {
   font-weight: bold;
-  margin-top: 10px;
+  margin-top: 6px;
+  font-size: 0.8rem;
 }
 .feature-desc {
-  font-size: 0.7rem;
+  font-size: 0.55rem;
   opacity: 0.7;
-  margin-top: 5px;
+  margin-top: 3px;
 }
 .highlight-box {
   border-color: var(--primary);
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
 }
 .highlight-text {
   color: var(--primary-light);
@@ -490,28 +495,28 @@ p {
 
 .ai-features {
   display: flex;
-  gap: 20px;
+  gap: 12px;
   flex-wrap: wrap;
   justify-content: center;
-  margin-top: 40px;
+  margin-top: 20px;
 }
 .ai-card {
-  width: 300px;
+  width: 240px;
   background: #1e293b;
-  padding: 20px;
-  border-radius: 20px;
+  padding: 15px;
+  border-radius: 16px;
   border: 1px solid #334155;
 }
 .ai-icon {
-  font-size: 2rem;
-  margin-bottom: 10px;
+  font-size: 1.5rem;
+  margin-bottom: 6px;
 }
 .ai-card h3 {
-  font-size: 1.2rem;
-  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  margin-bottom: 0.3rem;
 }
 .ai-card p {
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   text-align: left;
   margin-bottom: 0;
 }
@@ -520,33 +525,34 @@ p {
   background: var(--primary);
   color: white;
   font-weight: bold;
-  padding: 1rem 3rem;
+  padding: 0.6rem 2rem;
   border-radius: 50px;
   text-decoration: none;
-  font-size: 1.2rem;
+  font-size: 1rem;
   transition: all 0.3s;
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
-  margin-top: 30px;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+  margin-top: 15px;
   display: inline-block;
   border: none;
   cursor: pointer;
 }
 .btn-primary:hover {
   transform: scale(1.05);
-  box-shadow: 0 0 30px rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 25px rgba(59, 130, 246, 0.8);
 }
 
 .badge-wrapper {
-  margin: 30px 0;
+  margin: 15px 0;
 }
 .pulse-badge {
   background: var(--accent);
   color: white;
-  padding: 8px 20px;
+  padding: 5px 12px;
   border-radius: 50px;
   font-weight: bold;
-  margin-bottom: 20px;
+  margin-bottom: 5px;
   display: inline-block;
+  font-size: 0.8rem;
   animation: pulse 2s infinite;
 }
 @keyframes pulse {
@@ -563,9 +569,9 @@ p {
 
 .nav-hint {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  font-size: 0.8rem;
+  bottom: 15px;
+  right: 15px;
+  font-size: 0.7rem;
   color: rgba(255, 255, 255, 0.3);
   z-index: 100;
 }

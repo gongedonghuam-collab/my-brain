@@ -1864,624 +1864,6 @@ defineExpose({
 </template>
 </file>
 
-<file path="src/views/LandingView/LandingView.vue">
-<script setup lang="ts">
-import { useRouter } from "vue-router";
-
-const router = useRouter();
-
-const goToLogin = () => {
-  // ログイン画面へ遷移
-  router.push("/login");
-};
-</script>
-
-<template>
-  <div class="lp-container">
-    <div class="nav-hint">Scroll or Use Arrow Keys ↓</div>
-
-    <div class="slides-container" id="container">
-      <section id="s1">
-        <div class="bg-blob primary-blob"></div>
-
-        <div class="logo-wrapper">
-          <img
-            src="/logo.png?v=3"
-            width="80"
-            height="80"
-            class="lp-logo fade-in-up"
-          />
-        </div>
-
-        <p class="fade-in-up subtitle">AI KNOWLEDGE BASE</p>
-        <h1 class="fade-in-up delay-100">
-          あなたの記憶を、<br />AIが拡張する。
-        </h1>
-        <p class="fade-in-up delay-200 description">
-          忘れても大丈夫。あなただけの「第2の脳」がここにあります。
-        </p>
-
-        <button @click="goToLogin" class="btn-primary fade-in-up delay-300">
-          今すぐ始める
-        </button>
-
-        <div class="fade-in-up delay-500 mock-wrapper">
-          <div class="phone">
-            <div class="notch"></div>
-            <div class="screen">
-              <div class="screen-header">My Brain</div>
-              <div class="chat-bubble chat-user">
-                先週の会議で決まったA社の予算っていくらだっけ？
-              </div>
-              <div class="chat-bubble chat-ai">
-                先週木曜日のメモによると、A社の予算は「300万円（税抜）」で承認されています。<br /><br />関連資料：<br />📄
-                240115_議事録.pdf
-              </div>
-              <div class="chat-bubble chat-user">ありがとう！助かった。</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="s2">
-        <h2 class="fade-in-up">The Problem</h2>
-        <h1 class="fade-in-up delay-100 section-title">
-          脳の容量、足りてますか？
-        </h1>
-
-        <div class="problem-grid fade-in-up delay-200">
-          <div class="problem-card">
-            <span class="icon">🌫️</span>
-            <h3>思い出せない</h3>
-            <p>
-              「あの件、どうなったっけ？」<br />大事な情報を忘れてしまい、<br />信頼を失う恐怖。
-            </p>
-          </div>
-          <div class="problem-card">
-            <span class="icon">🔍</span>
-            <h3>見つからない</h3>
-            <p>
-              LINE、Slack、メモ帳...<br />情報が散らばりすぎて、<br />検索に時間を浪費する毎日。
-            </p>
-          </div>
-          <div class="problem-card">
-            <span class="icon">🤯</span>
-            <h3>整理できない</h3>
-            <p>
-              情報はインプットするだけ。<br />整理する時間がなく、<br />知識として定着しない。
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section id="s3">
-        <div class="bg-blob accent-blob"></div>
-
-        <h2 class="fade-in-up">Solution</h2>
-        <h1 class="fade-in-up delay-100 section-title">
-          放り込むだけで、整理完了。
-        </h1>
-        <p class="fade-in-up delay-200 description">
-          My
-          Brainは、あらゆる情報を一元管理し、AIがあなたの思考をサポートします。
-        </p>
-
-        <div class="solution-row fade-in-up delay-300">
-          <div class="feature-box">
-            <span class="icon">📝</span>
-            <span class="feature-title">メモ・画像</span>
-            <span class="feature-desc">何でも保存</span>
-          </div>
-          <div class="feature-box">
-            <span class="icon">🌐</span>
-            <span class="feature-title">Web保存</span>
-            <span class="feature-desc">URL貼るだけ</span>
-          </div>
-          <div class="feature-box highlight-box">
-            <span class="icon">🤖</span>
-            <span class="feature-title highlight-text">AI検索</span>
-            <span class="feature-desc">会話で思い出す</span>
-          </div>
-        </div>
-      </section>
-
-      <section id="s4">
-        <h2 class="fade-in-up">AI Core</h2>
-        <h1 class="fade-in-up delay-100 section-title">
-          ただの検索じゃない。<br />文脈を理解する「対話」です。
-        </h1>
-
-        <div class="ai-features fade-in-up delay-200">
-          <div class="ai-card">
-            <div class="ai-icon">🧠</div>
-            <h3>曖昧な記憶でOK</h3>
-            <p>
-              「先月の飲み会で話題になった映画なんだっけ？」のような、キーワードを覚えていなくてもAIが推測して答えます。
-            </p>
-          </div>
-          <div class="ai-card">
-            <div class="ai-icon">📊</div>
-            <h3>構造化・図解</h3>
-            <p>
-              複雑な情報は、AIが自動でマインドマップや表に変換。視覚的に理解を助けます。
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section id="s5">
-        <p class="fade-in-up primary-text">FREE ACCESS</p>
-        <h1 class="fade-in-up delay-100 section-title">
-          あなたの脳を、アップデートしよう。
-        </h1>
-
-        <div class="fade-in-up delay-200 badge-wrapper">
-          <div class="pulse-badge">🚀 ベータ版につき完全無料</div>
-        </div>
-
-        <button @click="goToLogin" class="btn-primary fade-in-up delay-300">
-          My Brain を開く
-        </button>
-
-        <p class="fade-in-up delay-500 footer-text">
-          Designed by Takumi Yoshioka
-        </p>
-      </section>
-    </div>
-  </div>
-</template>
-
-<style scoped>
-/* スコープ付きCSS */
-.lp-container {
-  --primary: #3b82f6;
-  --primary-light: #60a5fa;
-  --dark: #0f172a;
-  --darker: #020617;
-  --light: #f8fafc;
-  --accent: #8b5cf6;
-  --text-gray: #94a3b8;
-
-  font-family: "Poppins", "Noto Sans JP", sans-serif;
-  background-color: var(--darker);
-  color: var(--light);
-  overflow-x: hidden;
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.slides-container {
-  width: 100vw;
-  height: 100vh;
-  overflow-y: scroll;
-  scroll-snap-type: y mandatory;
-  scroll-behavior: smooth;
-}
-
-section {
-  width: 100vw;
-  height: 100vh;
-  scroll-snap-align: start;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 2rem;
-  overflow: hidden;
-}
-
-.bg-blob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.2;
-  z-index: 0;
-  width: 600px;
-  height: 600px;
-}
-.primary-blob {
-  top: -10%;
-  left: -10%;
-  background: var(--primary);
-}
-.accent-blob {
-  top: 50%;
-  right: -10%;
-  background: var(--accent);
-}
-
-.logo-wrapper {
-  margin-bottom: 20px;
-}
-.lp-logo {
-  border-radius: 20px;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
-}
-
-h1 {
-  font-size: clamp(2.5rem, 6vw, 5rem);
-  font-weight: 900;
-  line-height: 1.1;
-  margin-bottom: 1.5rem;
-  background: linear-gradient(135deg, #fff 0%, var(--primary-light) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-align: center;
-  z-index: 1;
-}
-
-h2 {
-  font-size: clamp(1.5rem, 4vw, 3rem);
-  color: var(--primary);
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  margin-bottom: 2rem;
-  text-align: center;
-  z-index: 1;
-}
-
-h3 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin-bottom: 1rem;
-  color: white;
-}
-
-p {
-  font-size: 1.2rem;
-  color: var(--text-gray);
-  max-width: 800px;
-  text-align: center;
-  line-height: 1.8;
-  z-index: 1;
-}
-
-.subtitle {
-  letter-spacing: 0.2em;
-  color: var(--primary-light);
-  font-weight: bold;
-  margin-bottom: 1rem;
-}
-.description {
-  font-size: 1.2rem;
-  color: var(--text-gray);
-}
-.section-title {
-  font-size: 2.5rem;
-  margin-bottom: 3rem;
-}
-.primary-text {
-  color: var(--primary);
-  font-weight: bold;
-}
-.footer-text {
-  margin-top: 50px;
-  font-size: 0.8rem;
-  opacity: 0.5;
-}
-
-/* アニメーション */
-.fade-in-up {
-  opacity: 0;
-  animation: fadeInUp 0.8s ease-out forwards;
-}
-.delay-100 {
-  animation-delay: 0.1s;
-}
-.delay-200 {
-  animation-delay: 0.2s;
-}
-.delay-300 {
-  animation-delay: 0.3s;
-}
-.delay-500 {
-  animation-delay: 0.5s;
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* スマホモック */
-.mock-wrapper {
-  margin-top: 40px;
-  position: relative;
-}
-.phone {
-  width: 280px;
-  height: 580px;
-  background: #0f172a;
-  border-radius: 40px;
-  border: 8px solid #334155;
-  position: relative;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  z-index: 2;
-  transform: rotate(-5deg) translateY(20px);
-}
-.notch {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 120px;
-  height: 25px;
-  background: #334155;
-  border-bottom-left-radius: 16px;
-  border-bottom-right-radius: 16px;
-  z-index: 10;
-}
-.screen {
-  flex: 1;
-  background: #020617;
-  overflow: hidden;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  color: white;
-  padding: 20px;
-}
-.screen-header {
-  margin-top: 40px;
-  font-weight: 900;
-  font-size: 1.2rem;
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-/* チャット */
-.chat-bubble {
-  padding: 12px 16px;
-  border-radius: 16px;
-  font-size: 0.8rem;
-  margin-bottom: 10px;
-  max-width: 85%;
-  line-height: 1.5;
-  text-align: left;
-}
-.chat-user {
-  background-color: #1e293b;
-  align-self: flex-end;
-  border-top-right-radius: 4px;
-}
-.chat-ai {
-  background-color: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #bfdbfe;
-  align-self: flex-start;
-  border-top-left-radius: 4px;
-}
-
-/* カード類 */
-.problem-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
-  width: 100%;
-  max-width: 1000px;
-  margin-top: 40px;
-  z-index: 2;
-}
-.problem-card {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 30px;
-  border-radius: 20px;
-  text-align: center;
-  transition: transform 0.3s;
-}
-.problem-card:hover {
-  transform: translateY(-5px);
-  background: rgba(255, 255, 255, 0.05);
-}
-.icon {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-  display: block;
-}
-
-.solution-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 24px;
-  margin-top: 40px;
-  z-index: 2;
-}
-.feature-box {
-  width: 160px;
-  height: 160px;
-  background: linear-gradient(145deg, #1e293b, #0f172a);
-  border-radius: 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-}
-.feature-title {
-  font-weight: bold;
-  margin-top: 10px;
-}
-.feature-desc {
-  font-size: 0.7rem;
-  opacity: 0.7;
-  margin-top: 5px;
-}
-.highlight-box {
-  border-color: var(--primary);
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
-}
-.highlight-text {
-  color: var(--primary-light);
-}
-
-.ai-features {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-  justify-content: center;
-  margin-top: 40px;
-}
-.ai-card {
-  width: 300px;
-  background: #1e293b;
-  padding: 20px;
-  border-radius: 20px;
-  border: 1px solid #334155;
-}
-.ai-icon {
-  font-size: 2rem;
-  margin-bottom: 10px;
-}
-.ai-card h3 {
-  font-size: 1.2rem;
-  margin-bottom: 0.5rem;
-}
-.ai-card p {
-  font-size: 0.9rem;
-  text-align: left;
-  margin-bottom: 0;
-}
-
-.btn-primary {
-  background: var(--primary);
-  color: white;
-  font-weight: bold;
-  padding: 1rem 3rem;
-  border-radius: 50px;
-  text-decoration: none;
-  font-size: 1.2rem;
-  transition: all 0.3s;
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
-  margin-top: 30px;
-  display: inline-block;
-  border: none;
-  cursor: pointer;
-}
-.btn-primary:hover {
-  transform: scale(1.05);
-  box-shadow: 0 0 30px rgba(59, 130, 246, 0.8);
-}
-
-.badge-wrapper {
-  margin: 30px 0;
-}
-.pulse-badge {
-  background: var(--accent);
-  color: white;
-  padding: 8px 20px;
-  border-radius: 50px;
-  font-weight: bold;
-  margin-bottom: 20px;
-  display: inline-block;
-  animation: pulse 2s infinite;
-}
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-.nav-hint {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.3);
-  z-index: 100;
-}
-</style>
-</file>
-
-<file path="src/views/LegalView/LegalView.vue">
-<script setup lang="ts">
-import { useRouter } from "vue-router";
-const router = useRouter();
-</script>
-
-<template>
-  <div
-    class="min-h-screen bg-slate-950 text-slate-300 p-6 md:p-12 font-sans overflow-y-auto"
-  >
-    <div class="max-w-3xl mx-auto pb-20">
-      <button
-        @click="router.back()"
-        class="mb-6 text-sm text-slate-500 hover:text-white transition"
-      >
-        ← 戻る
-      </button>
-
-      <h1 class="text-2xl font-bold text-white mb-8">
-        特定商取引法に基づく表記
-      </h1>
-
-      <div class="space-y-8 text-sm leading-relaxed">
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
-          <p>（あなたの氏名または屋号）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">所在地</h2>
-          <p>（あなたの住所またはバーチャルオフィスの住所）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
-          <p>（電話番号）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">メールアドレス</h2>
-          <p>support@mybrain-app.com</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">販売価格</h2>
-          <p>PROプラン: 月額1,000円（税込）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">支払方法と時期</h2>
-          <p>
-            クレジットカード決済（Stripe）。初回申込時に決済され、以降毎月同日に自動更新されます。
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">キャンセル・解約</h2>
-          <p>
-            アプリ内の設定、またはStripeのカスタマーポータルよりいつでも解約可能です。次回更新日の前日までに手続きを行ってください。
-          </p>
-        </section>
-      </div>
-    </div>
-  </div>
-</template>
-</file>
-
 <file path="src/views/LoginView/LoginView.ts">
 import { ref } from "vue";
 import {
@@ -2910,502 +2292,6 @@ export default {
 }
 </file>
 
-<file path="functions/lib/index.js">
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.lineWebhook = exports.linkLineAccount = exports.scrapeUrl = void 0;
-const https_1 = require("firebase-functions/v2/https");
-const v2_1 = require("firebase-functions/v2");
-const params_1 = require("firebase-functions/params");
-const admin = __importStar(require("firebase-admin"));
-const axios_1 = __importDefault(require("axios"));
-const cheerio = __importStar(require("cheerio"));
-const line = __importStar(require("@line/bot-sdk"));
-const generative_ai_1 = require("@google/generative-ai");
-// 初期化
-if (admin.apps.length === 0) {
-    admin.initializeApp();
-}
-const db = admin.firestore();
-// 日本リージョンに設定
-(0, v2_1.setGlobalOptions)({ region: "asia-northeast1", memory: "1GiB" });
-// 秘密鍵の定義
-const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN");
-const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET");
-const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID");
-const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET");
-const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
-// ---------------------------------------------------------
-// 1. URLスクレイピング
-// ---------------------------------------------------------
-exports.scrapeUrl = (0, https_1.onCall)(async (request) => {
-    if (!request.auth) {
-        throw new https_1.HttpsError("unauthenticated", "Login required");
-    }
-    const { url } = request.data;
-    try {
-        const response = await axios_1.default.get(url, {
-            headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            },
-            timeout: 10000,
-        });
-        const $ = cheerio.load(response.data);
-        $("script").remove();
-        $("style").remove();
-        const title = $("title").text().trim() || "No Title";
-        let content = "";
-        $("p, h1, h2, article").each((_, el) => {
-            const text = $(el).text().trim();
-            if (text.length > 20)
-                content += text + "\n";
-        });
-        return { success: true, title, content: content.slice(0, 50000) };
-    }
-    catch (error) {
-        throw new https_1.HttpsError("internal", error.message);
-    }
-});
-// ---------------------------------------------------------
-// 2. LINE連携 (アカウント紐付け) ★これが抜けていました！
-// ---------------------------------------------------------
-exports.linkLineAccount = (0, https_1.onCall)({
-    secrets: [
-        lineLoginChannelId,
-        lineLoginChannelSecret,
-        lineBotToken,
-        lineBotSecret,
-    ],
-}, async (request) => {
-    var _a;
-    // ログインチェック
-    if (!request.auth) {
-        throw new https_1.HttpsError("unauthenticated", "ログインが必要です");
-    }
-    const { code, redirectUri } = request.data;
-    try {
-        // 1. LINEからアクセストークンを取得
-        const params = new URLSearchParams();
-        params.append("grant_type", "authorization_code");
-        params.append("code", code);
-        params.append("redirect_uri", redirectUri);
-        params.append("client_id", lineLoginChannelId.value());
-        params.append("client_secret", lineLoginChannelSecret.value());
-        const tokenResponse = await axios_1.default.post("https://api.line.me/oauth2/v2.1/token", params);
-        const { access_token } = tokenResponse.data;
-        // 2. アクセストークンを使ってプロフィール(LINE UserID)を取得
-        const profileResponse = await axios_1.default.get("https://api.line.me/v2/profile", { headers: { Authorization: `Bearer ${access_token}` } });
-        const lineUserId = profileResponse.data.userId;
-        const lineDisplayName = profileResponse.data.displayName;
-        // 3. Firestoreのユーザー情報にLINE IDを書き込む
-        await db.collection("users").doc(request.auth.uid).set({
-            isLineLinked: true,
-            lineUserId: lineUserId,
-            lineDisplayName: lineDisplayName,
-        }, { merge: true });
-        return { success: true };
-    }
-    catch (error) {
-        console.error("LINE Link Error:", ((_a = error.response) === null || _a === void 0 ? void 0 : _a.data) || error);
-        throw new https_1.HttpsError("internal", "LINE連携に失敗しました");
-    }
-});
-// ---------------------------------------------------------
-// 3. LINE Webhook (ボット機能)
-// ---------------------------------------------------------
-exports.lineWebhook = (0, https_1.onRequest)({ secrets: [lineBotToken, lineBotSecret, geminiApiKey] }, async (req, res) => {
-    const events = req.body.events;
-    const token = lineBotToken.value();
-    const client = new line.Client({ channelAccessToken: token });
-    for (const event of events) {
-        if (event.type !== "message")
-            continue;
-        const lineUserId = event.source.userId;
-        if (!lineUserId)
-            continue;
-        // LINE IDと紐づくユーザーを探す
-        const usersSnap = await db
-            .collection("users")
-            .where("lineUserId", "==", lineUserId)
-            .limit(1)
-            .get();
-        if (usersSnap.empty) {
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: "My Brainと連携されていません。アプリ設定から連携してください🙇‍♂️",
-            });
-            continue;
-        }
-        const userDoc = usersSnap.docs[0];
-        const uid = userDoc.id;
-        try {
-            if (event.message.type === "text") {
-                const text = event.message.text;
-                await saveMemoryFromLine(uid, text, null);
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "📝 メモを脳に保存しました！",
-                });
-            }
-            else if (event.message.type === "image") {
-                const stream = await client.getMessageContent(event.message.id);
-                const chunks = [];
-                for await (const chunk of stream)
-                    chunks.push(chunk);
-                const buffer = Buffer.concat(chunks);
-                const base64 = buffer.toString("base64");
-                await saveMemoryFromLine(uid, "LINEからの画像", {
-                    data: base64,
-                    mimeType: "image/jpeg",
-                });
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "📷 画像を解析して保存しました！",
-                });
-            }
-        }
-        catch (err) {
-            console.error("LINE Error:", err);
-        }
-    }
-    res.json({ success: true });
-});
-// サーバー側でのAI保存ヘルパー関数
-async function saveMemoryFromLine(uid, text, image) {
-    const apiKey = geminiApiKey.value();
-    const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    let promptParts = [];
-    if (image) {
-        promptParts.push({ inlineData: image });
-        promptParts.push({
-            text: 'この画像を分析して記憶データを作成してください。出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "詳細な内容"}',
-        });
-    }
-    else {
-        promptParts.push({
-            text: `以下のテキストを記憶データとして整理してください。\n${text}\n出力形式: JSON {\"summary\": \"20字要約\", \"tags\": [\"タグ\"], \"fullText\": \"${text}\"}`,
-        });
-    }
-    try {
-        const result = await model.generateContent(promptParts);
-        const responseText = result.response.text();
-        const cleanJson = responseText
-            .replace(/```json/g, "")
-            .replace(/```/g, "")
-            .trim();
-        let aiData;
-        try {
-            aiData = JSON.parse(cleanJson);
-        }
-        catch (_a) {
-            aiData = {
-                fullText: text,
-                summary: text.slice(0, 20) + "...",
-                tags: ["LINE"],
-            };
-        }
-        const embedModel = genAI.getGenerativeModel({
-            model: "text-embedding-004",
-        });
-        const embedRes = await embedModel.embedContent(aiData.fullText || text);
-        await db.collection("memories").add({
-            userId: uid,
-            text: aiData.fullText || text,
-            aiSummary: aiData.summary,
-            tags: aiData.tags,
-            embedding: embedRes.embedding.values,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            hasImage: !!image,
-            source: "LINE",
-        });
-    }
-    catch (e) {
-        console.error("Save Memory Error:", e);
-    }
-}
-</file>
-
-<file path="functions/index.ts">
-import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
-import { setGlobalOptions } from "firebase-functions/v2";
-import { defineSecret } from "firebase-functions/params";
-import * as admin from "firebase-admin";
-import axios from "axios";
-import * as cheerio from "cheerio";
-import * as line from "@line/bot-sdk";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-// 初期化
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-}
-
-const db = admin.firestore();
-// 日本リージョンに設定
-setGlobalOptions({ region: "asia-northeast1", memory: "1GiB" });
-
-// 秘密鍵の定義
-const lineBotToken = defineSecret("LINE_BOT_TOKEN");
-const lineBotSecret = defineSecret("LINE_BOT_SECRET");
-const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
-const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
-const geminiApiKey = defineSecret("GEMINI_API_KEY");
-
-// ---------------------------------------------------------
-// 1. URLスクレイピング
-// ---------------------------------------------------------
-export const scrapeUrl = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Login required");
-  }
-  const { url } = request.data;
-  try {
-    const response = await axios.get(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-      },
-      timeout: 10000,
-    });
-    const $ = cheerio.load(response.data);
-    $("script").remove();
-    $("style").remove();
-    const title = $("title").text().trim() || "No Title";
-    let content = "";
-    $("p, h1, h2, article").each((_, el) => {
-      const text = $(el).text().trim();
-      if (text.length > 20) content += text + "\n";
-    });
-    return { success: true, title, content: content.slice(0, 50000) };
-  } catch (error: any) {
-    throw new HttpsError("internal", error.message);
-  }
-});
-
-// ---------------------------------------------------------
-// 2. LINE連携 (アカウント紐付け)
-// ---------------------------------------------------------
-export const linkLineAccount = onCall(
-  {
-    secrets: [
-      lineLoginChannelId,
-      lineLoginChannelSecret,
-      lineBotToken,
-      lineBotSecret,
-    ],
-  },
-  async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "ログインが必要です");
-    }
-
-    const { code, redirectUri } = request.data;
-
-    try {
-      const params = new URLSearchParams();
-      params.append("grant_type", "authorization_code");
-      params.append("code", code);
-      params.append("redirect_uri", redirectUri);
-      params.append("client_id", lineLoginChannelId.value());
-      params.append("client_secret", lineLoginChannelSecret.value());
-
-      const tokenResponse = await axios.post(
-        "https://api.line.me/oauth2/v2.1/token",
-        params,
-      );
-      const { access_token } = tokenResponse.data;
-
-      const profileResponse = await axios.get(
-        "https://api.line.me/v2/profile",
-        { headers: { Authorization: `Bearer ${access_token}` } },
-      );
-
-      const lineUserId = profileResponse.data.userId;
-      const lineDisplayName = profileResponse.data.displayName;
-
-      await db.collection("users").doc(request.auth.uid).set(
-        {
-          isLineLinked: true,
-          lineUserId: lineUserId,
-          lineDisplayName: lineDisplayName,
-        },
-        { merge: true },
-      );
-
-      return { success: true };
-    } catch (error: any) {
-      console.error("LINE Link Error:", error.response?.data || error);
-      throw new HttpsError("internal", "LINE連携に失敗しました");
-    }
-  },
-);
-
-// ---------------------------------------------------------
-// 3. LINE Webhook (ボット機能: ここで保存処理を行う)
-// ---------------------------------------------------------
-export const lineWebhook = onRequest(
-  { secrets: [lineBotToken, lineBotSecret, geminiApiKey] },
-  async (req, res) => {
-    const events = req.body.events;
-    const token = lineBotToken.value();
-    const client = new line.Client({ channelAccessToken: token });
-
-    for (const event of events) {
-      if (event.type !== "message") continue;
-
-      const lineUserId = event.source.userId;
-      if (!lineUserId) continue;
-
-      // LINE IDと紐づくユーザーを探す
-      const usersSnap = await db
-        .collection("users")
-        .where("lineUserId", "==", lineUserId)
-        .limit(1)
-        .get();
-
-      if (usersSnap.empty) {
-        await client.replyMessage(event.replyToken, {
-          type: "text",
-          text: "My Brainと連携されていません。アプリ設定から連携してください🙇‍♂️",
-        });
-        continue;
-      }
-
-      const userDoc = usersSnap.docs[0];
-      const uid = userDoc.id;
-
-      try {
-        if (event.message.type === "text") {
-          const text = event.message.text;
-          await saveMemoryFromLine(uid, text, null);
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: "📝 メモを脳に保存しました！",
-          });
-        } else if (event.message.type === "image") {
-          const stream = await client.getMessageContent(event.message.id);
-          const chunks: any[] = [];
-          for await (const chunk of stream) chunks.push(chunk);
-          const buffer = Buffer.concat(chunks);
-          const base64 = buffer.toString("base64");
-
-          await saveMemoryFromLine(uid, "LINEからの画像", {
-            data: base64,
-            mimeType: "image/jpeg",
-          });
-
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: "📷 画像を解析して保存しました！",
-          });
-        }
-      } catch (err) {
-        console.error("LINE Error:", err);
-      }
-    }
-    res.json({ success: true });
-  },
-);
-
-// サーバー側でのAI保存ヘルパー関数
-async function saveMemoryFromLine(
-  uid: string,
-  text: string,
-  image: { data: string; mimeType: string } | null,
-) {
-  const apiKey = geminiApiKey.value();
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-  let promptParts: any[] = [];
-  if (image) {
-    promptParts.push({ inlineData: image });
-    promptParts.push({
-      text: 'この画像を分析して記憶データを作成してください。出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "詳細な内容"}',
-    });
-  } else {
-    promptParts.push({
-      text: `以下のテキストを記憶データとして整理してください。\n${text}\n出力形式: JSON {\"summary\": \"20字要約\", \"tags\": [\"タグ\"], \"fullText\": \"${text}\"}`,
-    });
-  }
-
-  try {
-    const result = await model.generateContent(promptParts);
-    const responseText = result.response.text();
-    const cleanJson = responseText
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
-
-    let aiData;
-    try {
-      aiData = JSON.parse(cleanJson);
-    } catch {
-      aiData = {
-        fullText: text,
-        summary: text.slice(0, 20) + "...",
-        tags: ["LINE"],
-      };
-    }
-
-    const embedModel = genAI.getGenerativeModel({
-      model: "text-embedding-004",
-    });
-    const embedRes = await embedModel.embedContent(aiData.fullText || text);
-
-    await db.collection("memories").add({
-      userId: uid,
-      text: aiData.fullText || text,
-      aiSummary: aiData.summary,
-      tags: aiData.tags,
-      embedding: embedRes.embedding.values,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      hasImage: !!image,
-      source: "LINE",
-    });
-  } catch (e) {
-    console.error("Save Memory Error:", e);
-  }
-}
-</file>
-
 <file path="public/firebase-messaging-sw.js">
 // public/firebase-messaging-sw.js
 importScripts(
@@ -3447,48 +2333,6 @@ messaging.onBackgroundMessage((payload) => {
 
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
-</file>
-
-<file path="src/components/AppHeader/AppHeader.vue">
-<script setup lang="ts">
-import { useAppHeader } from "./useAppHeader";
-
-// ★あなたのLINEログインチャンネルIDを入れてください
-const LINE_LOGIN_CHANNEL_ID = "2008915242";
-const REDIRECT_URI = window.location.origin + "/app";
-
-const startLineLogin = () => {
-  // LINEの認証画面へ飛ばすURL
-  const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${LINE_LOGIN_CHANNEL_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=randomstate123&scope=profile%20openid`;
-  window.location.href = url;
-};
-
-const { logout } = useAppHeader();
-</script>
-
-<template>
-  <header
-    class="h-14 px-4 flex items-center justify-between border-b border-slate-800 bg-slate-900/50 backdrop-blur z-20"
-  >
-    <div class="font-black text-lg tracking-tight">🧠 My Brain</div>
-
-    <div class="flex items-center gap-3">
-      <button
-        @click="startLineLogin"
-        class="text-[10px] bg-[#06C755] text-white px-3 py-1.5 rounded-full font-bold hover:opacity-90 transition flex items-center gap-1"
-      >
-        <span>💬</span> LINE連携
-      </button>
-
-      <button
-        @click="logout"
-        class="text-xs font-bold text-slate-500 hover:text-white transition"
-      >
-        ログアウト
-      </button>
-    </div>
-  </header>
-</template>
 </file>
 
 <file path="src/components/ChatList/ChatList.vue">
@@ -3649,201 +2493,6 @@ export function useChatList() {
 }
 </file>
 
-<file path="src/components/InputFooter/InputFooter.vue">
-<script setup lang="ts">
-import { computed } from "vue";
-import { useInputFooter } from "./useInputFooter";
-import { useMyBrain } from "@/composables/useMyBrain";
-
-const props = defineProps<{
-  modelValue: "memo" | "chat" | "url";
-}>();
-
-const emit = defineEmits<{
-  (e: "update:modelValue", val: "memo" | "chat" | "url"): void;
-}>();
-
-const inputMode = computed({
-  get: () => props.modelValue,
-  set: (val) => emit("update:modelValue", val),
-});
-
-const {
-  inputText,
-  selectedFile,
-  filePreview,
-  fileInputRef,
-  isListening,
-  isAiThinking,
-  toggleListening,
-  handleFileSelect,
-  clearFile,
-  handleSend,
-} = useInputFooter(props.modelValue);
-
-// ▼ 課金ステータス表示用
-const { currentUser, startSubscription } = useMyBrain();
-
-const remainingCount = computed(() => {
-  if (currentUser.value?.isPro) return 9999;
-  return 5 - (currentUser.value?.dailyUsage || 0);
-});
-</script>
-
-<template>
-  <footer
-    class="fixed bottom-0 w-full bg-slate-900/90 backdrop-blur border-t border-slate-800 p-4 pb-8 z-30 transition-all"
-  >
-    <div class="max-w-md mx-auto">
-      <div class="flex items-center justify-between px-4 mb-2">
-        <div class="text-[10px] font-bold text-slate-400">
-          <span v-if="currentUser?.isPro" class="text-yellow-400"
-            >★ PRO Plan</span
-          >
-          <span v-else>
-            Free: 残り
-            <span
-              :class="remainingCount === 0 ? 'text-red-500' : 'text-white'"
-              >{{ remainingCount }}</span
-            >
-            / 5回
-          </span>
-        </div>
-
-        <button
-          v-if="!currentUser?.isPro"
-          @click="startSubscription"
-          class="text-[10px] bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 py-1 rounded-full font-bold shadow-lg hover:opacity-90 transition"
-        >
-          🚀 PROにアップグレード (¥1,000/月)
-        </button>
-      </div>
-
-      <div
-        class="flex gap-2 mb-4 justify-center bg-slate-800 p-1 rounded-full w-fit mx-auto"
-      >
-        <button
-          @click="inputMode = 'memo'"
-          class="text-xs font-bold px-4 py-2 rounded-full transition"
-          :class="
-            inputMode === 'memo'
-              ? 'bg-white text-slate-900'
-              : 'text-slate-400 hover:text-white'
-          "
-        >
-          📝 メモ
-        </button>
-        <button
-          @click="inputMode = 'url'"
-          class="text-xs font-bold px-4 py-2 rounded-full transition"
-          :class="
-            inputMode === 'url'
-              ? 'bg-green-500 text-white'
-              : 'text-slate-400 hover:text-white'
-          "
-        >
-          🌐 URL
-        </button>
-        <button
-          @click="inputMode = 'chat'"
-          class="text-xs font-bold px-4 py-2 rounded-full transition"
-          :class="
-            inputMode === 'chat'
-              ? 'bg-blue-600 text-white'
-              : 'text-slate-400 hover:text-white'
-          "
-        >
-          🔍 会話
-        </button>
-      </div>
-
-      <div
-        v-if="selectedFile"
-        class="relative mb-2 inline-block animate-fade-in"
-      >
-        <img
-          v-if="filePreview"
-          :src="filePreview"
-          class="h-20 rounded-lg border border-slate-600"
-        />
-        <div
-          v-else
-          class="h-20 w-20 bg-slate-800 rounded-lg border border-slate-600 flex flex-col items-center justify-center p-2"
-        >
-          <span class="text-2xl">📄</span>
-          <span
-            class="text-[8px] text-slate-400 truncate w-full text-center mt-1"
-            >{{ selectedFile.name }}</span
-          >
-        </div>
-        <button
-          @click="clearFile"
-          class="absolute -top-2 -right-2 bg-slate-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-500"
-        >
-          ×
-        </button>
-      </div>
-
-      <div class="relative flex items-end gap-2">
-        <button
-          @click="toggleListening"
-          class="w-10 h-10 flex items-center justify-center rounded-xl transition shadow-lg relative overflow-hidden"
-          :class="
-            isListening
-              ? 'bg-red-500 text-white animate-pulse'
-              : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
-          "
-        >
-          <span class="relative z-10">{{ isListening ? "■" : "🎙️" }}</span>
-          <div
-            v-if="isListening"
-            class="absolute inset-0 bg-red-600 animate-ping opacity-75"
-          ></div>
-        </button>
-
-        <div v-if="inputMode === 'memo'">
-          <input
-            type="file"
-            ref="fileInputRef"
-            accept="image/*, application/pdf, text/plain, audio/*"
-            class="hidden"
-            @change="handleFileSelect"
-          />
-          <button
-            @click="fileInputRef?.click()"
-            class="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 transition"
-          >
-            📎
-          </button>
-        </div>
-
-        <textarea
-          v-model="inputText"
-          rows="1"
-          class="flex-1 bg-slate-800 border border-slate-700 text-white rounded-2xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden"
-          :placeholder="
-            inputMode === 'url'
-              ? 'URLを入力...'
-              : inputMode === 'memo'
-                ? '記憶/画像/音声を...'
-                : '質問...'
-          "
-          @keydown.enter.prevent="handleSend(inputMode)"
-        ></textarea>
-
-        <button
-          @click="handleSend(inputMode)"
-          :disabled="(!inputText && !selectedFile) || isAiThinking"
-          class="w-10 h-10 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg"
-        >
-          ↑
-        </button>
-      </div>
-    </div>
-  </footer>
-</template>
-</file>
-
 <file path="src/components/InputFooter/useInputFooter.ts">
 import { ref, onMounted } from "vue";
 import { useMyBrain } from "@/composables/useMyBrain";
@@ -3955,6 +2604,654 @@ export function useInputFooter(inputMode: InputMode) {
     handleSend,
   };
 }
+</file>
+
+<file path="src/views/LandingView/LandingView.vue">
+<script setup lang="ts">
+import { useRouter } from "vue-router";
+
+const router = useRouter();
+
+const goToLogin = () => {
+  router.push("/login");
+};
+</script>
+
+<template>
+  <div class="lp-container">
+    <div class="nav-hint">Scroll or Use Arrow Keys ↓</div>
+
+    <div class="slides-container" id="container">
+      <section id="s1">
+        <div class="bg-blob primary-blob"></div>
+
+        <div class="logo-wrapper">
+          <img
+            src="/logo.png?v=3"
+            width="50"
+            height="50"
+            class="lp-logo fade-in-up"
+          />
+        </div>
+
+        <p class="fade-in-up subtitle">AI KNOWLEDGE BASE</p>
+        <h1 class="fade-in-up delay-100">
+          あなたの記憶を、<br />AIが拡張する。
+        </h1>
+        <p class="fade-in-up delay-200 description">
+          忘れても大丈夫。あなただけの「第2の脳」がここにあります。
+        </p>
+
+        <button @click="goToLogin" class="btn-primary fade-in-up delay-300">
+          今すぐ始める
+        </button>
+
+        <div class="fade-in-up delay-500 mock-wrapper">
+          <div class="phone">
+            <div class="notch"></div>
+            <div class="screen">
+              <div class="screen-header">My Brain</div>
+              <div class="chat-bubble chat-user">
+                先週の会議で決まったA社の予算っていくらだっけ？
+              </div>
+              <div class="chat-bubble chat-ai">
+                先週木曜日のメモによると、A社の予算は「300万円（税抜）」で承認されています。<br /><br />関連資料：<br />📄
+                240115_議事録.pdf
+              </div>
+              <div class="chat-bubble chat-user">ありがとう！助かった。</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s2">
+        <h2 class="fade-in-up">The Problem</h2>
+        <h1 class="fade-in-up delay-100 section-title">
+          脳の容量、足りてますか？
+        </h1>
+
+        <div class="problem-grid fade-in-up delay-200">
+          <div class="problem-card">
+            <span class="icon">🌫️</span>
+            <h3>思い出せない</h3>
+            <p>
+              「あの件、どうなったっけ？」<br />大事な情報を忘れてしまい、<br />信頼を失う恐怖。
+            </p>
+          </div>
+          <div class="problem-card">
+            <span class="icon">🔍</span>
+            <h3>見つからない</h3>
+            <p>
+              LINE、Slack、メモ帳...<br />情報が散らばりすぎて、<br />検索に時間を浪費する毎日。
+            </p>
+          </div>
+          <div class="problem-card">
+            <span class="icon">🤯</span>
+            <h3>整理できない</h3>
+            <p>
+              情報はインプットするだけ。<br />整理する時間がなく、<br />知識として定着しない。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="s3">
+        <div class="bg-blob accent-blob"></div>
+
+        <h2 class="fade-in-up">Solution</h2>
+        <h1 class="fade-in-up delay-100 section-title">
+          放り込むだけで、整理完了。
+        </h1>
+        <p class="fade-in-up delay-200 description">
+          My
+          Brainは、あらゆる情報を一元管理し、AIがあなたの思考をサポートします。
+        </p>
+
+        <div class="solution-row fade-in-up delay-300">
+          <div class="feature-box">
+            <span class="icon">📝</span>
+            <span class="feature-title">メモ・画像</span>
+            <span class="feature-desc">何でも保存</span>
+          </div>
+          <div class="feature-box">
+            <span class="icon">🌐</span>
+            <span class="feature-title">Web保存</span>
+            <span class="feature-desc">URL貼るだけ</span>
+          </div>
+          <div class="feature-box highlight-box">
+            <span class="icon">🤖</span>
+            <span class="feature-title highlight-text">AI検索</span>
+            <span class="feature-desc">会話で思い出す</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="s4">
+        <h2 class="fade-in-up">AI Core</h2>
+        <h1 class="fade-in-up delay-100 section-title">
+          ただの検索じゃない。<br />文脈を理解する「対話」です。
+        </h1>
+
+        <div class="ai-features fade-in-up delay-200">
+          <div class="ai-card">
+            <div class="ai-icon">🧠</div>
+            <h3>曖昧な記憶でOK</h3>
+            <p>
+              「先月の飲み会で話題になった映画なんだっけ？」のような、キーワードを覚えていなくてもAIが推測して答えます。
+            </p>
+          </div>
+          <div class="ai-card">
+            <div class="ai-icon">📊</div>
+            <h3>構造化・図解</h3>
+            <p>
+              複雑な情報は、AIが自動でマインドマップや表に変換。視覚的に理解を助けます。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="s5">
+        <p class="fade-in-up primary-text">FREE ACCESS</p>
+        <h1 class="fade-in-up delay-100 section-title">
+          あなたの脳を、アップデートしよう。
+        </h1>
+
+        <div class="fade-in-up delay-200 badge-wrapper">
+          <div class="pulse-badge">🚀 ベータ版につき完全無料</div>
+        </div>
+
+        <button @click="goToLogin" class="btn-primary fade-in-up delay-300">
+          My Brain を開く
+        </button>
+
+        <div class="fade-in-up delay-500 footer-container">
+          <div class="legal-links">
+            <router-link to="/legal" class="legal-link"
+              >特定商取引法に基づく表記</router-link
+            >
+          </div>
+          <p class="footer-text">Designed by Takumi Yoshioka</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+/* スコープ付きCSS */
+.lp-container {
+  --primary: #3b82f6;
+  --primary-light: #60a5fa;
+  --dark: #0f172a;
+  --darker: #020617;
+  --light: #f8fafc;
+  --accent: #8b5cf6;
+  --text-gray: #94a3b8;
+
+  font-family: "Poppins", "Noto Sans JP", sans-serif;
+  background-color: var(--darker);
+  color: var(--light);
+  overflow-x: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.slides-container {
+  width: 100vw;
+  height: 100vh;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+}
+
+section {
+  width: 100vw;
+  height: 100vh;
+  min-height: 550px; /* 最小高さをさらに縮小 */
+  scroll-snap-align: start;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 0.5rem; /* パディングを極限まで減らす */
+  overflow: hidden;
+}
+
+.bg-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.2;
+  z-index: 0;
+  width: 500px;
+  height: 500px;
+}
+.primary-blob {
+  top: -10%;
+  left: -10%;
+  background: var(--primary);
+}
+.accent-blob {
+  top: 50%;
+  right: -10%;
+  background: var(--accent);
+}
+
+.logo-wrapper {
+  margin-bottom: 5px; /* マージン極小 */
+}
+.lp-logo {
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+}
+
+h1 {
+  /* フォントサイズを縮小して1行に収まりやすくする */
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 900;
+  line-height: 1.1;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(135deg, #fff 0%, var(--primary-light) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-align: center;
+  z-index: 1;
+}
+
+h2 {
+  font-size: clamp(1rem, 2.5vw, 1.5rem);
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  margin-bottom: 1rem;
+  text-align: center;
+  z-index: 1;
+}
+
+h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+  color: white;
+}
+
+p {
+  font-size: 0.9rem;
+  color: var(--text-gray);
+  max-width: 800px;
+  text-align: center;
+  line-height: 1.5;
+  z-index: 1;
+}
+
+.subtitle {
+  letter-spacing: 0.15em;
+  color: var(--primary-light);
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  font-size: 0.7rem;
+}
+.description {
+  font-size: 0.9rem;
+  color: var(--text-gray);
+}
+.section-title {
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
+  margin-bottom: 1.5rem;
+}
+.primary-text {
+  color: var(--primary);
+  font-weight: bold;
+}
+
+/* フッター調整 */
+.footer-container {
+  margin-top: 30px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.legal-links {
+  margin-bottom: 5px;
+}
+.legal-link {
+  color: var(--text-gray);
+  font-size: 0.7rem;
+  text-decoration: underline;
+  transition: color 0.3s;
+}
+.legal-link:hover {
+  color: white;
+}
+.footer-text {
+  font-size: 0.6rem;
+  opacity: 0.4;
+}
+
+/* アニメーション */
+.fade-in-up {
+  opacity: 0;
+  animation: fadeInUp 0.8s ease-out forwards;
+}
+.delay-100 {
+  animation-delay: 0.1s;
+}
+.delay-200 {
+  animation-delay: 0.2s;
+}
+.delay-300 {
+  animation-delay: 0.3s;
+}
+.delay-500 {
+  animation-delay: 0.5s;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* スマホモック */
+.mock-wrapper {
+  margin-top: 20px;
+  position: relative;
+}
+.phone {
+  /* スマホサイズを大幅に縮小 */
+  width: 180px;
+  height: 380px;
+  background: #0f172a;
+  border-radius: 24px;
+  border: 5px solid #334155;
+  position: relative;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 2;
+  transform: rotate(-3deg) translateY(0px); /* 傾きと位置調整 */
+}
+.notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 18px;
+  background: #334155;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+  z-index: 10;
+}
+.screen {
+  flex: 1;
+  background: #020617;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  color: white;
+  padding: 10px;
+}
+.screen-header {
+  margin-top: 25px;
+  font-weight: 900;
+  font-size: 0.9rem;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+/* チャット */
+.chat-bubble {
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 0.6rem;
+  margin-bottom: 6px;
+  max-width: 90%;
+  line-height: 1.4;
+  text-align: left;
+}
+.chat-user {
+  background-color: #1e293b;
+  align-self: flex-end;
+  border-top-right-radius: 4px;
+}
+.chat-ai {
+  background-color: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #bfdbfe;
+  align-self: flex-start;
+  border-top-left-radius: 4px;
+}
+
+/* カード類 */
+.problem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  width: 100%;
+  max-width: 800px;
+  margin-top: 20px;
+  z-index: 2;
+}
+.problem-card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 15px;
+  border-radius: 16px;
+  text-align: center;
+  transition: transform 0.3s;
+}
+.problem-card:hover {
+  transform: translateY(-5px);
+  background: rgba(255, 255, 255, 0.05);
+}
+.icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.solution-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 15px;
+  margin-top: 20px;
+  z-index: 2;
+}
+.feature-box {
+  width: 110px;
+  height: 110px;
+  background: linear-gradient(145deg, #1e293b, #0f172a);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 5px 10px -3px rgba(0, 0, 0, 0.5);
+}
+.feature-title {
+  font-weight: bold;
+  margin-top: 6px;
+  font-size: 0.8rem;
+}
+.feature-desc {
+  font-size: 0.55rem;
+  opacity: 0.7;
+  margin-top: 3px;
+}
+.highlight-box {
+  border-color: var(--primary);
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+}
+.highlight-text {
+  color: var(--primary-light);
+}
+
+.ai-features {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 20px;
+}
+.ai-card {
+  width: 240px;
+  background: #1e293b;
+  padding: 15px;
+  border-radius: 16px;
+  border: 1px solid #334155;
+}
+.ai-icon {
+  font-size: 1.5rem;
+  margin-bottom: 6px;
+}
+.ai-card h3 {
+  font-size: 1rem;
+  margin-bottom: 0.3rem;
+}
+.ai-card p {
+  font-size: 0.75rem;
+  text-align: left;
+  margin-bottom: 0;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  font-weight: bold;
+  padding: 0.6rem 2rem;
+  border-radius: 50px;
+  text-decoration: none;
+  font-size: 1rem;
+  transition: all 0.3s;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+  margin-top: 15px;
+  display: inline-block;
+  border: none;
+  cursor: pointer;
+}
+.btn-primary:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 25px rgba(59, 130, 246, 0.8);
+}
+
+.badge-wrapper {
+  margin: 15px 0;
+}
+.pulse-badge {
+  background: var(--accent);
+  color: white;
+  padding: 5px 12px;
+  border-radius: 50px;
+  font-weight: bold;
+  margin-bottom: 5px;
+  display: inline-block;
+  font-size: 0.8rem;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.nav-hint {
+  position: fixed;
+  bottom: 15px;
+  right: 15px;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.3);
+  z-index: 100;
+}
+</style>
+</file>
+
+<file path="src/views/LegalView/LegalView.vue">
+<script setup lang="ts">
+import { useRouter } from "vue-router";
+const router = useRouter();
+</script>
+
+<template>
+  <div
+    class="min-h-screen bg-slate-950 text-slate-300 p-6 md:p-12 font-sans overflow-y-auto"
+  >
+    <div class="max-w-3xl mx-auto pb-20">
+      <button
+        @click="router.back()"
+        class="mb-6 text-sm text-slate-500 hover:text-white transition"
+      >
+        ← 戻る
+      </button>
+
+      <h1 class="text-2xl font-bold text-white mb-8">
+        特定商取引法に基づく表記
+      </h1>
+
+      <div class="space-y-8 text-sm leading-relaxed">
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
+          <p>BlueCode</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">所在地</h2>
+          <p>福岡県福岡市南区野間1丁目19-1</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
+          <p>080-6423-6435</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">メールアドレス</h2>
+          <p>gongedonghuam@gmail.com</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">販売価格</h2>
+          <p>PROプラン: 月額980円（税込）</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">支払方法と時期</h2>
+          <p>
+            クレジットカード決済（Stripe）。初回申込時に決済され、以降毎月同日に自動更新されます。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">キャンセル・解約</h2>
+          <p>
+            アプリ内の設定、またはStripeのカスタマーポータルよりいつでも解約可能です。次回更新日の前日までに手続きを行ってください。
+          </p>
+        </section>
+      </div>
+    </div>
+  </div>
+</template>
 </file>
 
 <file path="src/views/LoginView/LoginView.vue">
@@ -4415,633 +3712,676 @@ export default defineConfig({
 });
 </file>
 
-<file path="src/composables/useMyBrain.ts">
-import { ref, computed } from "vue";
-import { db, auth } from "@/firebase";
-import {
-  doc,
-  getDoc,
-  collection,
-  query,
-  limit,
-  getDocs,
-  addDoc,
-  deleteDoc,
-  updateDoc,
-  setDoc,
-  orderBy,
-  serverTimestamp,
-  where,
-  onSnapshot,
-  increment,
-} from "firebase/firestore";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { getFunctions, httpsCallable } from "firebase/functions";
+<file path="functions/lib/index.js">
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.lineWebhook = exports.linkLineAccount = exports.scrapeUrl = void 0;
+const https_1 = require("firebase-functions/v2/https");
+const v2_1 = require("firebase-functions/v2");
+const params_1 = require("firebase-functions/params");
+const admin = __importStar(require("firebase-admin"));
+const axios_1 = __importDefault(require("axios"));
+const cheerio = __importStar(require("cheerio"));
+const line = __importStar(require("@line/bot-sdk"));
+const generative_ai_1 = require("@google/generative-ai");
+if (admin.apps.length === 0) {
+    admin.initializeApp();
+}
+const db = admin.firestore();
+(0, v2_1.setGlobalOptions)({ region: "asia-northeast1", memory: "1GiB" });
+const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN");
+const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET");
+const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID");
+const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET");
+const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
+// 1. URLスクレイピング
+exports.scrapeUrl = (0, https_1.onCall)(async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    const { url } = request.data;
+    try {
+        const response = await axios_1.default.get(url, {
+            headers: { "User-Agent": "Mozilla/5.0..." },
+            timeout: 10000,
+        });
+        const $ = cheerio.load(response.data);
+        $("script").remove();
+        $("style").remove();
+        const title = $("title").text().trim() || "No Title";
+        let content = "";
+        $("p, h1, h2, article").each((_, el) => {
+            const text = $(el).text().trim();
+            if (text.length > 20)
+                content += text + "\n";
+        });
+        return { success: true, title, content: content.slice(0, 50000) };
+    }
+    catch (error) {
+        throw new https_1.HttpsError("internal", error.message);
+    }
+});
+// 2. LINE連携 (アカウント紐付け) ★ここが追加されました
+exports.linkLineAccount = (0, https_1.onCall)({ secrets: [lineLoginChannelId, lineLoginChannelSecret] }, async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    const { code, redirectUri } = request.data;
+    try {
+        const params = new URLSearchParams();
+        params.append("grant_type", "authorization_code");
+        params.append("code", code);
+        params.append("redirect_uri", redirectUri);
+        params.append("client_id", lineLoginChannelId.value());
+        params.append("client_secret", lineLoginChannelSecret.value());
+        const tokenRes = await axios_1.default.post("https://api.line.me/oauth2/v2.1/token", params);
+        const { access_token } = tokenRes.data;
+        const profileRes = await axios_1.default.get("https://api.line.me/v2/profile", {
+            headers: { Authorization: `Bearer ${access_token}` },
+        });
+        await db.collection("users").doc(request.auth.uid).set({
+            isLineLinked: true,
+            lineUserId: profileRes.data.userId,
+            lineDisplayName: profileRes.data.displayName,
+        }, { merge: true });
+        return { success: true };
+    }
+    catch (error) {
+        throw new https_1.HttpsError("internal", "LINE連携失敗");
+    }
+});
+// 3. LINE Webhook (ボット機能) ★ここが追加されました
+exports.lineWebhook = (0, https_1.onRequest)({ secrets: [lineBotToken, lineBotSecret, geminiApiKey] }, async (req, res) => {
+    const token = lineBotToken.value();
+    const client = new line.Client({ channelAccessToken: token });
+    const events = req.body.events;
+    for (const event of events) {
+        if (event.type !== "message")
+            continue;
+        const lineUserId = event.source.userId;
+        if (!lineUserId)
+            continue;
+        // LINE IDからユーザーを特定
+        const usersSnap = await db
+            .collection("users")
+            .where("lineUserId", "==", lineUserId)
+            .limit(1)
+            .get();
+        if (usersSnap.empty) {
+            await client.replyMessage(event.replyToken, {
+                type: "text",
+                text: "アプリでLINE連携を行ってください🙇‍♂️",
+            });
+            continue;
+        }
+        const uid = usersSnap.docs[0].id;
+        try {
+            if (event.message.type === "text") {
+                await saveMemoryFromLine(uid, event.message.text, null);
+                await client.replyMessage(event.replyToken, {
+                    type: "text",
+                    text: "📝 メモしました！",
+                });
+            }
+            else if (event.message.type === "image") {
+                const stream = await client.getMessageContent(event.message.id);
+                const chunks = [];
+                for await (const chunk of stream)
+                    chunks.push(chunk);
+                const buffer = Buffer.concat(chunks);
+                await saveMemoryFromLine(uid, "LINE画像", {
+                    data: buffer.toString("base64"),
+                    mimeType: "image/jpeg",
+                });
+                await client.replyMessage(event.replyToken, {
+                    type: "text",
+                    text: "📷 画像を保存しました！",
+                });
+            }
+        }
+        catch (e) {
+            console.error(e);
+        }
+    }
+    res.json({ success: true });
+});
+async function saveMemoryFromLine(uid, text, image) {
+    const apiKey = geminiApiKey.value();
+    const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    let promptParts = [];
+    if (image) {
+        promptParts.push({ inlineData: image });
+        promptParts.push({
+            text: "画像を分析して記憶データを作成。出力JSON: {summary, tags, fullText}",
+        });
+    }
+    else {
+        promptParts.push({
+            text: `テキストを整理。内容: ${text} 出力JSON: {summary, tags, fullText}`,
+        });
+    }
+    const result = await model.generateContent(promptParts);
+    const jsonStr = result.response
+        .text()
+        .replace(/```json|```/g, "")
+        .trim();
+    let aiData;
+    try {
+        aiData = JSON.parse(jsonStr);
+    }
+    catch (_a) {
+        aiData = { fullText: text, summary: text.substring(0, 20), tags: ["LINE"] };
+    }
+    const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
+    const embedRes = await embedModel.embedContent(aiData.fullText || text);
+    await db.collection("memories").add({
+        userId: uid,
+        text: aiData.fullText || text,
+        aiSummary: aiData.summary,
+        tags: [...(aiData.tags || []), "LINE"],
+        embedding: embedRes.embedding.values,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        hasImage: !!image,
+        source: "LINE",
+    });
+}
+</file>
+
+<file path="functions/index.ts">
+import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
+import { setGlobalOptions } from "firebase-functions/v2";
+import { defineSecret } from "firebase-functions/params";
+import * as admin from "firebase-admin";
+import axios from "axios";
+import * as cheerio from "cheerio";
+import * as line from "@line/bot-sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// ★ここにStripeの商品ID (price_xxxx) を入れてください
-const STRIPE_PRICE_ID = "price_XXXXXXXXXXXXXXXXXXXXXXXX";
-
-// ★ここに無条件でPRO扱いにするメールアドレスを入れてください
-const ADMIN_EMAILS = [
-  "gongedonghuam@gmail.com", // あなたのアドレス
-];
-
-export interface Memory {
-  id: string;
-  userId: string;
-  text: string;
-  aiSummary?: string;
-  tags?: string[];
-  createdAt: any;
-  hasImage?: boolean;
-  fileType?: string;
-  embedding?: number[];
-  sourceUrl?: string;
+if (admin.apps.length === 0) {
+  admin.initializeApp();
 }
 
-export interface ChatLog {
-  id: string;
-  userId: string;
-  question: string;
-  answer: string;
-  createdAt: any;
-  mermaidCode?: string;
-  action?: {
-    title: string;
-    date?: string;
-    url: string;
-  };
-}
+const db = admin.firestore();
+setGlobalOptions({ region: "asia-northeast1", memory: "1GiB" });
 
-export interface User {
-  uid: string;
-  email: string;
-  displayName?: string;
-  photoURL?: string | null;
-  // ▼ 課金・制限用データ
-  isPro?: boolean;
-  dailyUsage?: number;
-  lastUsageDate?: string;
-  stripeId?: string;
-  role?: string;
-}
+const lineBotToken = defineSecret("LINE_BOT_TOKEN");
+const lineBotSecret = defineSecret("LINE_BOT_SECRET");
+const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
+const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
-const currentUser = ref<User | null>(null);
-const memories = ref<Memory[]>([]);
-const chatLogs = ref<ChatLog[]>([]);
-const loading = ref(false);
-const isAiThinking = ref(false);
-const activeTag = ref<string | null>(null);
-
-// ファイルをBase64に変換
-const fileToGenerativePart = async (file: File) => {
-  return new Promise<{ inlineData: { data: string; mimeType: string } }>(
-    (resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = (reader.result as string).split(",")[1];
-        resolve({ inlineData: { data: base64String, mimeType: file.type } });
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    },
-  );
-};
-
-// コサイン類似度 (関連度計算)
-const cosineSimilarity = (vecA: number[], vecB: number[]) => {
-  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < vecA.length; i++) {
-    dotProduct += vecA[i] * vecB[i];
-    normA += vecA[i] * vecA[i];
-    normB += vecB[i] * vecB[i];
+// 1. URLスクレイピング
+export const scrapeUrl = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const { url } = request.data;
+  try {
+    const response = await axios.get(url, {
+      headers: { "User-Agent": "Mozilla/5.0..." },
+      timeout: 10000,
+    });
+    const $ = cheerio.load(response.data);
+    $("script").remove();
+    $("style").remove();
+    const title = $("title").text().trim() || "No Title";
+    let content = "";
+    $("p, h1, h2, article").each((_, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 20) content += text + "\n";
+    });
+    return { success: true, title, content: content.slice(0, 50000) };
+  } catch (error: any) {
+    throw new HttpsError("internal", error.message);
   }
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-};
+});
 
-export function useMyBrain() {
-  const getEmbeddingModel = (apiKey: string) => {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    return genAI.getGenerativeModel({ model: "text-embedding-004" });
-  };
-
-  const getSmartModelName = async (apiKey: string): Promise<string> => {
+// 2. LINE連携 (アカウント紐付け) ★ここが追加されました
+export const linkLineAccount = onCall(
+  { secrets: [lineLoginChannelId, lineLoginChannelSecret] },
+  async (request) => {
+    if (!request.auth)
+      throw new HttpsError("unauthenticated", "Login required");
+    const { code, redirectUri } = request.data;
     try {
-      // Proユーザーなら高性能モデルを使うなどの分岐も可能
-      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-      const listResponse = await fetch(listUrl);
-      if (!listResponse.ok) return "gemini-1.5-flash";
-      const listData = await listResponse.json();
-      const generationModels = (listData.models || []).filter((m: any) =>
-        m.supportedGenerationMethods?.includes("generateContent"),
+      const params = new URLSearchParams();
+      params.append("grant_type", "authorization_code");
+      params.append("code", code);
+      params.append("redirect_uri", redirectUri);
+      params.append("client_id", lineLoginChannelId.value());
+      params.append("client_secret", lineLoginChannelSecret.value());
+
+      const tokenRes = await axios.post(
+        "https://api.line.me/oauth2/v2.1/token",
+        params,
       );
-      // Flashモデルを優先
-      const flash = generationModels.find((m: any) =>
-        m.name.includes("gemini-1.5-flash"),
-      );
-      const targetModelObj = flash || generationModels[0];
-      return targetModelObj?.name.replace("models/", "") || "gemini-1.5-flash";
-    } catch (e) {
-      return "gemini-1.5-flash";
-    }
-  };
-
-  // ----------------------------------------------------
-  // ▼ 1. 課金・制限ロジック
-  // ----------------------------------------------------
-  const checkAndIncrementUsage = async (): Promise<boolean> => {
-    if (!currentUser.value) return false;
-
-    // Proユーザーは無制限
-    if (currentUser.value.isPro) return true;
-
-    const todayStr = new Date().toISOString().split("T")[0];
-    const userRef = doc(db, "users", currentUser.value.uid);
-
-    // 確実な判定のため最新データを取得
-    const snap = await getDoc(userRef);
-    const data = snap.data();
-
-    let currentCount = 0;
-
-    // 日付が変わっていたらリセット
-    if (data?.lastUsageDate !== todayStr) {
-      currentCount = 0;
-      await updateDoc(userRef, {
-        dailyUsage: 0,
-        lastUsageDate: todayStr,
-      });
-    } else {
-      currentCount = data?.dailyUsage || 0;
-    }
-
-    // 制限チェック (5回)
-    if (currentCount >= 5) {
-      alert(
-        "本日の無料枠（5回）を使い切りました。\nProプランで無制限に解放しましょう！🚀",
-      );
-      return false;
-    }
-
-    // カウントアップ
-    await updateDoc(userRef, {
-      dailyUsage: increment(1),
-      lastUsageDate: todayStr,
-    });
-
-    return true;
-  };
-
-  // Stripe Checkoutへ遷移
-  const startSubscription = async () => {
-    if (!currentUser.value) return;
-
-    // Extensionが監視するコレクションへ書き込み
-    const sessionsRef = collection(
-      db,
-      "users",
-      currentUser.value.uid,
-      "checkout_sessions",
-    );
-    const docRef = await addDoc(sessionsRef, {
-      price: STRIPE_PRICE_ID,
-      success_url: window.location.origin + "/app",
-      cancel_url: window.location.origin + "/app",
-    });
-
-    // URL発行を待機
-    onSnapshot(docRef, (snap) => {
-      const { url } = snap.data() || {};
-      if (url) {
-        window.location.assign(url);
-      }
-    });
-  };
-
-  // ----------------------------------------------------
-  // ▼ 2. 認証・初期化 (修正版)
-  // ----------------------------------------------------
-  const initAuth = () => {
-    onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // ★修正: まずユーザーIDを確定させて、データ取得ができる状態にする
-        currentUser.value = {
-          uid: user.uid,
-          email: user.email || "",
-          displayName: user.displayName || undefined,
-          photoURL: user.photoURL || undefined,
-          isPro: false, // 仮のデフォルト値
-          dailyUsage: 0,
-        };
-
-        // 並行して詳細データを監視
-        onSnapshot(doc(db, "users", user.uid), (docSnap) => {
-          const data = docSnap.data();
-          if (data && currentUser.value) {
-            const isAdmin = ADMIN_EMAILS.includes(user.email || "");
-            const isSubscribed =
-              !!data.stripeId || data.role === "pro" || isAdmin;
-
-            currentUser.value = {
-              ...currentUser.value, // uid等を維持
-              displayName: data.displayName || currentUser.value.displayName,
-              isPro: isSubscribed,
-              dailyUsage: data.dailyUsage || 0,
-              lastUsageDate: data.lastUsageDate,
-              stripeId: data.stripeId,
-              role: data.role,
-            };
-          }
-        });
-
-        // ユーザーIDがセットされた状態でデータ取得を実行
-        await Promise.all([fetchMemories(), fetchChatLogs()]);
-      } else {
-        currentUser.value = null;
-        memories.value = [];
-        chatLogs.value = [];
-      }
-    });
-  };
-
-  const logout = async () => {
-    await signOut(auth);
-    window.location.reload();
-  };
-
-  // ----------------------------------------------------
-  // ▼ 3. データ取得
-  // ----------------------------------------------------
-  const fetchMemories = async () => {
-    if (!currentUser.value) return;
-    loading.value = true;
-    try {
-      // 全件取得 (新しい順)
-      let q = query(
-        collection(db, "memories"),
-        where("userId", "==", currentUser.value.uid),
-        orderBy("createdAt", "desc"),
-      );
-      const snap = await getDocs(q);
-      memories.value = snap.docs.map(
-        (d) =>
-          ({
-            id: d.id,
-            ...d.data(),
-          }) as Memory,
-      );
-    } catch (e) {
-      console.error("Fetch memories error:", e);
-    } finally {
-      loading.value = false;
-    }
-  };
-
-  const fetchChatLogs = async () => {
-    if (!currentUser.value) return;
-    try {
-      const q = query(
-        collection(db, "chat_logs"),
-        where("userId", "==", currentUser.value.uid),
-        orderBy("createdAt", "desc"),
-        limit(50),
-      );
-      const snap = await getDocs(q);
-      chatLogs.value = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }) as ChatLog)
-        .reverse();
-    } catch (e) {
-      console.error("Fetch chat logs error:", e);
-    }
-  };
-
-  const selectTag = async (tag: string | null) => {
-    activeTag.value = tag;
-  };
-
-  const filteredMemories = computed(() => {
-    if (!activeTag.value) return memories.value;
-    return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
-  });
-
-  // ----------------------------------------------------
-  // ▼ 4. メモ追加 (AI解析・音声対応・リコメンド)
-  // ----------------------------------------------------
-  const addMemory = async (text: string, file?: File | null) => {
-    // 制限チェック
-    const canUse = await checkAndIncrementUsage();
-    if (!canUse) return null;
-
-    if (!currentUser.value) return null;
-    isAiThinking.value = true;
-
-    try {
-      const isImage = file?.type.startsWith("image/");
-      const isPdf = file?.type === "application/pdf";
-      const isAudio = file?.type.startsWith("audio/");
-
-      const fileTypeLabel = isImage
-        ? "画像"
-        : isPdf
-          ? "PDF"
-          : isAudio
-            ? "音声"
-            : "ファイル";
-      const initialText = file ? `(${fileTypeLabel}解析中...) ${text}` : text;
-
-      const docRef = await addDoc(collection(db, "memories"), {
-        userId: currentUser.value.uid,
-        text: initialText,
-        createdAt: serverTimestamp(),
-        tags: [],
-        aiSummary: "AI処理中...",
-        hasImage: !!file,
-        fileType: file?.type || null,
+      const { access_token } = tokenRes.data;
+      const profileRes = await axios.get("https://api.line.me/v2/profile", {
+        headers: { Authorization: `Bearer ${access_token}` },
       });
 
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (apiKey) {
-        const targetModelName = await getSmartModelName(apiKey);
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-          model: targetModelName,
-          generationConfig: { responseMimeType: "application/json" },
+      await db.collection("users").doc(request.auth.uid).set(
+        {
+          isLineLinked: true,
+          lineUserId: profileRes.data.userId,
+          lineDisplayName: profileRes.data.displayName,
+        },
+        { merge: true },
+      );
+
+      return { success: true };
+    } catch (error: any) {
+      throw new HttpsError("internal", "LINE連携失敗");
+    }
+  },
+);
+
+// 3. LINE Webhook (ボット機能) ★ここが追加されました
+export const lineWebhook = onRequest(
+  { secrets: [lineBotToken, lineBotSecret, geminiApiKey] },
+  async (req, res) => {
+    const token = lineBotToken.value();
+    const client = new line.Client({ channelAccessToken: token });
+    const events = req.body.events;
+
+    for (const event of events) {
+      if (event.type !== "message") continue;
+      const lineUserId = event.source.userId;
+      if (!lineUserId) continue;
+
+      // LINE IDからユーザーを特定
+      const usersSnap = await db
+        .collection("users")
+        .where("lineUserId", "==", lineUserId)
+        .limit(1)
+        .get();
+      if (usersSnap.empty) {
+        await client.replyMessage(event.replyToken, {
+          type: "text",
+          text: "アプリでLINE連携を行ってください🙇‍♂️",
         });
+        continue;
+      }
+      const uid = usersSnap.docs[0].id;
 
-        let promptParts: any[] = [];
-
-        if (file) {
-          const filePart = await fileToGenerativePart(file);
-          promptParts.push(filePart);
-
-          // ★音声(議事録)対応
-          if (isAudio) {
-            promptParts.push({
-              text: `
-                これは会議や独り言の音声データです。以下の指示に従って処理してください。
-                1. 内容を詳細に書き起こし・要約してください。
-                2. 決定事項やネクストアクション（タスク）があれば抽出してください。
-                3. ユーザーのメモ: ${text}
-                
-                出力形式: JSON {"summary": "20字以内のタイトル", "tags": ["議事録", "音声メモ"], "fullText": "## 要約\n...\n\n## 書き起こし\n...\n\n## タスク\n- [ ] ..."}
-              `,
-            });
-          } else {
-            // 画像・PDF用
-            promptParts.push({
-              text: `
-                画像/資料を分析して記憶データを作成してください。
-                ユーザーメモ: ${text}
-                出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "全テキスト"}
-              `,
-            });
-          }
-        } else {
-          promptParts.push({
-            text: `
-            以下のテキストを分析して記憶データを作成してください。
-            内容: ${text}
-            出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "${text}"}
-          `,
+      try {
+        if (event.message.type === "text") {
+          await saveMemoryFromLine(uid, event.message.text, null);
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: "📝 メモしました！",
+          });
+        } else if (event.message.type === "image") {
+          const stream = await client.getMessageContent(event.message.id);
+          const chunks: any[] = [];
+          for await (const chunk of stream) chunks.push(chunk);
+          const buffer = Buffer.concat(chunks);
+          await saveMemoryFromLine(uid, "LINE画像", {
+            data: buffer.toString("base64"),
+            mimeType: "image/jpeg",
+          });
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: "📷 画像を保存しました！",
           });
         }
-
-        const result = await model.generateContent(promptParts);
-        const aiData = JSON.parse(result.response.text());
-        const finalContent = file
-          ? `【${fileTypeLabel}】${text}\n\n${aiData.fullText}`
-          : text;
-
-        const embedModel = getEmbeddingModel(apiKey);
-        const embedResult = await embedModel.embedContent(finalContent);
-        const embedding = embedResult.embedding.values;
-
-        await updateDoc(docRef, {
-          text: finalContent,
-          aiSummary: aiData.summary,
-          tags: aiData.tags,
-          embedding: embedding,
-        });
-
-        const newMem: Memory = {
-          id: docRef.id,
-          userId: currentUser.value.uid,
-          text: finalContent,
-          aiSummary: aiData.summary,
-          tags: aiData.tags,
-          createdAt: new Date(),
-          hasImage: !!file,
-          fileType: file?.type,
-          embedding: embedding,
-        };
-        memories.value.unshift(newMem);
-
-        // ★「芋づる式」リコメンドロジック
-        // 類似度が高い(0.65以上)過去のメモを探す
-        const relatedMemories = memories.value
-          .filter((m) => m.id !== docRef.id && m.embedding)
-          .map((m) => ({
-            ...m,
-            score: m.embedding ? cosineSimilarity(embedding, m.embedding) : 0,
-          }))
-          .filter((m) => m.score > 0.65)
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 3); // Top 3
-
-        return relatedMemories; // 関連メモを返す
-      }
-    } catch (e) {
-      console.error("Add memory error:", e);
-      alert("保存エラー");
-      return null;
-    } finally {
-      isAiThinking.value = false;
-    }
-    return null;
-  };
-
-  const addUrlMemory = async (url: string) => {
-    const canUse = await checkAndIncrementUsage();
-    if (!canUse) return;
-
-    if (!currentUser.value) return;
-    isAiThinking.value = true;
-
-    try {
-      const functions = getFunctions();
-      const scrapeFunc = httpsCallable(functions, "scrapeUrl");
-      const result: any = await scrapeFunc({ url });
-
-      if (result.data.success) {
-        const { title, content } = result.data;
-        const fullText = `【WEB記事】${title}\nURL: ${url}\n\n${content}`;
-        // URL保存もEmbedding対象にするため addMemory を経由して保存
-        await addMemory(fullText);
-      }
-    } catch (e: any) {
-      console.error("URL Add Error:", e);
-      alert("記事の読み込みに失敗しました: " + e.message);
-    } finally {
-      isAiThinking.value = false;
-    }
-  };
-
-  const updateMemory = async (id: string, newText: string) => {
-    if (!currentUser.value || !newText.trim()) return;
-    try {
-      await updateDoc(doc(db, "memories", id), { text: newText });
-      const target = memories.value.find((m) => m.id === id);
-      if (target) target.text = newText;
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const deleteMemory = async (id: string) => {
-    if (!confirm("削除しますか？")) return;
-    await deleteDoc(doc(db, "memories", id));
-    memories.value = memories.value.filter((m) => m.id !== id);
-  };
-
-  const deleteChatLog = async (id: string) => {
-    await deleteDoc(doc(db, "chat_logs", id));
-    chatLogs.value = chatLogs.value.filter((l) => l.id !== id);
-  };
-
-  // ----------------------------------------------------
-  // ▼ 5. チャット機能
-  // ----------------------------------------------------
-  const askBrain = async (question: string): Promise<string> => {
-    const canUse = await checkAndIncrementUsage();
-    if (!canUse) return "";
-
-    if (!question.trim() || !currentUser.value) return "";
-    isAiThinking.value = true;
-
-    try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-
-      const embedModel = getEmbeddingModel(apiKey);
-      const qEmbed = await embedModel.embedContent(question);
-      const qVec = qEmbed.embedding.values;
-
-      const scoredMemories = memories.value
-        .map((m) => ({
-          ...m,
-          score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
-        }))
-        .sort((a, b) => b.score - a.score);
-
-      const contextMemories = scoredMemories.slice(0, 30);
-      const context = contextMemories
-        .map(
-          (m) =>
-            `- [${m.createdAt?.toDate ? m.createdAt.toDate().toLocaleDateString() : ""}] ${m.text.slice(0, 500)}`,
-        )
-        .join("\n\n");
-
-      const targetModelName = await getSmartModelName(apiKey);
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: targetModelName });
-
-      const prompt = `
-        あなたはユーザーの「第二の脳」です。以下の【記憶データ】を参考に質問に答えてください。
-        
-        【重要指示】
-        回答は必ず以下のJSON形式で行ってください。Markdownは不要です。
-        {
-          "answer": "質問への回答本文（丁寧な口調で）",
-          "mermaid": "関連性や構造を図解するためのMermaid記法コード（グラフやフローチャート）。不要な場合はnull",
-          "action": { "title": "カレンダー登録用の件名", "date": "YYYY-MM-DD HH:mm (推定日時)", "description": "詳細" } または null
-        }
-
-        【ユーザーの質問】${question}
-        【記憶データ(関連順)】${context}
-      `;
-
-      const result = await model.generateContent(prompt);
-      const rawText = result.response.text();
-
-      const cleanJson = rawText
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
-      let data;
-      try {
-        data = JSON.parse(cleanJson);
       } catch (e) {
-        data = { answer: rawText, mermaid: null, action: null };
+        console.error(e);
       }
-
-      let actionUrl = "";
-      if (data.action && data.action.title) {
-        const baseUrl =
-          "https://www.google.com/calendar/render?action=TEMPLATE";
-        const textParam = `&text=${encodeURIComponent(data.action.title)}`;
-        const detailsParam = `&details=${encodeURIComponent(data.action.description || "")}`;
-        actionUrl = `${baseUrl}${textParam}${detailsParam}`;
-      }
-
-      const logData = {
-        userId: currentUser.value.uid,
-        question: question,
-        answer: data.answer,
-        mermaidCode: data.mermaid || null,
-        action: actionUrl
-          ? { title: data.action.title, url: actionUrl, date: data.action.date }
-          : null,
-        createdAt: serverTimestamp(),
-      };
-
-      const logRef = await addDoc(collection(db, "chat_logs"), logData);
-
-      chatLogs.value.push({
-        id: logRef.id,
-        ...logData,
-        createdAt: new Date(),
-      } as any);
-
-      return data.answer;
-    } catch (e: any) {
-      return "エラー: " + e.message;
-    } finally {
-      isAiThinking.value = false;
     }
-  };
+    res.json({ success: true });
+  },
+);
 
-  const allTags = computed(() => {
-    const tags = new Set<string>();
-    memories.value.forEach((m) => {
-      if (m.tags) m.tags.forEach((t) => tags.add(t));
+async function saveMemoryFromLine(
+  uid: string,
+  text: string,
+  image: { data: string; mimeType: string } | null,
+) {
+  const apiKey = geminiApiKey.value();
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  let promptParts: any[] = [];
+  if (image) {
+    promptParts.push({ inlineData: image });
+    promptParts.push({
+      text: "画像を分析して記憶データを作成。出力JSON: {summary, tags, fullText}",
     });
-    return Array.from(tags);
-  });
+  } else {
+    promptParts.push({
+      text: `テキストを整理。内容: ${text} 出力JSON: {summary, tags, fullText}`,
+    });
+  }
 
-  return {
-    currentUser,
-    memories,
-    filteredMemories,
-    chatLogs,
-    loading,
-    isAiThinking,
-    activeTag,
-    allTags,
-    initAuth,
-    logout,
-    addMemory,
-    addUrlMemory,
-    updateMemory,
-    deleteMemory,
-    askBrain,
-    deleteChatLog,
-    selectTag,
-    startSubscription, // 追加
-  };
+  const result = await model.generateContent(promptParts);
+  const jsonStr = result.response
+    .text()
+    .replace(/```json|```/g, "")
+    .trim();
+  let aiData;
+  try {
+    aiData = JSON.parse(jsonStr);
+  } catch {
+    aiData = { fullText: text, summary: text.substring(0, 20), tags: ["LINE"] };
+  }
+
+  const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
+  const embedRes = await embedModel.embedContent(aiData.fullText || text);
+
+  await db.collection("memories").add({
+    userId: uid,
+    text: aiData.fullText || text,
+    aiSummary: aiData.summary,
+    tags: [...(aiData.tags || []), "LINE"],
+    embedding: embedRes.embedding.values,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    hasImage: !!image,
+    source: "LINE",
+  });
 }
+</file>
+
+<file path="src/components/AppHeader/AppHeader.vue">
+<script setup lang="ts">
+import { useAppHeader } from "./useAppHeader";
+import { useMyBrain } from "@/composables/useMyBrain"; // 追加
+
+const { currentUser } = useMyBrain(); // ユーザー情報取得
+
+// ★設定項目
+const LINE_LOGIN_CHANNEL_ID = "2008915242";
+const REDIRECT_URI = window.location.origin + "/app";
+
+const startLineLogin = () => {
+  const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${LINE_LOGIN_CHANNEL_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=random123&scope=profile%20openid`;
+  window.location.href = url;
+};
+
+const { logout } = useAppHeader();
+</script>
+
+<template>
+  <header
+    class="h-14 px-4 flex items-center justify-between border-b border-slate-800 bg-slate-900/50 backdrop-blur z-20"
+  >
+    <div class="font-black text-lg tracking-tight text-white">🧠 My Brain</div>
+
+    <div class="flex items-center gap-3">
+      <div
+        v-if="currentUser?.isLineLinked"
+        class="text-[10px] bg-slate-700 text-slate-300 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 cursor-default border border-slate-600"
+      >
+        <span>✅</span> LINE連携済
+      </div>
+
+      <button
+        v-else
+        @click="startLineLogin"
+        class="text-[10px] bg-[#06C755] text-white px-3 py-1.5 rounded-full font-bold hover:opacity-90 transition flex items-center gap-1"
+      >
+        <span>💬</span> LINE連携
+      </button>
+
+      <button
+        @click="logout"
+        class="text-xs font-bold text-slate-500 hover:text-white transition"
+      >
+        ログアウト
+      </button>
+    </div>
+  </header>
+</template>
+</file>
+
+<file path="src/components/InputFooter/InputFooter.vue">
+<script setup lang="ts">
+import { computed } from "vue";
+import { useInputFooter } from "./useInputFooter";
+import { useMyBrain } from "@/composables/useMyBrain";
+
+const props = defineProps<{ modelValue: "memo" | "chat" | "url" }>();
+const emit = defineEmits<{
+  (e: "update:modelValue", val: "memo" | "chat" | "url"): void;
+}>();
+
+const inputMode = computed({
+  get: () => props.modelValue,
+  set: (val) => emit("update:modelValue", val),
+});
+
+const {
+  inputText,
+  selectedFile,
+  filePreview,
+  fileInputRef,
+  isListening,
+  toggleListening,
+  handleFileSelect,
+  clearFile,
+  handleSend,
+} = useInputFooter(props.modelValue);
+const { currentUser, startSubscription, isSaving, isAiThinking } = useMyBrain(); // ★isSaving追加
+
+const remainingCount = computed(() =>
+  currentUser.value?.isPro ? 9999 : 5 - (currentUser.value?.dailyUsage || 0),
+);
+</script>
+
+<template>
+  <footer
+    class="fixed bottom-0 w-full bg-slate-900/95 backdrop-blur-md border-t border-slate-800 p-4 pb-8 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.3)]"
+  >
+    <div class="max-w-md mx-auto relative">
+      <div
+        v-if="isSaving || isAiThinking"
+        class="absolute -top-16 left-0 right-0 flex justify-center"
+      >
+        <div
+          class="bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg font-bold text-xs flex items-center gap-2 animate-pulse"
+        >
+          <span class="text-lg">{{ isSaving ? "🧠" : "🤖" }}</span>
+          {{ isSaving ? "脳に書き込み中..." : "AIが思考中..." }}
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between px-2 mb-3">
+        <div class="text-[10px] font-bold text-slate-400">
+          <span
+            v-if="currentUser?.isPro"
+            class="text-yellow-400 flex items-center gap-1"
+            >👑 PRO Plan</span
+          >
+          <span v-else
+            >Free: 残り
+            <span
+              :class="remainingCount === 0 ? 'text-red-500' : 'text-white'"
+              >{{ remainingCount }}</span
+            >
+            / 5回</span
+          >
+        </div>
+
+        <div class="flex flex-col items-end gap-1">
+          <button
+            v-if="!currentUser?.isPro"
+            @click="startSubscription"
+            class="text-[10px] bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-3 py-1 rounded-full font-bold shadow hover:opacity-90 transition"
+          >
+            🚀 PROへ (¥1,000)
+          </button>
+
+          <router-link
+            to="/legal"
+            class="text-[9px] text-slate-500 hover:text-slate-300 transition underline"
+          >
+            特定商取引法に基づく表記
+          </router-link>
+        </div>
+      </div>
+
+      <div
+        class="flex bg-slate-800 p-1 rounded-xl mb-3 relative overflow-hidden"
+      >
+        <div
+          class="absolute top-1 bottom-1 bg-white/10 rounded-lg transition-all duration-300 ease-out"
+          :style="{
+            left:
+              inputMode === 'memo'
+                ? '4px'
+                : inputMode === 'url'
+                  ? '33.3%'
+                  : '66.6%',
+            width: 'calc(33.3% - 5px)',
+          }"
+        ></div>
+        <button
+          @click="inputMode = 'memo'"
+          :class="[
+            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
+            inputMode === 'memo' ? 'text-white' : 'text-slate-400',
+          ]"
+        >
+          📝 メモ
+        </button>
+        <button
+          @click="inputMode = 'url'"
+          :class="[
+            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
+            inputMode === 'url' ? 'text-green-400' : 'text-slate-400',
+          ]"
+        >
+          🌐 URL
+        </button>
+        <button
+          @click="inputMode = 'chat'"
+          :class="[
+            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
+            inputMode === 'chat' ? 'text-blue-400' : 'text-slate-400',
+          ]"
+        >
+          🔍 会話
+        </button>
+      </div>
+
+      <div
+        v-if="selectedFile"
+        class="relative mb-2 inline-block animate-fade-in"
+      >
+        <img
+          v-if="filePreview"
+          :src="filePreview"
+          class="h-20 rounded-lg border border-slate-600 object-cover"
+        />
+        <div
+          v-else
+          class="h-20 w-20 bg-slate-800 rounded-lg border border-slate-600 flex flex-col items-center justify-center p-2"
+        >
+          <span class="text-2xl">📄</span
+          ><span
+            class="text-[8px] text-slate-400 truncate w-full text-center mt-1"
+            >{{ selectedFile.name }}</span
+          >
+        </div>
+        <button
+          @click="clearFile"
+          class="absolute -top-2 -right-2 bg-slate-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-500"
+        >
+          ×
+        </button>
+      </div>
+
+      <div class="relative flex items-end gap-2">
+        <button
+          @click="toggleListening"
+          :class="[
+            'w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl transition shadow-lg relative overflow-hidden',
+            isListening
+              ? 'bg-red-500 text-white'
+              : 'bg-slate-800 text-slate-400',
+          ]"
+        >
+          <span class="relative z-10">{{ isListening ? "■" : "🎙️" }}</span>
+          <div
+            v-if="isListening"
+            class="absolute inset-0 bg-red-600 animate-ping opacity-75"
+          ></div>
+        </button>
+
+        <div v-if="inputMode === 'memo'" class="flex-shrink-0">
+          <input
+            type="file"
+            ref="fileInputRef"
+            accept="image/*,application/pdf,text/plain,audio/*"
+            class="hidden"
+            @change="handleFileSelect"
+          />
+          <button
+            @click="fileInputRef?.click()"
+            class="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-xl text-slate-400 hover:text-white transition"
+          >
+            📎
+          </button>
+        </div>
+
+        <textarea
+          v-model="inputText"
+          rows="3"
+          class="flex-1 bg-slate-800 border border-slate-700 text-white rounded-2xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 resize-none leading-relaxed text-sm"
+          :placeholder="
+            inputMode === 'url'
+              ? 'https://...'
+              : inputMode === 'memo'
+                ? '何を記憶しますか？'
+                : 'AIに質問...'
+          "
+          @keydown.enter.ctrl="handleSend(inputMode)"
+        ></textarea>
+
+        <button
+          @click="handleSend(inputMode)"
+          :disabled="(!inputText && !selectedFile) || isSaving || isAiThinking"
+          class="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg self-end mb-1"
+        >
+          ↑
+        </button>
+      </div>
+    </div>
+  </footer>
+</template>
 </file>
 
 <file path="src/router/index.ts">
@@ -5189,69 +4529,509 @@ export default router;
 </html>
 </file>
 
-<file path=".firebase/hosting.ZGlzdA.cache">
-sw.js,1768725278318,49577705aaa89e37823047e5aa6a06dae2fa54ae5bd175e800452b290b22ab2f
-registerSW.js,1768725277580,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-manifest.webmanifest,1768725277578,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-workbox-8c29f6e4.js,1768725278319,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-index.html,1768725277580,3bda019a9221ed99a5b7c6c5bac81d22ed7da499022d93c17cc1a0b5db449dea
-firebase-messaging-sw.js,1768725277181,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-lp.html,1768725277183,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/stateDiagram-v2-4FDKWEC3-STih6-AR.js,1768725277578,8d1981906c8192e9c08f8b64c5f3cb9367cee115f1a7f728b3dd3e2af41a26f0
-assets/stateDiagram-FKZM4ZOC-NsNNOrtR.js,1768725277578,09937c2ead99f5c4ca1e93e8cdd4f2f616eed8069cf86468b5a6c00881e3edd1
-assets/timeline-definition-IT6M3QCI-PrQRipWR.js,1768725277578,2c81cde84c5651017ab4d6a062b87b4808de231121b3a60cbddafaf5e5e897e6
-assets/ordinal-Cboi1Yqb.js,1768725277578,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/sankeyDiagram-TZEHDZUN-DKPoqrGU.js,1768725277578,23c894c23b037c41eb2230edd2b0ae214781428ff2ee0f171634072124df804b
-assets/pieDiagram-ADFJNKIX-Dxvzw10A.js,1768725277578,5adb3530fd57bd4497ec0c0b8b26bf3ccbe42e22aa2607e70afd21faa2398374
-assets/xychartDiagram-PRI3JC2R-6ZJqErp_.js,1768725277578,172e266fbb2a0a0f2bb2606056595c1edae5c9cd21498341ff49aa5df2d95253
-assets/min-C7t9U-en.js,1768725277578,45007581649c5cf5d775e7e216409a59119ba79bd9f2c9fd9fbe923b86ffda90
-assets/requirementDiagram-UZGBJVZJ-BA174Yqv.js,1768725277577,d85a17fe7e2a43e7783b86e2ab97406a84368a263f55f3bc2a95dffa50aec44b
-assets/quadrantDiagram-AYHSOK5B-DD-IbPNp.js,1768725277577,1a5156dff0d3dbbb5754e6ec49f52c42b3d287f4ca5f2734df3a6b5704c09e0c
-assets/linear-KdIUKbtX.js,1768725277578,503ef4c0c618c58967c76f1047c38ae72fc1a8e7e04238243d6733ef9c61d7e2
-assets/kanban-definition-3W4ZIXB7-Bpt0y2tq.js,1768725277578,4e863b3b91e6ae861543f6c2d6ea5437fd0a95f4af0bb7df73388f4973edb73f
-assets/init-Gi6I4Gst.js,1768725277578,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/infoDiagram-WHAUD3N6-v0EJ1XgO.js,1768725277578,515c6a1f1392d9498ade0b4358efaf40ce2006bca9536fc06e6bb70da4cb9132
-assets/layout-D7IKigxY.js,1768725277579,0a8c187f1803cc623fcdb53903678eca7f412b4fa209bfcdb20323a4b09361a0
-assets/mindmap-definition-VGOIOE7T-CKf-j7gR.js,1768725277578,0f56f381aa74e6a33c002321eaf938e973d4d8a27d76ff56cd4600a47e84c575
-assets/index-CwiKJ89y.css,1768725277577,adeebf48e7f41d2291b9558ecefd791718a65560424afff22eeb090cd2202b26
-assets/graph-_hxnuo0P.js,1768725277578,4d2e1f866c7136d65e43fa64b96bec79452761f71a3b2ba73072cefc9ec04e4c
-assets/gitGraphDiagram-NY62KEGX-CSdOJl1G.js,1768725277577,172d68edfbdcf50737d0c43ab6b533a5d26d802d851d30ea63b3146c5302053f
-assets/diagram-S2PKOQOG-BoejZ_xk.js,1768725277578,0178d0e94a6bb4aa2228b971e4c9613d84e158ba78d4a1afaf5c4d8e95519067
-assets/erDiagram-Q2GNP2WA-B27Unlet.js,1768725277577,4884fa307141459600adca7e8f98569ed09e13157dd0de463743a6342013e3e9
-assets/diagram-PSM6KHXK-BMfM2nIT.js,1768725277578,58a79196c93c8cfca065c67b2494ebb8a8bf546ca1a6fc483e60271a650a554b
-assets/diagram-QEK2KX5R-BN4Rg2Xi.js,1768725277578,cb0248c1e04de8a24aa568cdbf11f4c9b3529da60bbbd1b24882c36b556588ea
-assets/defaultLocale-DX6XiGOO.js,1768725277578,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/journeyDiagram-XKPGCS4Q-DD-T9HCn.js,1768725277578,a2699a5bc05555460b0329a81a5b0abb94751c00be9e075c47731aad218c31a8
-assets/dagre-6UL2VRFP-BvGR6EBR.js,1768725277578,b9b15201a29d1532f8909f393fc6b4447c4febb08dc5842e8432f23a9273cecf
-assets/clone-BUM223jV.js,1768725277578,5589dad434310f1dfcaf103cc5f9671127912db408568b0b66f09aeebf63479d
-assets/classDiagram-v2-WZHVMYZB-D9816fWX.js,1768725277577,f5f61e2f8877a5db02ebcf27b56f87a7a50b4e6c269a4f26ec72412835d80d66
-assets/classDiagram-2ON5EDUG-D9816fWX.js,1768725277577,f5f61e2f8877a5db02ebcf27b56f87a7a50b4e6c269a4f26ec72412835d80d66
-assets/chunk-TZMSLE5B-BqJzYrut.js,1768725277578,72278f7bb309d61e3dd7561d1c4172992d332089118625f3168d0685902b804f
-assets/chunk-QZHKN3VN-D2DjA74P.js,1768725277577,89d34bea10f257e96e5ac92cf0607c71a020248e8534e5bb7a370ee3bdac3c85
-assets/flowDiagram-NV44I4VS-B9uS86au.js,1768725277577,55873dba6625a6d5b1a72e26e9f08404f14f7eaaf1b519fd7728a94573b45686
-assets/sequenceDiagram-WL72ISMW-BwdXQzI7.js,1768725277577,3ce2a6b653dcbe2f6764b61580db8ea767444f2d2ace285345617b7ce6bca60a
-assets/ganttDiagram-JELNMOA3-CYCn1Nnr.js,1768725277578,e1ddb966fb3e7562682822f37169909f54302f06ca4f23615ab642d83cd6e2cb
-assets/cose-bilkent-S5V4N54A-C14yuHcv.js,1768725277578,86a0f17334a672bd3a0c7e91a24b9925625a529634807d6dd4651fc4090e474d
-assets/chunk-QN33PNHL-JOyMDW46.js,1768725277578,0d53dd5fdf29a2869dafe0b6a5b7f633104182792dc5503d7080056c3534f1d5
-assets/chunk-FMBD7UC4-DogsVtcU.js,1768725277578,cca5decdb8cf7113ca5f8a9ce0bfc152ad3b482f5c1c70b048285d14cc637590
-assets/chunk-4BX2VUAB-DvTzZOdh.js,1768725277578,cdd05dac2be58eda19c21a9530e9f807660c491ead6480b46d6ccf95eeba53ba
-assets/chunk-55IACEB6-CruZhEOa.js,1768725277578,16ff9aa194e479823833a969eda951e8fbd029830b75ab606e444397bdbde350
-assets/chunk-DI55MBZ5-CC7B1yLp.js,1768725277578,05c3334d416b880ceb39bb8d571c26510aa30729e60517337dc4b83e8a672e2e
-assets/channel-CbcRdrbm.js,1768725277578,1371b961e66d472e9e8b639636ec40fc7f22d49a6704e65339be202771b754dc
-assets/chunk-B4BG7PRW-CcwkCoa2.js,1768725277578,5297adbf21fa63289c5dfb94351d170bcde2cd04eb78dd14ebe914c028570ce1
-assets/arc-DQ3lqqNM.js,1768725277578,a69e60a1e13cb99c32c6691988074222515558b0d3edecab19f61fc803ed86f2
-assets/_baseUniq-BrPbc2D5.js,1768725277578,81cb6916e25e5bf3a13eeae78ea6502efdd066c4faf62eae1f18f08d49c40af2
-assets/c4Diagram-YG6GDRKO-Cvb-HFLV.js,1768725277574,2ab0ebedc782b7840391a0987de1cc582b842bd5f17cf4d8c639ba9d48310eb5
-assets/blockDiagram-VD42YOAC-D3AAEvuD.js,1768725277578,0eaa27c39eb267f69a5ab57b514d55caee4618b748461f3db4b275140f008de4
-assets/architectureDiagram-VXUJARFQ-CSnTPJ1w.js,1768725277578,b72d7f95c178ab772e503ff690b4d15f0824c372eefb9a1c34294ca51b77c909
-assets/katex-Cu_Erd72.js,1768725277578,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-C8O4osaw.js,1768725277578,ec447b49b60a6ac7489b4b735a756cdfcfa7fb52b2f185bd949952e1f8201f71
-assets/cytoscape.esm-CyJtwmzi.js,1768725277578,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-CDVFGndu.js,1768725277580,766b613cb83b7fd961728a356dc9a5637c55a78a629aa215da883ecdc0d10e94
-logo.png,1768725277182,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1768725277200,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-apple-touch-icon.png,1768725277180,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-192x192.png,1768725277192,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+<file path="src/composables/useMyBrain.ts">
+import { ref, computed } from "vue";
+import { db, auth } from "@/firebase";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  limit,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  updateDoc,
+  setDoc,
+  orderBy,
+  serverTimestamp,
+  where,
+  onSnapshot,
+  increment,
+} from "firebase/firestore";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// ★設定項目 (ID等を書き換えてください)
+const STRIPE_PRICE_ID = "price_1SqvJAFjyhW5lKcrgAmd48sB "; // あなたのStripe価格IDに変更してください
+const ADMIN_EMAILS = [
+  "gongedonghuam@gmail.com", // あなたのアドレス
+];
+
+export interface Memory {
+  id: string;
+  userId: string;
+  text: string;
+  aiSummary?: string;
+  tags?: string[];
+  createdAt: any;
+  hasImage?: boolean;
+  fileType?: string;
+  embedding?: number[];
+  sourceUrl?: string;
+}
+
+export interface ChatLog {
+  id: string;
+  userId: string;
+  question: string;
+  answer: string;
+  createdAt: any;
+  mermaidCode?: string;
+  action?: {
+    title: string;
+    date?: string;
+    url: string;
+  };
+}
+
+export interface User {
+  uid: string;
+  email: string;
+  displayName?: string;
+  photoURL?: string | null;
+  isPro?: boolean;
+  dailyUsage?: number;
+  lastUsageDate?: string;
+  stripeId?: string;
+  role?: string;
+  isLineLinked?: boolean;
+}
+
+const currentUser = ref<User | null>(null);
+const memories = ref<Memory[]>([]);
+const chatLogs = ref<ChatLog[]>([]);
+const loading = ref(false);
+const isAiThinking = ref(false);
+const isSaving = ref(false);
+const activeTag = ref<string | null>(null);
+
+// ファイルをBase64に変換
+const fileToGenerativePart = async (file: File) => {
+  return new Promise<{ inlineData: { data: string; mimeType: string } }>(
+    (resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = (reader.result as string).split(",")[1];
+        resolve({ inlineData: { data: base64String, mimeType: file.type } });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    },
+  );
+};
+
+// コサイン類似度
+const cosineSimilarity = (vecA: number[], vecB: number[]) => {
+  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+};
+
+export function useMyBrain() {
+  const getEmbeddingModel = (apiKey: string) => {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    return genAI.getGenerativeModel({ model: "text-embedding-004" });
+  };
+
+  const getSmartModelName = async (apiKey: string): Promise<string> => {
+    // 常にFlashモデルを使用（コスト対策）
+    return "gemini-1.5-flash";
+  };
+
+  // ----------------------------------------------------
+  // ▼ 1. 課金・制限ロジック
+  // ----------------------------------------------------
+  const checkAndIncrementUsage = async (): Promise<boolean> => {
+    if (!currentUser.value) return false;
+    if (currentUser.value.isPro) return true;
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const userRef = doc(db, "users", currentUser.value.uid);
+    const snap = await getDoc(userRef);
+    const data = snap.data();
+
+    let currentCount = 0;
+    if (data?.lastUsageDate !== todayStr) {
+      currentCount = 0;
+      await updateDoc(userRef, { dailyUsage: 0, lastUsageDate: todayStr });
+    } else {
+      currentCount = data?.dailyUsage || 0;
+    }
+
+    if (currentCount >= 5) {
+      alert(
+        "本日の無料枠（5回）を使い切りました。\nProプランで無制限に解放しましょう！🚀",
+      );
+      return false;
+    }
+
+    await updateDoc(userRef, {
+      dailyUsage: increment(1),
+      lastUsageDate: todayStr,
+    });
+    return true;
+  };
+
+  const startSubscription = async () => {
+    if (!currentUser.value) return;
+    const sessionsRef = collection(
+      db,
+      "users",
+      currentUser.value.uid,
+      "checkout_sessions",
+    );
+    const docRef = await addDoc(sessionsRef, {
+      price: STRIPE_PRICE_ID,
+      success_url: window.location.origin + "/app",
+      cancel_url: window.location.origin + "/app",
+    });
+    onSnapshot(docRef, (snap) => {
+      const { url } = snap.data() || {};
+      if (url) window.location.assign(url);
+    });
+  };
+
+  // ----------------------------------------------------
+  // ▼ 2. 認証・初期化
+  // ----------------------------------------------------
+  const initAuth = () => {
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        currentUser.value = {
+          uid: user.uid,
+          email: user.email || "",
+          displayName: user.displayName || undefined,
+          photoURL: user.photoURL || undefined,
+          isPro: false,
+          dailyUsage: 0,
+          isLineLinked: false,
+        };
+
+        onSnapshot(doc(db, "users", user.uid), (docSnap) => {
+          const data = docSnap.data();
+          if (data && currentUser.value) {
+            const isAdmin = ADMIN_EMAILS.includes(user.email || "");
+            const isSubscribed =
+              !!data.stripeId || data.role === "pro" || isAdmin;
+
+            currentUser.value = {
+              ...currentUser.value,
+              displayName: data.displayName || currentUser.value.displayName,
+              isPro: isSubscribed,
+              dailyUsage: data.dailyUsage || 0,
+              lastUsageDate: data.lastUsageDate,
+              stripeId: data.stripeId,
+              role: data.role,
+              isLineLinked: data.isLineLinked || false,
+            };
+          }
+        });
+
+        await Promise.all([fetchMemories(), fetchChatLogs()]);
+      } else {
+        currentUser.value = null;
+        memories.value = [];
+        chatLogs.value = [];
+      }
+    });
+  };
+
+  const logout = async () => {
+    await signOut(auth);
+    window.location.reload();
+  };
+
+  // ----------------------------------------------------
+  // ▼ 3. データ取得
+  // ----------------------------------------------------
+  const fetchMemories = async () => {
+    if (!currentUser.value) return;
+    loading.value = true;
+    try {
+      let q = query(
+        collection(db, "memories"),
+        where("userId", "==", currentUser.value.uid),
+        orderBy("createdAt", "desc"),
+      );
+      const snap = await getDocs(q);
+      memories.value = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as Memory,
+      );
+    } catch (e) {
+      console.error("Fetch memories error:", e);
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const fetchChatLogs = async () => {
+    if (!currentUser.value) return;
+    try {
+      const q = query(
+        collection(db, "chat_logs"),
+        where("userId", "==", currentUser.value.uid),
+        orderBy("createdAt", "desc"),
+        limit(50),
+      );
+      const snap = await getDocs(q);
+      chatLogs.value = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as ChatLog)
+        .reverse();
+    } catch (e) {
+      console.error("Fetch chat logs error:", e);
+    }
+  };
+
+  const selectTag = async (tag: string | null) => {
+    activeTag.value = tag;
+  };
+
+  const filteredMemories = computed(() => {
+    if (!activeTag.value) return memories.value;
+    return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
+  });
+
+  // ----------------------------------------------------
+  // ▼ 4. メモ追加 (保存中ステータス・リコメンド)
+  // ----------------------------------------------------
+  const addMemory = async (text: string, file?: File | null) => {
+    if (!(await checkAndIncrementUsage())) return null;
+    isSaving.value = true; // ★保存開始
+
+    if (!currentUser.value) return null;
+
+    try {
+      const isAudio = file?.type.startsWith("audio/");
+      const initText = file ? `(解析中...) ${text}` : text;
+
+      const docRef = await addDoc(collection(db, "memories"), {
+        userId: currentUser.value.uid,
+        text: initText,
+        createdAt: serverTimestamp(),
+        tags: [],
+        aiSummary: "AI処理中...",
+        hasImage: !!file,
+        fileType: file?.type || null,
+      });
+
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (apiKey) {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: "gemini-1.5-flash",
+          generationConfig: { responseMimeType: "application/json" },
+        });
+
+        let promptParts: any[] = [];
+        if (file) {
+          const filePart = await fileToGenerativePart(file);
+          promptParts.push(filePart);
+          if (isAudio) {
+            promptParts.push({
+              text: `音声データです。書き起こしと要約とタスク抽出をして。ユーザーメモ:${text} 出力JSON:{summary, tags, fullText}`,
+            });
+          } else {
+            promptParts.push({
+              text: `画像/PDFです。内容を分析して。ユーザーメモ:${text} 出力JSON:{summary, tags, fullText}`,
+            });
+          }
+        } else {
+          promptParts.push({
+            text: `以下のテキストを整理・分析して。${text} 出力JSON:{summary, tags, fullText}`,
+          });
+        }
+
+        const result = await model.generateContent(promptParts);
+        const aiData = JSON.parse(result.response.text());
+        const finalContent = file
+          ? `【解析済み】${text}\n\n${aiData.fullText}`
+          : text;
+
+        const embedModel = getEmbeddingModel(apiKey);
+        const embedResult = await embedModel.embedContent(finalContent);
+        const embedding = embedResult.embedding.values;
+
+        await updateDoc(docRef, {
+          text: finalContent,
+          aiSummary: aiData.summary,
+          tags: aiData.tags,
+          embedding: embedding,
+        });
+
+        const newMem: Memory = {
+          id: docRef.id,
+          userId: currentUser.value.uid,
+          text: finalContent,
+          aiSummary: aiData.summary,
+          tags: aiData.tags,
+          createdAt: new Date(),
+          hasImage: !!file,
+          fileType: file?.type,
+          embedding: embedding,
+        };
+        memories.value.unshift(newMem);
+
+        // リコメンド
+        const relatedMemories = memories.value
+          .filter((m) => m.id !== docRef.id && m.embedding)
+          .map((m) => ({
+            ...m,
+            score: m.embedding ? cosineSimilarity(embedding, m.embedding) : 0,
+          }))
+          .filter((m) => m.score > 0.65)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3);
+
+        return relatedMemories;
+      }
+    } catch (e) {
+      console.error("Add memory error:", e);
+      alert("保存エラー");
+      return null;
+    } finally {
+      isSaving.value = false; // ★保存終了
+    }
+    return null;
+  };
+
+  const addUrlMemory = async (url: string) => {
+    if (!(await checkAndIncrementUsage())) return;
+    isSaving.value = true;
+    try {
+      const functions = getFunctions();
+      const scrapeFunc = httpsCallable(functions, "scrapeUrl");
+      const result: any = await scrapeFunc({ url });
+
+      if (result.data.success) {
+        const { title, content } = result.data;
+        const fullText = `【WEB記事】${title}\nURL: ${url}\n\n${content}`;
+        await addMemory(fullText);
+      }
+    } catch (e: any) {
+      alert("記事の読み込みに失敗しました: " + e.message);
+    } finally {
+      isSaving.value = false;
+    }
+  };
+
+  const askBrain = async (question: string): Promise<string> => {
+    if (!(await checkAndIncrementUsage())) return "";
+    isAiThinking.value = true;
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const embedModel = getEmbeddingModel(apiKey);
+      const qEmbed = await embedModel.embedContent(question);
+      const qVec = qEmbed.embedding.values;
+
+      const scoredMemories = memories.value
+        .map((m) => ({
+          ...m,
+          score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
+        }))
+        .sort((a, b) => b.score - a.score);
+
+      const context = scoredMemories
+        .slice(0, 20)
+        .map((m) => `- ${m.text.slice(0, 500)}`)
+        .join("\n\n");
+
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const prompt = `あなたは「第2の脳」です。記憶データ:${context}\n質問:${question}\n回答はJSON形式 {"answer": "回答", "mermaid": "図解コード(任意)", "action": null} で。`;
+
+      const result = await model.generateContent(prompt);
+      const data = JSON.parse(
+        result.response
+          .text()
+          .replace(/```json|```/g, "")
+          .trim(),
+      );
+
+      const logData = {
+        userId: currentUser.value!.uid,
+        question: question,
+        answer: data.answer,
+        mermaidCode: data.mermaid || null,
+        createdAt: serverTimestamp(),
+      };
+      const logRef = await addDoc(collection(db, "chat_logs"), logData);
+      chatLogs.value.push({
+        id: logRef.id,
+        ...logData,
+        createdAt: new Date(),
+      } as any);
+
+      return data.answer;
+    } catch (e: any) {
+      return "エラー: " + e.message;
+    } finally {
+      isAiThinking.value = false;
+    }
+  };
+
+  const updateMemory = async (id: string, newText: string) => {
+    if (!currentUser.value || !newText.trim()) return;
+    try {
+      await updateDoc(doc(db, "memories", id), { text: newText });
+      const target = memories.value.find((m) => m.id === id);
+      if (target) target.text = newText;
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const deleteMemory = async (id: string) => {
+    if (!confirm("削除しますか？")) return;
+    await deleteDoc(doc(db, "memories", id));
+    memories.value = memories.value.filter((m) => m.id !== id);
+  };
+
+  const deleteChatLog = async (id: string) => {
+    await deleteDoc(doc(db, "chat_logs", id));
+    chatLogs.value = chatLogs.value.filter((l) => l.id !== id);
+  };
+
+  const allTags = computed(() => {
+    const tags = new Set<string>();
+    memories.value.forEach((m) => {
+      if (m.tags) m.tags.forEach((t) => tags.add(t));
+    });
+    return Array.from(tags);
+  });
+
+  return {
+    currentUser,
+    memories,
+    filteredMemories,
+    chatLogs,
+    loading,
+    isAiThinking,
+    isSaving,
+    activeTag,
+    allTags,
+    initAuth,
+    logout,
+    addMemory,
+    addUrlMemory,
+    askBrain,
+    selectTag,
+    startSubscription,
+    // ▼ ここに追加しました！
+    updateMemory,
+    deleteMemory,
+    deleteChatLog,
+  };
+}
 </file>
 
 <file path="src/views/HomeView/HomeView.vue">
@@ -5260,9 +5040,8 @@ import { ref, onMounted, watch, nextTick } from "vue";
 import { useMyBrain, type Memory } from "@/composables/useMyBrain";
 import mermaid from "mermaid";
 import { httpsCallable, getFunctions } from "firebase/functions";
-import { getApp } from "firebase/app"; // ★追加: アプリ取得用
+import { getApp } from "firebase/app";
 import { useRouter, useRoute } from "vue-router";
-
 import AppHeader from "@/components/AppHeader/AppHeader.vue";
 import TagFilter from "@/components/TagFilter/TagFilter.vue";
 import MemoList from "@/components/MemoList/MemoList.vue";
@@ -5274,10 +5053,7 @@ const { initAuth, chatLogs, isAiThinking } = useMyBrain();
 const inputMode = ref<"memo" | "chat" | "url">("memo");
 const editingMemory = ref<Memory | null>(null);
 const chatContainerRef = ref<HTMLElement | null>(null);
-
-// 通知表示用のフラグ
 const showSuccessToast = ref(false);
-
 const route = useRoute();
 const router = useRouter();
 
@@ -5290,32 +5066,18 @@ onMounted(async () => {
     suppressErrorRendering: true,
   });
 
-  // ▼ LINEログインからのコールバック処理
   const code = route.query.code as string;
   if (code) {
-    // URLをクリーンにする
     window.history.replaceState({}, document.title, "/app");
-
     try {
-      // ★修正: ここでリージョン "asia-northeast1" を指定する！
-      const functions = getFunctions(getApp(), "asia-northeast1");
+      const functions = getFunctions(getApp(), "asia-northeast1"); // ★リージョン指定
       const linkFunc = httpsCallable(functions, "linkLineAccount");
-
-      // バックエンド連携
-      await linkFunc({
-        code,
-        redirectUri: window.location.origin + "/app",
-      });
-
+      await linkFunc({ code, redirectUri: window.location.origin + "/app" });
       showSuccessToast.value = true;
-      setTimeout(() => {
-        showSuccessToast.value = false;
-      }, 5000);
+      setTimeout(() => (showSuccessToast.value = false), 5000);
     } catch (e) {
       console.error(e);
-      alert(
-        "連携に失敗しました。\n(開発者用メモ: Cloud Functionsのログを確認してください)",
-      );
+      alert("LINE連携に失敗しました");
     }
   }
 });
@@ -5324,12 +5086,11 @@ const scrollToBottom = async () => {
   if (inputMode.value !== "chat") return;
   await nextTick();
   setTimeout(() => {
-    if (chatContainerRef.value) {
+    if (chatContainerRef.value)
       chatContainerRef.value.scrollTo({
         top: chatContainerRef.value.scrollHeight,
         behavior: "smooth",
       });
-    }
   }, 100);
 };
 
@@ -5338,18 +5099,15 @@ watch(isAiThinking, scrollToBottom);
 watch(inputMode, (newMode) => {
   if (newMode === "chat") {
     nextTick(() => {
-      if (chatContainerRef.value) {
+      if (chatContainerRef.value)
         chatContainerRef.value.scrollTop = chatContainerRef.value.scrollHeight;
-      }
     });
     scrollToBottom();
   }
 });
-
 const onOpenDetail = (memo: Memory) => {
   editingMemory.value = memo;
 };
-
 const onModeChange = (newMode: "memo" | "chat" | "url") => {
   inputMode.value = newMode;
 };
@@ -5366,7 +5124,7 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
       >
         <span class="text-2xl">✅</span>
         <div>
-          <p class="font-bold text-sm">LINE連携に成功しました！</p>
+          <p class="font-bold text-sm">LINE連携完了！</p>
           <p class="text-xs opacity-90">
             公式アカウントにメッセージを送ってみましょう
           </p>
@@ -5379,18 +5137,16 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
 
     <main
       ref="chatContainerRef"
-      class="flex-1 overflow-y-auto p-4 space-y-6 pb-44 scrollbar-hide"
+      class="flex-1 overflow-y-auto p-4 space-y-6 pb-60 scrollbar-hide"
     >
       <MemoList
         v-if="inputMode === 'memo' || inputMode === 'url'"
         @openDetail="onOpenDetail"
       />
-
       <ChatList v-if="inputMode === 'chat'" />
     </main>
 
     <MemoryModal :memory="editingMemory" @close="editingMemory = null" />
-
     <InputFooter :modelValue="inputMode" @update:modelValue="onModeChange" />
   </div>
 </template>
@@ -5403,33 +5159,6 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
-}
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.animate-pulse-soft {
-  animation: pulse-soft 2s infinite;
-}
-@keyframes pulse-soft {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
-/* トーストのアニメーション */
 .toast-enter-active,
 .toast-leave-active {
   transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -5440,6 +5169,71 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
   transform: translate(-50%, -20px);
 }
 </style>
+</file>
+
+<file path=".firebase/hosting.ZGlzdA.cache">
+sw.js,1768741873111,ab562b02a289fbaa094f93c508199837e411a66fab44d5536d56e9a08dc0bf43
+manifest.webmanifest,1768741872387,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+registerSW.js,1768741872387,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+workbox-8c29f6e4.js,1768741873112,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+index.html,1768741872387,3ea13c97a7e46fbd111b6da10114f00e298b86ec2d360588afbc75a4f7bfc486
+firebase-messaging-sw.js,1768741871987,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+lp.html,1768741871991,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/stateDiagram-v2-4FDKWEC3-O1dq-hA7.js,1768741872386,184d9d5c7760805703e3864191ab457d05b37f02e414f1c3b2a0b296a960f3e3
+assets/stateDiagram-FKZM4ZOC-BAreNlWY.js,1768741872386,41c82497430122c5df2f778a922d251b1384fd0f19aa98bddbb506ac34265e33
+assets/timeline-definition-IT6M3QCI-CdDVS9zZ.js,1768741872386,fa5487e3ef06f70b7ae19934e3ac43759d32731adbd7d829f452ce72088a781b
+assets/sankeyDiagram-TZEHDZUN-1WMFf_8n.js,1768741872387,0205892ca2b9a1ef9c5322d73685a3d53042c6a3215ec7c58227ba00b9bcb3e3
+assets/pieDiagram-ADFJNKIX-BVMGJ8iV.js,1768741872387,6acb1946f8089664363a35ad0d292d246e92c1094060605190458cb2e07aff3b
+assets/ordinal-Cboi1Yqb.js,1768741872387,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/xychartDiagram-PRI3JC2R-D0NbUtbe.js,1768741872387,8ec1476a0fb65dedb759a9fe9c554e8d4b9699c51c960d7372eb5744c9037e66
+assets/min-NRqyfIhd.js,1768741872387,a0c375999ea3bcec44167ab11e39feb22b27e2af50ca34cb274f44f24b6a37dd
+assets/linear-z3x6WNTm.js,1768741872387,45ed6fae49173cc8b05457c9bf4816475cfb6808e16a860db0365730e3909423
+assets/requirementDiagram-UZGBJVZJ-3IsXYuNq.js,1768741872386,8ee7fd6ff4f07d06aeefdb34e194b599fd840175bf3614c136c5d6568a22ba08
+assets/mindmap-definition-VGOIOE7T-4_OJsuxL.js,1768741872387,66217f38bc78e788a84bfab951d8a3114cbcf6a1f48e689f4c82ab38dc843fbc
+assets/quadrantDiagram-AYHSOK5B-BGfMkiYX.js,1768741872386,18b9b8b72d11c4c9a41dfb4e21539bb0e1b297cdded01c9aef4e40412db184eb
+assets/init-Gi6I4Gst.js,1768741872387,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/kanban-definition-3W4ZIXB7-v5EcgfFw.js,1768741872386,eb8ff24b1b74c03ffb02ec666cc74113a59e82fdca44af8eb29a8203f4cb9163
+assets/infoDiagram-WHAUD3N6-BArgX7EP.js,1768741872386,b105caaec7f50ed359a5ee65e3dc9db5cb0b5c9188933449445bde07527169ff
+assets/layout-C1nkapgf.js,1768741872387,81b8267ff82b292d89c1c854844820a4cb6f9b78f53dfd9238eb95578c28a6c6
+assets/journeyDiagram-XKPGCS4Q-5SPzY0zp.js,1768741872387,dd2a67ebf1b52c2b7ce81c71cb3ea90c23676ba656bc67d398feb6bb1a004bf8
+assets/graph-18XJ9t75.js,1768741872387,8849392b3c3401e267b6ff2649d178c9488aa7241a83eba488af0a7f66a1ae2b
+assets/index-BVaTgqzo.css,1768741872386,3d534952624292eb8e1530f313e5b1ac26f023598c10eba730e2e2ec96791120
+assets/gitGraphDiagram-NY62KEGX-BIYZGZNk.js,1768741872386,489e9fbc6b10496e4662d1ce57cd50b7d5b40dd8cbaf0604a1918c8c767550ad
+assets/diagram-QEK2KX5R-CRJ1Squf.js,1768741872387,29cec2f7d15d10a15aa76de4e559e9b7547688ac6689a052fd4a66fa89d1fd69
+assets/defaultLocale-DX6XiGOO.js,1768741872387,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/diagram-S2PKOQOG-BEoj08cA.js,1768741872386,3cca961596333d85f4a55ce49ee0fd69d61abb6d1662bf0b9bec7ecf055b240a
+assets/diagram-PSM6KHXK-K57lKvFc.js,1768741872387,b071c8fe45085e4370209b1570d707415cd7a1e39d2089bdffaaf85966b3d845
+assets/dagre-6UL2VRFP-DFj85kCh.js,1768741872387,700e7a24c795a255ed29c3132f2e254c625a2a5bb0af06642ca6454f699306b8
+assets/clone-LnpXwIVm.js,1768741872387,8fc8f4797f034ccb693a3b57715ff7356b8fc20ee11d2418f016727eaa7dd63a
+assets/classDiagram-v2-WZHVMYZB-DLJgjFRS.js,1768741872386,6ef9118dc4a962ec791554ce0fa2e4babc5700b17444902c666657f1da685d3c
+assets/erDiagram-Q2GNP2WA-D-y-lWDN.js,1768741872387,6ec3282ef1e1b60252504f6729c2554449c5231ca909a3d201db640721934dc0
+assets/chunk-TZMSLE5B-C-lUKfgA.js,1768741872386,42c7a2bccde21e3f6e6f38fe16fbbdad90884c3af9839fde61659354ebcbe5ec
+assets/chunk-QZHKN3VN-BmTgEx29.js,1768741872386,9bf41235e553ca4e4f70d4df296d6af55d0cc58d40d59c2f691543e5e6fc6ed8
+assets/classDiagram-2ON5EDUG-DLJgjFRS.js,1768741872386,6ef9118dc4a962ec791554ce0fa2e4babc5700b17444902c666657f1da685d3c
+assets/flowDiagram-NV44I4VS-anHtb95R.js,1768741872386,2f2aab28cc67ee214f858b62b6bbdf44244d4c90266a8c9d600d6241ffd42755
+assets/ganttDiagram-JELNMOA3-MoguLjuh.js,1768741872387,e7dda2884221b75bad726d08efce70a35ebcfbb1973bdcca6e368cf4e0f0c546
+assets/sequenceDiagram-WL72ISMW-CaRvE1pd.js,1768741872386,62c4bacd90f243dcccbd662908da9b027caf55f323e1490b17b30b570c38ecd4
+assets/cose-bilkent-S5V4N54A-DkVXCwAp.js,1768741872387,adcf8e3ac78c9851780a729b3d1533d5012f48e9168d50cc998ea46b0630715b
+assets/chunk-QN33PNHL-DLxzqmGy.js,1768741872387,c495e70a6b6ee92d131de88ef01c51a847c4376ce5e29aaf8873406e4654de43
+assets/chunk-FMBD7UC4-H80_vPj_.js,1768741872387,24922ae059c0d5dfff07911e46f3ca62b069357a07aab2f12285cd5c590ecf3b
+assets/chunk-55IACEB6-875w5S-a.js,1768741872387,2f78786e09503985a5a0d6dd3e0d7314f1521ca36ba651b4fae0a5c90086886c
+assets/chunk-4BX2VUAB--anWWdsp.js,1768741872387,63eadb821f2cb0da9b715ebb9e6a15120d5bfdec001d5eb37dca0beec103befb
+assets/channel-BKgefKLf.js,1768741872387,bc3cf6b12aa23ea9d7e7d69f81db587c7d75cf0ade18a099a798bd00c2dc5796
+assets/chunk-DI55MBZ5-DarK0Rod.js,1768741872386,9a5fb12ed3687bb49bfa3ba4443894e4b39b38f6a33c9cb3d50b3bd409468355
+assets/chunk-B4BG7PRW-XcCIfKda.js,1768741872386,8f68733f9be0d63a7217cb503d3e1707f56550cf8ccd38622f51d79b60a3b037
+assets/arc-BqLMmfPu.js,1768741872386,78d32b48334e7fc3f4ce553feaec3d656c475262d6cbcf3cf05ce413976340cc
+assets/_baseUniq-B-ZoFNNt.js,1768741872387,8e5c887b79fdbfcaff784cb35a19baaf5690543dcf66734df4b7016c80682e52
+assets/c4Diagram-YG6GDRKO-BSeidL6x.js,1768741872386,af9e5da507961b497234e52da720b25bdbe6580354680164e329fe56970f52e0
+assets/blockDiagram-VD42YOAC-CMUDFp2c.js,1768741872387,9cd164e5f7350a4d22a13700163ad72107222222e1c7cb00a28768c351f16692
+assets/architectureDiagram-VXUJARFQ-BPLeMlWV.js,1768741872387,6fa11fb71b2e57c0a993ff3e44eb8823e60c8afab0272c54b91160c903430dbe
+assets/katex-Cu_Erd72.js,1768741872387,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-DHE_FiSt.js,1768741872387,4926941e976d41b5e1fecdb73091d711ad99bca8483caff78b76daceaa573c89
+assets/cytoscape.esm-CyJtwmzi.js,1768741872387,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-2UrC0W-1.js,1768741872387,f54f421af42a6b462c4050e2c48d01fff400c032f09b59b433f631e0ab5985e5
+apple-touch-icon.png,1768741871986,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+logo.png,1768741871989,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1768741872009,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-192x192.png,1768741871998,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>

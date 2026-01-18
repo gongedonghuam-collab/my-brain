@@ -13,18 +13,17 @@ const inputMode = computed({
   set: (val) => emit("update:modelValue", val),
 });
 
+// マイク関連（isListening, toggleListening）を削除
 const {
   inputText,
   selectedFile,
   filePreview,
   fileInputRef,
-  isListening,
-  toggleListening,
   handleFileSelect,
   clearFile,
   handleSend,
 } = useInputFooter(props.modelValue);
-const { currentUser, startSubscription, isSaving, isAiThinking } = useMyBrain(); // ★isSaving追加
+const { currentUser, startSubscription, isSaving, isAiThinking } = useMyBrain();
 
 const remainingCount = computed(() =>
   currentUser.value?.isPro ? 9999 : 5 - (currentUser.value?.dailyUsage || 0),
@@ -155,22 +154,6 @@ const remainingCount = computed(() =>
       </div>
 
       <div class="relative flex items-end gap-2">
-        <button
-          @click="toggleListening"
-          :class="[
-            'w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl transition shadow-lg relative overflow-hidden',
-            isListening
-              ? 'bg-red-500 text-white'
-              : 'bg-slate-800 text-slate-400',
-          ]"
-        >
-          <span class="relative z-10">{{ isListening ? "■" : "🎙️" }}</span>
-          <div
-            v-if="isListening"
-            class="absolute inset-0 bg-red-600 animate-ping opacity-75"
-          ></div>
-        </button>
-
         <div v-if="inputMode === 'memo'" class="flex-shrink-0">
           <input
             type="file"
