@@ -20,7 +20,7 @@ const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
 const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
-// 1. URLスクレイピング
+// URLスクレイピング
 export const scrapeUrl = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
   const { url } = request.data;
@@ -44,7 +44,7 @@ export const scrapeUrl = onCall(async (request) => {
   }
 });
 
-// 2. LINE連携 (アカウント紐付け) ★ここが追加されました
+// LINE連携
 export const linkLineAccount = onCall(
   { secrets: [lineLoginChannelId, lineLoginChannelSecret] },
   async (request) => {
@@ -67,7 +67,6 @@ export const linkLineAccount = onCall(
       const profileRes = await axios.get("https://api.line.me/v2/profile", {
         headers: { Authorization: `Bearer ${access_token}` },
       });
-
       await db.collection("users").doc(request.auth.uid).set(
         {
           isLineLinked: true,
@@ -76,7 +75,6 @@ export const linkLineAccount = onCall(
         },
         { merge: true },
       );
-
       return { success: true };
     } catch (error: any) {
       throw new HttpsError("internal", "LINE連携失敗");
@@ -84,7 +82,7 @@ export const linkLineAccount = onCall(
   },
 );
 
-// 3. LINE Webhook (ボット機能) ★ここが追加されました
+// LINE Webhook
 export const lineWebhook = onRequest(
   { secrets: [lineBotToken, lineBotSecret, geminiApiKey] },
   async (req, res) => {
@@ -97,7 +95,6 @@ export const lineWebhook = onRequest(
       const lineUserId = event.source.userId;
       if (!lineUserId) continue;
 
-      // LINE IDからユーザーを特定
       const usersSnap = await db
         .collection("users")
         .where("lineUserId", "==", lineUserId)
@@ -141,14 +138,50 @@ export const lineWebhook = onRequest(
   },
 );
 
+// ★追加: 利用可能なモデルを自動判定する関数
+async function getSmartModelName(apiKey: string): Promise<string> {
+  try {
+    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const listResponse = await axios.get(listUrl);
+    const models = listResponse.data.models || [];
+
+    const viableModels = models.filter((m: any) =>
+      m.supportedGenerationMethods?.includes("generateContent"),
+    );
+
+    const preferredOrder = [
+      "gemini-1.5-flash",
+      "gemini-1.5-flash-latest",
+      "gemini-1.5-pro",
+      "gemini-pro",
+    ];
+
+    for (const pref of preferredOrder) {
+      const found = viableModels.find((m: any) => m.name.includes(pref));
+      if (found) return found.name.replace("models/", "");
+    }
+
+    if (viableModels.length > 0) {
+      return viableModels[0].name.replace("models/", "");
+    }
+    return "gemini-1.5-flash";
+  } catch (e) {
+    console.warn("Model fetch failed in Functions:", e);
+    return "gemini-1.5-flash";
+  }
+}
+
 async function saveMemoryFromLine(
   uid: string,
   text: string,
   image: { data: string; mimeType: string } | null,
 ) {
   const apiKey = geminiApiKey.value();
+  // ★修正: モデル名を動的に取得
+  const modelName = await getSmartModelName(apiKey);
+
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: modelName });
 
   let promptParts: any[] = [];
   if (image) {

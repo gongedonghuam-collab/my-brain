@@ -2606,587 +2606,6 @@ export function useInputFooter(inputMode: InputMode) {
 }
 </file>
 
-<file path="src/views/LandingView/LandingView.vue">
-<script setup lang="ts">
-import { useRouter } from "vue-router";
-
-const router = useRouter();
-
-const goToLogin = () => {
-  router.push("/login");
-};
-</script>
-
-<template>
-  <div class="lp-container">
-    <div class="nav-hint">Scroll or Use Arrow Keys ↓</div>
-
-    <div class="slides-container" id="container">
-      <section id="s1">
-        <div class="bg-blob primary-blob"></div>
-
-        <div class="logo-wrapper">
-          <img
-            src="/logo.png?v=3"
-            width="50"
-            height="50"
-            class="lp-logo fade-in-up"
-          />
-        </div>
-
-        <p class="fade-in-up subtitle">AI KNOWLEDGE BASE</p>
-        <h1 class="fade-in-up delay-100">
-          あなたの記憶を、<br />AIが拡張する。
-        </h1>
-        <p class="fade-in-up delay-200 description">
-          忘れても大丈夫。あなただけの「第2の脳」がここにあります。
-        </p>
-
-        <button @click="goToLogin" class="btn-primary fade-in-up delay-300">
-          今すぐ始める
-        </button>
-
-        <div class="fade-in-up delay-500 mock-wrapper">
-          <div class="phone">
-            <div class="notch"></div>
-            <div class="screen">
-              <div class="screen-header">My Brain</div>
-              <div class="chat-bubble chat-user">
-                先週の会議で決まったA社の予算っていくらだっけ？
-              </div>
-              <div class="chat-bubble chat-ai">
-                先週木曜日のメモによると、A社の予算は「300万円（税抜）」で承認されています。<br /><br />関連資料：<br />📄
-                240115_議事録.pdf
-              </div>
-              <div class="chat-bubble chat-user">ありがとう！助かった。</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="s2">
-        <h2 class="fade-in-up">The Problem</h2>
-        <h1 class="fade-in-up delay-100 section-title">
-          脳の容量、足りてますか？
-        </h1>
-
-        <div class="problem-grid fade-in-up delay-200">
-          <div class="problem-card">
-            <span class="icon">🌫️</span>
-            <h3>思い出せない</h3>
-            <p>
-              「あの件、どうなったっけ？」<br />大事な情報を忘れてしまい、<br />信頼を失う恐怖。
-            </p>
-          </div>
-          <div class="problem-card">
-            <span class="icon">🔍</span>
-            <h3>見つからない</h3>
-            <p>
-              LINE、Slack、メモ帳...<br />情報が散らばりすぎて、<br />検索に時間を浪費する毎日。
-            </p>
-          </div>
-          <div class="problem-card">
-            <span class="icon">🤯</span>
-            <h3>整理できない</h3>
-            <p>
-              情報はインプットするだけ。<br />整理する時間がなく、<br />知識として定着しない。
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section id="s3">
-        <div class="bg-blob accent-blob"></div>
-
-        <h2 class="fade-in-up">Solution</h2>
-        <h1 class="fade-in-up delay-100 section-title">
-          放り込むだけで、整理完了。
-        </h1>
-        <p class="fade-in-up delay-200 description">
-          My
-          Brainは、あらゆる情報を一元管理し、AIがあなたの思考をサポートします。
-        </p>
-
-        <div class="solution-row fade-in-up delay-300">
-          <div class="feature-box">
-            <span class="icon">📝</span>
-            <span class="feature-title">メモ・画像</span>
-            <span class="feature-desc">何でも保存</span>
-          </div>
-          <div class="feature-box">
-            <span class="icon">🌐</span>
-            <span class="feature-title">Web保存</span>
-            <span class="feature-desc">URL貼るだけ</span>
-          </div>
-          <div class="feature-box highlight-box">
-            <span class="icon">🤖</span>
-            <span class="feature-title highlight-text">AI検索</span>
-            <span class="feature-desc">会話で思い出す</span>
-          </div>
-        </div>
-      </section>
-
-      <section id="s4">
-        <h2 class="fade-in-up">AI Core</h2>
-        <h1 class="fade-in-up delay-100 section-title">
-          ただの検索じゃない。<br />文脈を理解する「対話」です。
-        </h1>
-
-        <div class="ai-features fade-in-up delay-200">
-          <div class="ai-card">
-            <div class="ai-icon">🧠</div>
-            <h3>曖昧な記憶でOK</h3>
-            <p>
-              「先月の飲み会で話題になった映画なんだっけ？」のような、キーワードを覚えていなくてもAIが推測して答えます。
-            </p>
-          </div>
-          <div class="ai-card">
-            <div class="ai-icon">📊</div>
-            <h3>構造化・図解</h3>
-            <p>
-              複雑な情報は、AIが自動でマインドマップや表に変換。視覚的に理解を助けます。
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section id="s5">
-        <p class="fade-in-up primary-text">FREE ACCESS</p>
-        <h1 class="fade-in-up delay-100 section-title">
-          あなたの脳を、アップデートしよう。
-        </h1>
-
-        <div class="fade-in-up delay-200 badge-wrapper">
-          <div class="pulse-badge">🚀 ベータ版につき完全無料</div>
-        </div>
-
-        <button @click="goToLogin" class="btn-primary fade-in-up delay-300">
-          My Brain を開く
-        </button>
-
-        <div class="fade-in-up delay-500 footer-container">
-          <div class="legal-links">
-            <router-link to="/legal" class="legal-link"
-              >特定商取引法に基づく表記</router-link
-            >
-          </div>
-          <p class="footer-text">Designed by Takumi Yoshioka</p>
-        </div>
-      </section>
-    </div>
-  </div>
-</template>
-
-<style scoped>
-/* スコープ付きCSS */
-.lp-container {
-  --primary: #3b82f6;
-  --primary-light: #60a5fa;
-  --dark: #0f172a;
-  --darker: #020617;
-  --light: #f8fafc;
-  --accent: #8b5cf6;
-  --text-gray: #94a3b8;
-
-  font-family: "Poppins", "Noto Sans JP", sans-serif;
-  background-color: var(--darker);
-  color: var(--light);
-  overflow-x: hidden;
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.slides-container {
-  width: 100vw;
-  height: 100vh;
-  overflow-y: scroll;
-  scroll-snap-type: y mandatory;
-  scroll-behavior: smooth;
-}
-
-section {
-  width: 100vw;
-  height: 100vh;
-  min-height: 550px; /* 最小高さをさらに縮小 */
-  scroll-snap-align: start;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 0.5rem; /* パディングを極限まで減らす */
-  overflow: hidden;
-}
-
-.bg-blob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.2;
-  z-index: 0;
-  width: 500px;
-  height: 500px;
-}
-.primary-blob {
-  top: -10%;
-  left: -10%;
-  background: var(--primary);
-}
-.accent-blob {
-  top: 50%;
-  right: -10%;
-  background: var(--accent);
-}
-
-.logo-wrapper {
-  margin-bottom: 5px; /* マージン極小 */
-}
-.lp-logo {
-  border-radius: 12px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-}
-
-h1 {
-  /* フォントサイズを縮小して1行に収まりやすくする */
-  font-size: clamp(1.8rem, 4vw, 3rem);
-  font-weight: 900;
-  line-height: 1.1;
-  margin-bottom: 0.5rem;
-  background: linear-gradient(135deg, #fff 0%, var(--primary-light) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-align: center;
-  z-index: 1;
-}
-
-h2 {
-  font-size: clamp(1rem, 2.5vw, 1.5rem);
-  color: var(--primary);
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  margin-bottom: 1rem;
-  text-align: center;
-  z-index: 1;
-}
-
-h3 {
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin-bottom: 0.3rem;
-  color: white;
-}
-
-p {
-  font-size: 0.9rem;
-  color: var(--text-gray);
-  max-width: 800px;
-  text-align: center;
-  line-height: 1.5;
-  z-index: 1;
-}
-
-.subtitle {
-  letter-spacing: 0.15em;
-  color: var(--primary-light);
-  font-weight: bold;
-  margin-bottom: 0.5rem;
-  font-size: 0.7rem;
-}
-.description {
-  font-size: 0.9rem;
-  color: var(--text-gray);
-}
-.section-title {
-  font-size: clamp(1.8rem, 4vw, 2.5rem);
-  margin-bottom: 1.5rem;
-}
-.primary-text {
-  color: var(--primary);
-  font-weight: bold;
-}
-
-/* フッター調整 */
-.footer-container {
-  margin-top: 30px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.legal-links {
-  margin-bottom: 5px;
-}
-.legal-link {
-  color: var(--text-gray);
-  font-size: 0.7rem;
-  text-decoration: underline;
-  transition: color 0.3s;
-}
-.legal-link:hover {
-  color: white;
-}
-.footer-text {
-  font-size: 0.6rem;
-  opacity: 0.4;
-}
-
-/* アニメーション */
-.fade-in-up {
-  opacity: 0;
-  animation: fadeInUp 0.8s ease-out forwards;
-}
-.delay-100 {
-  animation-delay: 0.1s;
-}
-.delay-200 {
-  animation-delay: 0.2s;
-}
-.delay-300 {
-  animation-delay: 0.3s;
-}
-.delay-500 {
-  animation-delay: 0.5s;
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* スマホモック */
-.mock-wrapper {
-  margin-top: 20px;
-  position: relative;
-}
-.phone {
-  /* スマホサイズを大幅に縮小 */
-  width: 180px;
-  height: 380px;
-  background: #0f172a;
-  border-radius: 24px;
-  border: 5px solid #334155;
-  position: relative;
-  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  z-index: 2;
-  transform: rotate(-3deg) translateY(0px); /* 傾きと位置調整 */
-}
-.notch {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 80px;
-  height: 18px;
-  background: #334155;
-  border-bottom-left-radius: 10px;
-  border-bottom-right-radius: 10px;
-  z-index: 10;
-}
-.screen {
-  flex: 1;
-  background: #020617;
-  overflow: hidden;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  color: white;
-  padding: 10px;
-}
-.screen-header {
-  margin-top: 25px;
-  font-weight: 900;
-  font-size: 0.9rem;
-  text-align: center;
-  margin-bottom: 10px;
-}
-
-/* チャット */
-.chat-bubble {
-  padding: 8px 10px;
-  border-radius: 10px;
-  font-size: 0.6rem;
-  margin-bottom: 6px;
-  max-width: 90%;
-  line-height: 1.4;
-  text-align: left;
-}
-.chat-user {
-  background-color: #1e293b;
-  align-self: flex-end;
-  border-top-right-radius: 4px;
-}
-.chat-ai {
-  background-color: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #bfdbfe;
-  align-self: flex-start;
-  border-top-left-radius: 4px;
-}
-
-/* カード類 */
-.problem-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-  width: 100%;
-  max-width: 800px;
-  margin-top: 20px;
-  z-index: 2;
-}
-.problem-card {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 15px;
-  border-radius: 16px;
-  text-align: center;
-  transition: transform 0.3s;
-}
-.problem-card:hover {
-  transform: translateY(-5px);
-  background: rgba(255, 255, 255, 0.05);
-}
-.icon {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
-  display: block;
-}
-
-.solution-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 15px;
-  margin-top: 20px;
-  z-index: 2;
-}
-.feature-box {
-  width: 110px;
-  height: 110px;
-  background: linear-gradient(145deg, #1e293b, #0f172a);
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 5px 10px -3px rgba(0, 0, 0, 0.5);
-}
-.feature-title {
-  font-weight: bold;
-  margin-top: 6px;
-  font-size: 0.8rem;
-}
-.feature-desc {
-  font-size: 0.55rem;
-  opacity: 0.7;
-  margin-top: 3px;
-}
-.highlight-box {
-  border-color: var(--primary);
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
-}
-.highlight-text {
-  color: var(--primary-light);
-}
-
-.ai-features {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: center;
-  margin-top: 20px;
-}
-.ai-card {
-  width: 240px;
-  background: #1e293b;
-  padding: 15px;
-  border-radius: 16px;
-  border: 1px solid #334155;
-}
-.ai-icon {
-  font-size: 1.5rem;
-  margin-bottom: 6px;
-}
-.ai-card h3 {
-  font-size: 1rem;
-  margin-bottom: 0.3rem;
-}
-.ai-card p {
-  font-size: 0.75rem;
-  text-align: left;
-  margin-bottom: 0;
-}
-
-.btn-primary {
-  background: var(--primary);
-  color: white;
-  font-weight: bold;
-  padding: 0.6rem 2rem;
-  border-radius: 50px;
-  text-decoration: none;
-  font-size: 1rem;
-  transition: all 0.3s;
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
-  margin-top: 15px;
-  display: inline-block;
-  border: none;
-  cursor: pointer;
-}
-.btn-primary:hover {
-  transform: scale(1.05);
-  box-shadow: 0 0 25px rgba(59, 130, 246, 0.8);
-}
-
-.badge-wrapper {
-  margin: 15px 0;
-}
-.pulse-badge {
-  background: var(--accent);
-  color: white;
-  padding: 5px 12px;
-  border-radius: 50px;
-  font-weight: bold;
-  margin-bottom: 5px;
-  display: inline-block;
-  font-size: 0.8rem;
-  animation: pulse 2s infinite;
-}
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-.nav-hint {
-  position: fixed;
-  bottom: 15px;
-  right: 15px;
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.3);
-  z-index: 100;
-}
-</style>
-</file>
-
 <file path="src/views/LegalView/LegalView.vue">
 <script setup lang="ts">
 import { useRouter } from "vue-router";
@@ -4167,6 +3586,732 @@ const { logout } = useAppHeader();
 </template>
 </file>
 
+<file path="src/router/index.ts">
+import { createRouter, createWebHistory } from "vue-router";
+import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
+import HomeView from "../views/HomeView/HomeView.vue";
+import LoginView from "../views/LoginView/LoginView.vue";
+import VerifyEmailView from "../views/VerifyEmailView/VerifyEmailView.vue";
+import LandingView from "../views/LandingView/LandingView.vue";
+import LegalView from "../views/LegalView/LegalView.vue"; // 追加
+
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    {
+      path: "/",
+      name: "landing",
+      component: LandingView,
+      meta: { public: true },
+    },
+    {
+      path: "/app",
+      name: "home",
+      component: HomeView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/login",
+      name: "login",
+      component: LoginView,
+      meta: { public: true },
+    },
+    {
+      path: "/verify-email",
+      name: "verify-email",
+      component: VerifyEmailView,
+      meta: { requiresAuth: true },
+    },
+    // 追加
+    {
+      path: "/legal",
+      name: "legal",
+      component: LegalView,
+      meta: { public: true },
+    },
+  ],
+});
+
+router.beforeEach(async (to, from, next) => {
+  const auth = getAuth();
+  const currentUser = await new Promise<User | null>((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
+
+  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
+
+  if (to.path === "/") {
+    if (currentUser) {
+      next("/app");
+      return;
+    } else {
+      next();
+      return;
+    }
+  }
+
+  if (requiresAuth && !currentUser) {
+    next("/login");
+  } else if (to.path === "/login" && currentUser) {
+    next("/app");
+  } else {
+    next();
+  }
+});
+
+export default router;
+</file>
+
+<file path="src/views/LandingView/LandingView.vue">
+<script setup lang="ts">
+import { useRouter } from "vue-router";
+
+const router = useRouter();
+
+const goToLogin = () => {
+  router.push("/login");
+};
+</script>
+
+<template>
+  <div class="lp-container">
+    <div class="nav-hint">Scroll or Use Arrow Keys ↓</div>
+
+    <div class="slides-container" id="container">
+      <section id="s1">
+        <div class="bg-blob primary-blob"></div>
+
+        <div class="logo-wrapper">
+          <img
+            src="/logo.png?v=3"
+            width="50"
+            height="50"
+            class="lp-logo fade-in-up"
+          />
+        </div>
+
+        <p class="fade-in-up subtitle">AI KNOWLEDGE BASE</p>
+        <h1 class="fade-in-up delay-100">
+          あなたの記憶を、<br />AIが拡張する。
+        </h1>
+        <p class="fade-in-up delay-200 description">
+          忘れても大丈夫。あなただけの「第2の脳」がここにあります。
+        </p>
+
+        <button @click="goToLogin" class="btn-primary fade-in-up delay-300">
+          今すぐ始める
+        </button>
+
+        <div class="fade-in-up delay-500 mock-wrapper">
+          <div class="phone">
+            <div class="notch"></div>
+            <div class="screen">
+              <div class="screen-header">My Brain</div>
+              <div class="chat-bubble chat-user">
+                先週の会議で決まったA社の予算っていくらだっけ？
+              </div>
+              <div class="chat-bubble chat-ai">
+                先週木曜日のメモによると、A社の予算は「300万円（税抜）」で承認されています。<br /><br />関連資料：<br />📄
+                240115_議事録.pdf
+              </div>
+              <div class="chat-bubble chat-user">ありがとう！助かった。</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s2">
+        <h2 class="fade-in-up">The Problem</h2>
+        <h1 class="fade-in-up delay-100 section-title">
+          脳の容量、足りてますか？
+        </h1>
+
+        <div class="problem-grid fade-in-up delay-200">
+          <div class="problem-card">
+            <span class="icon">🌫️</span>
+            <h3>思い出せない</h3>
+            <p>
+              「あの件、どうなったっけ？」<br />大事な情報を忘れてしまい、<br />信頼を失う恐怖。
+            </p>
+          </div>
+          <div class="problem-card">
+            <span class="icon">🔍</span>
+            <h3>見つからない</h3>
+            <p>
+              LINE、Slack、メモ帳...<br />情報が散らばりすぎて、<br />検索に時間を浪費する毎日。
+            </p>
+          </div>
+          <div class="problem-card">
+            <span class="icon">🤯</span>
+            <h3>整理できない</h3>
+            <p>
+              情報はインプットするだけ。<br />整理する時間がなく、<br />知識として定着しない。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="s3">
+        <div class="bg-blob accent-blob"></div>
+
+        <h2 class="fade-in-up">Solution</h2>
+        <h1 class="fade-in-up delay-100 section-title">
+          放り込むだけで、整理完了。
+        </h1>
+        <p class="fade-in-up delay-200 description">
+          My
+          Brainは、あらゆる情報を一元管理し、AIがあなたの思考をサポートします。
+        </p>
+
+        <div class="solution-row fade-in-up delay-300">
+          <div class="feature-box">
+            <span class="icon">📝</span>
+            <span class="feature-title">メモ・画像</span>
+            <span class="feature-desc">何でも保存</span>
+          </div>
+          <div class="feature-box">
+            <span class="icon">🌐</span>
+            <span class="feature-title">Web保存</span>
+            <span class="feature-desc">URL貼るだけ</span>
+          </div>
+          <div class="feature-box highlight-box">
+            <span class="icon">🤖</span>
+            <span class="feature-title highlight-text">AI検索</span>
+            <span class="feature-desc">会話で思い出す</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="s4">
+        <h2 class="fade-in-up">AI Core</h2>
+        <h1 class="fade-in-up delay-100 section-title">
+          ただの検索じゃない。<br />文脈を理解する「対話」です。
+        </h1>
+
+        <div class="ai-features fade-in-up delay-200">
+          <div class="ai-card">
+            <div class="ai-icon">🧠</div>
+            <h3>曖昧な記憶でOK</h3>
+            <p>
+              「先月の飲み会で話題になった映画なんだっけ？」のような、キーワードを覚えていなくてもAIが推測して答えます。
+            </p>
+          </div>
+          <div class="ai-card">
+            <div class="ai-icon">📊</div>
+            <h3>構造化・図解</h3>
+            <p>
+              複雑な情報は、AIが自動でマインドマップや表に変換。視覚的に理解を助けます。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="s5">
+        <p class="fade-in-up primary-text">FREE ACCESS</p>
+        <h1 class="fade-in-up delay-100 section-title">
+          あなたの脳を、アップデートしよう。
+        </h1>
+
+        <div class="fade-in-up delay-200 badge-wrapper">
+          <div class="pulse-badge">🚀 ベータ版につき完全無料</div>
+        </div>
+
+        <button @click="goToLogin" class="btn-primary fade-in-up delay-300">
+          My Brain を開く
+        </button>
+
+        <div class="fade-in-up delay-500 footer-container">
+          <div class="legal-links">
+            <router-link to="/legal" class="legal-link"
+              >特定商取引法に基づく表記</router-link
+            >
+          </div>
+          <p class="footer-text">Designed by Takumi Yoshioka</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+/* スコープ付きCSS */
+.lp-container {
+  --primary: #3b82f6;
+  --primary-light: #60a5fa;
+  --dark: #0f172a;
+  --darker: #020617;
+  --light: #f8fafc;
+  --accent: #8b5cf6;
+  --text-gray: #94a3b8;
+
+  font-family: "Poppins", "Noto Sans JP", sans-serif;
+  background-color: var(--darker);
+  color: var(--light);
+  overflow-x: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.slides-container {
+  width: 100vw;
+  height: 100vh;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+}
+
+section {
+  width: 100vw;
+  height: 100vh;
+  min-height: 550px; /* 最小高さをさらに縮小 */
+  scroll-snap-align: start;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 0.5rem; /* パディングを極限まで減らす */
+  overflow: hidden;
+}
+
+.bg-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.2;
+  z-index: 0;
+  width: 500px;
+  height: 500px;
+}
+.primary-blob {
+  top: -10%;
+  left: -10%;
+  background: var(--primary);
+}
+.accent-blob {
+  top: 50%;
+  right: -10%;
+  background: var(--accent);
+}
+
+.logo-wrapper {
+  margin-bottom: 5px; /* マージン極小 */
+}
+.lp-logo {
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+}
+
+h1 {
+  /* フォントサイズを縮小して1行に収まりやすくする */
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 900;
+  line-height: 1.1;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(135deg, #fff 0%, var(--primary-light) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-align: center;
+  z-index: 1;
+}
+
+h2 {
+  font-size: clamp(1rem, 2.5vw, 1.5rem);
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  margin-bottom: 1rem;
+  text-align: center;
+  z-index: 1;
+}
+
+h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+  color: white;
+}
+
+p {
+  font-size: 0.9rem;
+  color: var(--text-gray);
+  max-width: 800px;
+  text-align: center;
+  line-height: 1.5;
+  z-index: 1;
+}
+
+.subtitle {
+  letter-spacing: 0.15em;
+  color: var(--primary-light);
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  font-size: 0.7rem;
+}
+.description {
+  font-size: 0.9rem;
+  color: var(--text-gray);
+}
+.section-title {
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
+  margin-bottom: 1.5rem;
+}
+.primary-text {
+  color: var(--primary);
+  font-weight: bold;
+}
+
+/* フッター調整 */
+.footer-container {
+  margin-top: 30px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.legal-links {
+  margin-bottom: 5px;
+}
+.legal-link {
+  color: var(--text-gray);
+  font-size: 0.7rem;
+  text-decoration: underline;
+  transition: color 0.3s;
+}
+.legal-link:hover {
+  color: white;
+}
+.footer-text {
+  font-size: 0.6rem;
+  opacity: 0.4;
+}
+
+/* アニメーション */
+.fade-in-up {
+  opacity: 0;
+  animation: fadeInUp 0.8s ease-out forwards;
+}
+.delay-100 {
+  animation-delay: 0.1s;
+}
+.delay-200 {
+  animation-delay: 0.2s;
+}
+.delay-300 {
+  animation-delay: 0.3s;
+}
+.delay-500 {
+  animation-delay: 0.5s;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* スマホモック */
+.mock-wrapper {
+  margin-top: 20px;
+  position: relative;
+}
+.phone {
+  /* スマホサイズを大幅に縮小 */
+  width: 180px;
+  height: 380px;
+  background: #0f172a;
+  border-radius: 24px;
+  border: 5px solid #334155;
+  position: relative;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 2;
+  transform: rotate(-3deg) translateY(0px); /* 傾きと位置調整 */
+}
+.notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 18px;
+  background: #334155;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+  z-index: 10;
+}
+.screen {
+  flex: 1;
+  background: #020617;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  color: white;
+  padding: 10px;
+}
+.screen-header {
+  margin-top: 25px;
+  font-weight: 900;
+  font-size: 0.9rem;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+/* チャット */
+.chat-bubble {
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 0.6rem;
+  margin-bottom: 6px;
+  max-width: 90%;
+  line-height: 1.4;
+  text-align: left;
+}
+.chat-user {
+  background-color: #1e293b;
+  align-self: flex-end;
+  border-top-right-radius: 4px;
+}
+.chat-ai {
+  background-color: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #bfdbfe;
+  align-self: flex-start;
+  border-top-left-radius: 4px;
+}
+
+/* カード類 */
+.problem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  width: 100%;
+  max-width: 800px;
+  margin-top: 20px;
+  z-index: 2;
+}
+.problem-card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 15px;
+  border-radius: 16px;
+  text-align: center;
+  transition: transform 0.3s;
+}
+.problem-card:hover {
+  transform: translateY(-5px);
+  background: rgba(255, 255, 255, 0.05);
+}
+.icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.solution-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 15px;
+  margin-top: 20px;
+  z-index: 2;
+}
+.feature-box {
+  width: 110px;
+  height: 110px;
+  background: linear-gradient(145deg, #1e293b, #0f172a);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 5px 10px -3px rgba(0, 0, 0, 0.5);
+}
+.feature-title {
+  font-weight: bold;
+  margin-top: 6px;
+  font-size: 0.8rem;
+}
+.feature-desc {
+  font-size: 0.55rem;
+  opacity: 0.7;
+  margin-top: 3px;
+}
+.highlight-box {
+  border-color: var(--primary);
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+}
+.highlight-text {
+  color: var(--primary-light);
+}
+
+.ai-features {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 20px;
+}
+.ai-card {
+  width: 240px;
+  background: #1e293b;
+  padding: 15px;
+  border-radius: 16px;
+  border: 1px solid #334155;
+}
+.ai-icon {
+  font-size: 1.5rem;
+  margin-bottom: 6px;
+}
+.ai-card h3 {
+  font-size: 1rem;
+  margin-bottom: 0.3rem;
+}
+.ai-card p {
+  font-size: 0.75rem;
+  text-align: left;
+  margin-bottom: 0;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  font-weight: bold;
+  padding: 0.6rem 2rem;
+  border-radius: 50px;
+  text-decoration: none;
+  font-size: 1rem;
+  transition: all 0.3s;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+  margin-top: 15px;
+  display: inline-block;
+  border: none;
+  cursor: pointer;
+}
+.btn-primary:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 25px rgba(59, 130, 246, 0.8);
+}
+
+.badge-wrapper {
+  margin: 15px 0;
+}
+.pulse-badge {
+  background: var(--accent);
+  color: white;
+  padding: 5px 12px;
+  border-radius: 50px;
+  font-weight: bold;
+  margin-bottom: 5px;
+  display: inline-block;
+  font-size: 0.8rem;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.nav-hint {
+  position: fixed;
+  bottom: 15px;
+  right: 15px;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.3);
+  z-index: 100;
+}
+</style>
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/logo.png?v=3" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>My Brain</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0f172a;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+      }
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #0f172a;
+        color: white;
+        z-index: 9999;
+        transition: opacity 0.5s ease;
+      }
+      .loader {
+        margin-top: 32px;
+        width: 32px;
+        height: 32px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        border-top-color: #3b82f6;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="loading-screen">
+      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
+      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
+      <div class="loader"></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+</file>
+
 <file path="src/components/InputFooter/InputFooter.vue">
 <script setup lang="ts">
 import { computed } from "vue";
@@ -4183,18 +4328,17 @@ const inputMode = computed({
   set: (val) => emit("update:modelValue", val),
 });
 
+// マイク関連（isListening, toggleListening）を削除
 const {
   inputText,
   selectedFile,
   filePreview,
   fileInputRef,
-  isListening,
-  toggleListening,
   handleFileSelect,
   clearFile,
   handleSend,
 } = useInputFooter(props.modelValue);
-const { currentUser, startSubscription, isSaving, isAiThinking } = useMyBrain(); // ★isSaving追加
+const { currentUser, startSubscription, isSaving, isAiThinking } = useMyBrain();
 
 const remainingCount = computed(() =>
   currentUser.value?.isPro ? 9999 : 5 - (currentUser.value?.dailyUsage || 0),
@@ -4325,22 +4469,6 @@ const remainingCount = computed(() =>
       </div>
 
       <div class="relative flex items-end gap-2">
-        <button
-          @click="toggleListening"
-          :class="[
-            'w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl transition shadow-lg relative overflow-hidden',
-            isListening
-              ? 'bg-red-500 text-white'
-              : 'bg-slate-800 text-slate-400',
-          ]"
-        >
-          <span class="relative z-10">{{ isListening ? "■" : "🎙️" }}</span>
-          <div
-            v-if="isListening"
-            class="absolute inset-0 bg-red-600 animate-ping opacity-75"
-          ></div>
-        </button>
-
         <div v-if="inputMode === 'memo'" class="flex-shrink-0">
           <input
             type="file"
@@ -4382,151 +4510,6 @@ const remainingCount = computed(() =>
     </div>
   </footer>
 </template>
-</file>
-
-<file path="src/router/index.ts">
-import { createRouter, createWebHistory } from "vue-router";
-import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
-import HomeView from "../views/HomeView/HomeView.vue";
-import LoginView from "../views/LoginView/LoginView.vue";
-import VerifyEmailView from "../views/VerifyEmailView/VerifyEmailView.vue";
-import LandingView from "../views/LandingView/LandingView.vue";
-import LegalView from "../views/LegalView/LegalView.vue"; // 追加
-
-const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [
-    {
-      path: "/",
-      name: "landing",
-      component: LandingView,
-      meta: { public: true },
-    },
-    {
-      path: "/app",
-      name: "home",
-      component: HomeView,
-      meta: { requiresAuth: true },
-    },
-    {
-      path: "/login",
-      name: "login",
-      component: LoginView,
-      meta: { public: true },
-    },
-    {
-      path: "/verify-email",
-      name: "verify-email",
-      component: VerifyEmailView,
-      meta: { requiresAuth: true },
-    },
-    // 追加
-    {
-      path: "/legal",
-      name: "legal",
-      component: LegalView,
-      meta: { public: true },
-    },
-  ],
-});
-
-router.beforeEach(async (to, from, next) => {
-  const auth = getAuth();
-  const currentUser = await new Promise<User | null>((resolve) => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      unsubscribe();
-      resolve(user);
-    });
-  });
-
-  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
-
-  if (to.path === "/") {
-    if (currentUser) {
-      next("/app");
-      return;
-    } else {
-      next();
-      return;
-    }
-  }
-
-  if (requiresAuth && !currentUser) {
-    next("/login");
-  } else if (to.path === "/login" && currentUser) {
-    next("/app");
-  } else {
-    next();
-  }
-});
-
-export default router;
-</file>
-
-<file path="index.html">
-<!doctype html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" href="/logo.png?v=3" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
-    <title>My Brain</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        background-color: #0f172a;
-        height: 100vh;
-        width: 100vw;
-        overflow: hidden;
-      }
-      #loading-screen {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background-color: #0f172a;
-        color: white;
-        z-index: 9999;
-        transition: opacity 0.5s ease;
-      }
-      .loader {
-        margin-top: 32px;
-        width: 32px;
-        height: 32px;
-        border: 3px solid rgba(255, 255, 255, 0.1);
-        border-radius: 50%;
-        border-top-color: #3b82f6;
-        animation: spin 1s linear infinite;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app"></div>
-
-    <div id="loading-screen">
-      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
-      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
-      <div class="loader"></div>
-    </div>
-
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
 </file>
 
 <file path="src/composables/useMyBrain.ts">
@@ -5172,68 +5155,68 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
 </file>
 
 <file path=".firebase/hosting.ZGlzdA.cache">
-sw.js,1768741873111,ab562b02a289fbaa094f93c508199837e411a66fab44d5536d56e9a08dc0bf43
-manifest.webmanifest,1768741872387,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-registerSW.js,1768741872387,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-workbox-8c29f6e4.js,1768741873112,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-index.html,1768741872387,3ea13c97a7e46fbd111b6da10114f00e298b86ec2d360588afbc75a4f7bfc486
-firebase-messaging-sw.js,1768741871987,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-lp.html,1768741871991,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/stateDiagram-v2-4FDKWEC3-O1dq-hA7.js,1768741872386,184d9d5c7760805703e3864191ab457d05b37f02e414f1c3b2a0b296a960f3e3
-assets/stateDiagram-FKZM4ZOC-BAreNlWY.js,1768741872386,41c82497430122c5df2f778a922d251b1384fd0f19aa98bddbb506ac34265e33
-assets/timeline-definition-IT6M3QCI-CdDVS9zZ.js,1768741872386,fa5487e3ef06f70b7ae19934e3ac43759d32731adbd7d829f452ce72088a781b
-assets/sankeyDiagram-TZEHDZUN-1WMFf_8n.js,1768741872387,0205892ca2b9a1ef9c5322d73685a3d53042c6a3215ec7c58227ba00b9bcb3e3
-assets/pieDiagram-ADFJNKIX-BVMGJ8iV.js,1768741872387,6acb1946f8089664363a35ad0d292d246e92c1094060605190458cb2e07aff3b
-assets/ordinal-Cboi1Yqb.js,1768741872387,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/xychartDiagram-PRI3JC2R-D0NbUtbe.js,1768741872387,8ec1476a0fb65dedb759a9fe9c554e8d4b9699c51c960d7372eb5744c9037e66
-assets/min-NRqyfIhd.js,1768741872387,a0c375999ea3bcec44167ab11e39feb22b27e2af50ca34cb274f44f24b6a37dd
-assets/linear-z3x6WNTm.js,1768741872387,45ed6fae49173cc8b05457c9bf4816475cfb6808e16a860db0365730e3909423
-assets/requirementDiagram-UZGBJVZJ-3IsXYuNq.js,1768741872386,8ee7fd6ff4f07d06aeefdb34e194b599fd840175bf3614c136c5d6568a22ba08
-assets/mindmap-definition-VGOIOE7T-4_OJsuxL.js,1768741872387,66217f38bc78e788a84bfab951d8a3114cbcf6a1f48e689f4c82ab38dc843fbc
-assets/quadrantDiagram-AYHSOK5B-BGfMkiYX.js,1768741872386,18b9b8b72d11c4c9a41dfb4e21539bb0e1b297cdded01c9aef4e40412db184eb
-assets/init-Gi6I4Gst.js,1768741872387,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/kanban-definition-3W4ZIXB7-v5EcgfFw.js,1768741872386,eb8ff24b1b74c03ffb02ec666cc74113a59e82fdca44af8eb29a8203f4cb9163
-assets/infoDiagram-WHAUD3N6-BArgX7EP.js,1768741872386,b105caaec7f50ed359a5ee65e3dc9db5cb0b5c9188933449445bde07527169ff
-assets/layout-C1nkapgf.js,1768741872387,81b8267ff82b292d89c1c854844820a4cb6f9b78f53dfd9238eb95578c28a6c6
-assets/journeyDiagram-XKPGCS4Q-5SPzY0zp.js,1768741872387,dd2a67ebf1b52c2b7ce81c71cb3ea90c23676ba656bc67d398feb6bb1a004bf8
-assets/graph-18XJ9t75.js,1768741872387,8849392b3c3401e267b6ff2649d178c9488aa7241a83eba488af0a7f66a1ae2b
-assets/index-BVaTgqzo.css,1768741872386,3d534952624292eb8e1530f313e5b1ac26f023598c10eba730e2e2ec96791120
-assets/gitGraphDiagram-NY62KEGX-BIYZGZNk.js,1768741872386,489e9fbc6b10496e4662d1ce57cd50b7d5b40dd8cbaf0604a1918c8c767550ad
-assets/diagram-QEK2KX5R-CRJ1Squf.js,1768741872387,29cec2f7d15d10a15aa76de4e559e9b7547688ac6689a052fd4a66fa89d1fd69
-assets/defaultLocale-DX6XiGOO.js,1768741872387,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/diagram-S2PKOQOG-BEoj08cA.js,1768741872386,3cca961596333d85f4a55ce49ee0fd69d61abb6d1662bf0b9bec7ecf055b240a
-assets/diagram-PSM6KHXK-K57lKvFc.js,1768741872387,b071c8fe45085e4370209b1570d707415cd7a1e39d2089bdffaaf85966b3d845
-assets/dagre-6UL2VRFP-DFj85kCh.js,1768741872387,700e7a24c795a255ed29c3132f2e254c625a2a5bb0af06642ca6454f699306b8
-assets/clone-LnpXwIVm.js,1768741872387,8fc8f4797f034ccb693a3b57715ff7356b8fc20ee11d2418f016727eaa7dd63a
-assets/classDiagram-v2-WZHVMYZB-DLJgjFRS.js,1768741872386,6ef9118dc4a962ec791554ce0fa2e4babc5700b17444902c666657f1da685d3c
-assets/erDiagram-Q2GNP2WA-D-y-lWDN.js,1768741872387,6ec3282ef1e1b60252504f6729c2554449c5231ca909a3d201db640721934dc0
-assets/chunk-TZMSLE5B-C-lUKfgA.js,1768741872386,42c7a2bccde21e3f6e6f38fe16fbbdad90884c3af9839fde61659354ebcbe5ec
-assets/chunk-QZHKN3VN-BmTgEx29.js,1768741872386,9bf41235e553ca4e4f70d4df296d6af55d0cc58d40d59c2f691543e5e6fc6ed8
-assets/classDiagram-2ON5EDUG-DLJgjFRS.js,1768741872386,6ef9118dc4a962ec791554ce0fa2e4babc5700b17444902c666657f1da685d3c
-assets/flowDiagram-NV44I4VS-anHtb95R.js,1768741872386,2f2aab28cc67ee214f858b62b6bbdf44244d4c90266a8c9d600d6241ffd42755
-assets/ganttDiagram-JELNMOA3-MoguLjuh.js,1768741872387,e7dda2884221b75bad726d08efce70a35ebcfbb1973bdcca6e368cf4e0f0c546
-assets/sequenceDiagram-WL72ISMW-CaRvE1pd.js,1768741872386,62c4bacd90f243dcccbd662908da9b027caf55f323e1490b17b30b570c38ecd4
-assets/cose-bilkent-S5V4N54A-DkVXCwAp.js,1768741872387,adcf8e3ac78c9851780a729b3d1533d5012f48e9168d50cc998ea46b0630715b
-assets/chunk-QN33PNHL-DLxzqmGy.js,1768741872387,c495e70a6b6ee92d131de88ef01c51a847c4376ce5e29aaf8873406e4654de43
-assets/chunk-FMBD7UC4-H80_vPj_.js,1768741872387,24922ae059c0d5dfff07911e46f3ca62b069357a07aab2f12285cd5c590ecf3b
-assets/chunk-55IACEB6-875w5S-a.js,1768741872387,2f78786e09503985a5a0d6dd3e0d7314f1521ca36ba651b4fae0a5c90086886c
-assets/chunk-4BX2VUAB--anWWdsp.js,1768741872387,63eadb821f2cb0da9b715ebb9e6a15120d5bfdec001d5eb37dca0beec103befb
-assets/channel-BKgefKLf.js,1768741872387,bc3cf6b12aa23ea9d7e7d69f81db587c7d75cf0ade18a099a798bd00c2dc5796
-assets/chunk-DI55MBZ5-DarK0Rod.js,1768741872386,9a5fb12ed3687bb49bfa3ba4443894e4b39b38f6a33c9cb3d50b3bd409468355
-assets/chunk-B4BG7PRW-XcCIfKda.js,1768741872386,8f68733f9be0d63a7217cb503d3e1707f56550cf8ccd38622f51d79b60a3b037
-assets/arc-BqLMmfPu.js,1768741872386,78d32b48334e7fc3f4ce553feaec3d656c475262d6cbcf3cf05ce413976340cc
-assets/_baseUniq-B-ZoFNNt.js,1768741872387,8e5c887b79fdbfcaff784cb35a19baaf5690543dcf66734df4b7016c80682e52
-assets/c4Diagram-YG6GDRKO-BSeidL6x.js,1768741872386,af9e5da507961b497234e52da720b25bdbe6580354680164e329fe56970f52e0
-assets/blockDiagram-VD42YOAC-CMUDFp2c.js,1768741872387,9cd164e5f7350a4d22a13700163ad72107222222e1c7cb00a28768c351f16692
-assets/architectureDiagram-VXUJARFQ-BPLeMlWV.js,1768741872387,6fa11fb71b2e57c0a993ff3e44eb8823e60c8afab0272c54b91160c903430dbe
-assets/katex-Cu_Erd72.js,1768741872387,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-DHE_FiSt.js,1768741872387,4926941e976d41b5e1fecdb73091d711ad99bca8483caff78b76daceaa573c89
-assets/cytoscape.esm-CyJtwmzi.js,1768741872387,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-2UrC0W-1.js,1768741872387,f54f421af42a6b462c4050e2c48d01fff400c032f09b59b433f631e0ab5985e5
-apple-touch-icon.png,1768741871986,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-logo.png,1768741871989,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1768741872009,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-192x192.png,1768741871998,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+sw.js,1768744639050,32944d0ed04657ff1ddea5ebd930eff4855e10dbff25a07797ccdcaaf4d6c036
+registerSW.js,1768744638359,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+workbox-8c29f6e4.js,1768744639051,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+manifest.webmanifest,1768744638359,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+index.html,1768744638359,99b19cb2cd222876a407fe56d91e5bd8fac7f29ea0df4f07d6a508b634308415
+firebase-messaging-sw.js,1768744637963,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+lp.html,1768744637967,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/stateDiagram-v2-4FDKWEC3-Cpsid5Kh.js,1768744638358,bc515e5c4f85864efa79ce59838e915a75b49edf773b4da8cbee0a9d510dca44
+assets/timeline-definition-IT6M3QCI-cz2iZhRF.js,1768744638358,3f05404d548b34a62bfb38373f08c4ca55113d93a63911be4c8bf575c4bd1b95
+assets/stateDiagram-FKZM4ZOC-jrN210ds.js,1768744638358,8ee7a69c1ddebcc9b17a95fbfebb41b2339347f139cb94953ce97c75c0f6fc42
+assets/xychartDiagram-PRI3JC2R-CuPuThVX.js,1768744638358,53fffbc19c4659f59b711f251b01b469a82d5bfea6f8fa1c1b7f2803278030b7
+assets/pieDiagram-ADFJNKIX-KhwPt9nZ.js,1768744638358,a1571df7f06ae51c560b4ba305070a5b82b104e5e5414b0b073525b9b3a44c83
+assets/sankeyDiagram-TZEHDZUN-Bc2d8ldy.js,1768744638358,d53fa783bbf20579457a3767446abb627fccf69a6881ab4e56f07463b26adf57
+assets/ordinal-Cboi1Yqb.js,1768744638358,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/min-DnL_6X_D.js,1768744638358,f89821dec8bab0c93c5b4d28c2e478cb1a9df6d3422a1117cdb335060aa41d37
+assets/requirementDiagram-UZGBJVZJ-CwwRKxDJ.js,1768744638358,25153d6d300e545509a1b0a0e1c7cd5353ed352cfbb76541a81ccc0cf670b84b
+assets/mindmap-definition-VGOIOE7T-D9--KpBk.js,1768744638358,aa8d5bc76bdff98b8c73f8722b686a637e304eaad1f1aa5b0e109c55bb5aca0b
+assets/infoDiagram-WHAUD3N6-C93FytB5.js,1768744638358,c534cf46aa7980a33f5c900f3a9b14f815b58c357e0b3dcf82469cb7d05cb15c
+assets/linear-Ba-a0uU6.js,1768744638359,e75e9532671585a0e7f6c2fca3fbfbcbbedb57d0f19e317f1a921e7fb8b04509
+assets/init-Gi6I4Gst.js,1768744638358,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/quadrantDiagram-AYHSOK5B-B8jT8Oj2.js,1768744638358,c69fa7c54b1de0b9a3f47e646d6c7e6456f50a6962ab650bcbaf1cf46bff0c1c
+assets/kanban-definition-3W4ZIXB7-BxHgJZS7.js,1768744638358,35005e1cc83bc61ea722738b332252d2ca7575d519cc036304da52b2cd1c6dca
+assets/graph-AmseoxIy.js,1768744638359,8adf7b6fa3552bea82957eee40cdd866182727e266f5b3891c66a8932fdff712
+assets/journeyDiagram-XKPGCS4Q-BpT6JEik.js,1768744638358,57159cec643c8c802d5daa8e0fe52aa6533697d13312dd63e7a72f8c5279330d
+assets/gitGraphDiagram-NY62KEGX-3Yk1i1M8.js,1768744638358,0d07f898b73bbfb091d14d7159bd6cf3341193309a9d06cf3289d81f09c66db2
+assets/layout-Cm8nQp08.js,1768744638359,04091c2c8e94825eb32cd4bf01f1dcf803d29ae69d17a02baecdecb2950de2a9
+assets/diagram-S2PKOQOG-BZP7LINz.js,1768744638358,aef18f31c78472d4650ebcbf289a9d00c03ac65eab28df38195d38180350c950
+assets/index-CFOlPi71.css,1768744638358,5652f6654c7ff91489ad5313544612c6621863d2c6fcc721cacb99ce5ea7c6d0
+assets/diagram-QEK2KX5R-IjuLFi4A.js,1768744638358,d547fbcbdaee31542058a7d892efa8b8fc1afa42ae75075ef7132f0cfb185a65
+assets/clone-BhrwQDpS.js,1768744638358,c1abd491c5969c1207977c06df2b931f29dc7a8badbdbdcc5b7d3a4c390c6e5b
+assets/defaultLocale-DX6XiGOO.js,1768744638358,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/erDiagram-Q2GNP2WA-BW15CDfo.js,1768744638358,e1f6b3ca03307363eba52787c210085bc9e9091c8ad0b42956739a856cf674eb
+assets/classDiagram-v2-WZHVMYZB-BRm_joRW.js,1768744638358,dd6f99378748b4afc2bebd68ecfa38b7c07ffac65afc8b377a64e43da95bbcb1
+assets/classDiagram-2ON5EDUG-BRm_joRW.js,1768744638358,dd6f99378748b4afc2bebd68ecfa38b7c07ffac65afc8b377a64e43da95bbcb1
+assets/chunk-QZHKN3VN-BfQBbwwL.js,1768744638358,f059f6f0401b20103e27e93e07bacd398518a4d8fcafa11cc94f47c2d4fb3136
+assets/chunk-TZMSLE5B-peXRDX04.js,1768744638358,ce8f2ceb641b8269f885e5662db249a2c92663c6d75b587f00a13c161a2f4887
+assets/dagre-6UL2VRFP-DVeFiL1_.js,1768744638359,9cc93e3489e223695890042d42a3380b5d7276f09c856a66ec7596294493274e
+assets/diagram-PSM6KHXK-BuuPxqUn.js,1768744638359,6f78348cbd38976b1fc36b44767a4bf11bd01a051173c1363a943d6a2e37e756
+assets/flowDiagram-NV44I4VS-DcvyLwZF.js,1768744638358,257a6c16e3d6c5bf050b101be7bd30d4564567468791ac844bc7e2f40709e0b7
+assets/sequenceDiagram-WL72ISMW-yctN2JWX.js,1768744638358,71c52a1fd5dc62e8cc7f7473524ad1af05775d5df4749bdeee19991776a2d86a
+assets/ganttDiagram-JELNMOA3-DEcwfemN.js,1768744638359,785eb36ba809f102a67fd9aa5647d650b1e2884bb7220a148e4bfad1e70f8e86
+assets/cose-bilkent-S5V4N54A-CIewKDjB.js,1768744638359,fd8d78cbfda240a34c89e70a0011aa570fca0afd0ae7dc1cb99b3040e0e324a4
+assets/chunk-FMBD7UC4-B2yvtEza.js,1768744638358,73c471d86bb64b1a3c5b818b5b54ec8cc975e002b06a9fdbb045c1c7a03ce289
+assets/chunk-QN33PNHL-DDG9TCE2.js,1768744638358,902e21ab48147edd855d57ce202be2a88dedfa131cba624f8fe32f1ea08f0dd6
+assets/chunk-DI55MBZ5-ZQovUnp3.js,1768744638358,146422dc40713039f372962662978b9f3dc574ab85952f1d3202d915f65341d5
+assets/chunk-55IACEB6-Dl5WYZwT.js,1768744638358,d6ba09fe58f840a8cf35796d1576af3ddc55dd845b26bfe55f712f07e89f67db
+assets/chunk-4BX2VUAB-Cnvyn9sM.js,1768744638358,3e868c2f34bfb055a633fb9fda6bc0a07f1f293179051fc1c7da6f2b6c432499
+assets/channel-yjR7IZ_s.js,1768744638358,65f5c0cbd3e77dc4bcc0ec75192ae3e9dced8858ec48207c93111bc8af5a4d18
+assets/chunk-B4BG7PRW-BfDZWE_n.js,1768744638358,6d912bce4b91055dadd944512a1e5fb15d9ad8feb1a737504b1f670d0fd647aa
+assets/arc-Dl26LpKY.js,1768744638358,2236a9d8b8ab55987532c83bad76978e53ebbd0583dbffaf5f46045987e33237
+assets/_baseUniq-DWS1ShIR.js,1768744638359,512afe0b308fa1e9ac1f1bad485fe8e69ea43c79eeaf34c50d8556aad914bb0f
+assets/blockDiagram-VD42YOAC-KOArX6bS.js,1768744638358,084e75112bef6211bffe2ead0cfb096915a0e3fb57d8e2c3848add807e4b3b9c
+assets/c4Diagram-YG6GDRKO-zL2evr8u.js,1768744638358,7131d9e20d915e756e32a59ead23baced5818a52c63f166bdbffe02f37374ff5
+assets/architectureDiagram-VXUJARFQ-aWGOy295.js,1768744638358,9d9a95e82a6414cff7d817061e82c112387e390dc9b75e0ec72b950ef987ef47
+assets/katex-Cu_Erd72.js,1768744638358,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-BX3F0QGp.js,1768744638359,22636b3d9ad8a2dcb4017b80fc19a719b231e1252801eda967ad043069272d3e
+assets/cytoscape.esm-CyJtwmzi.js,1768744638358,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-tcTL10-Y.js,1768744638359,de81921bb77dec8577837d4fddb5a8b2523a867d8c1d8bd448c0e3a299c9707d
+pwa-192x192.png,1768744637973,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1768744637980,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1768744637962,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+logo.png,1768744637966,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>

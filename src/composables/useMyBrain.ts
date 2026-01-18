@@ -20,12 +20,11 @@ import {
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import axios from "axios"; // 追加: モデル取得用
 
-// ★設定項目 (ID等を書き換えてください)
-const STRIPE_PRICE_ID = "price_1SqvJAFjyhW5lKcrgAmd48sB "; // あなたのStripe価格IDに変更してください
-const ADMIN_EMAILS = [
-  "gongedonghuam@gmail.com", // あなたのアドレス
-];
+// ★設定項目
+const STRIPE_PRICE_ID = "price_1SqvJAFjyhW5lKcrgAmd48sB";
+const ADMIN_EMAILS = ["gongedonghuam@gmail.com"];
 
 export interface Memory {
   id: string;
@@ -75,7 +74,6 @@ const isAiThinking = ref(false);
 const isSaving = ref(false);
 const activeTag = ref<string | null>(null);
 
-// ファイルをBase64に変換
 const fileToGenerativePart = async (file: File) => {
   return new Promise<{ inlineData: { data: string; mimeType: string } }>(
     (resolve, reject) => {
@@ -90,7 +88,6 @@ const fileToGenerativePart = async (file: File) => {
   );
 };
 
-// コサイン類似度
 const cosineSimilarity = (vecA: number[], vecB: number[]) => {
   if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
   let dotProduct = 0;
@@ -110,14 +107,44 @@ export function useMyBrain() {
     return genAI.getGenerativeModel({ model: "text-embedding-004" });
   };
 
+  // 動的に利用可能なモデルを取得する関数
   const getSmartModelName = async (apiKey: string): Promise<string> => {
-    // 常にFlashモデルを使用（コスト対策）
-    return "gemini-1.5-flash";
+    try {
+      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+      // axiosを使うかfetchを使うか統一が必要ですが、ここではfetchで実装します
+      const response = await fetch(listUrl);
+      if (!response.ok) throw new Error("Model fetch failed");
+
+      const data = await response.json();
+      const models = data.models || [];
+
+      const viableModels = models.filter((m: any) =>
+        m.supportedGenerationMethods?.includes("generateContent"),
+      );
+
+      const preferredOrder = [
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-pro",
+        "gemini-pro",
+      ];
+
+      for (const pref of preferredOrder) {
+        const found = viableModels.find((m: any) => m.name.includes(pref));
+        if (found) return found.name.replace("models/", "");
+      }
+
+      if (viableModels.length > 0) {
+        return viableModels[0].name.replace("models/", "");
+      }
+
+      return "gemini-1.5-flash";
+    } catch (e) {
+      console.warn("Model auto-detect failed, using default.", e);
+      return "gemini-1.5-flash";
+    }
   };
 
-  // ----------------------------------------------------
-  // ▼ 1. 課金・制限ロジック
-  // ----------------------------------------------------
   const checkAndIncrementUsage = async (): Promise<boolean> => {
     if (!currentUser.value) return false;
     if (currentUser.value.isPro) return true;
@@ -168,9 +195,6 @@ export function useMyBrain() {
     });
   };
 
-  // ----------------------------------------------------
-  // ▼ 2. 認証・初期化
-  // ----------------------------------------------------
   const initAuth = () => {
     onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -218,9 +242,6 @@ export function useMyBrain() {
     window.location.reload();
   };
 
-  // ----------------------------------------------------
-  // ▼ 3. データ取得
-  // ----------------------------------------------------
   const fetchMemories = async () => {
     if (!currentUser.value) return;
     loading.value = true;
@@ -263,110 +284,105 @@ export function useMyBrain() {
     activeTag.value = tag;
   };
 
+  // ★ここが復活しました
   const filteredMemories = computed(() => {
     if (!activeTag.value) return memories.value;
     return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
   });
 
-  // ----------------------------------------------------
-  // ▼ 4. メモ追加 (保存中ステータス・リコメンド)
-  // ----------------------------------------------------
   const addMemory = async (text: string, file?: File | null) => {
     if (!(await checkAndIncrementUsage())) return null;
-    isSaving.value = true; // ★保存開始
+    isSaving.value = true;
 
     if (!currentUser.value) return null;
 
     try {
-      const isAudio = file?.type.startsWith("audio/");
       const initText = file ? `(解析中...) ${text}` : text;
-
       const docRef = await addDoc(collection(db, "memories"), {
         userId: currentUser.value.uid,
         text: initText,
         createdAt: serverTimestamp(),
         tags: [],
-        aiSummary: "AI処理中...",
+        aiSummary: "保存中...",
         hasImage: !!file,
         fileType: file?.type || null,
       });
 
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (apiKey) {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-          model: "gemini-1.5-flash",
-          generationConfig: { responseMimeType: "application/json" },
-        });
-
-        let promptParts: any[] = [];
-        if (file) {
-          const filePart = await fileToGenerativePart(file);
-          promptParts.push(filePart);
-          if (isAudio) {
-            promptParts.push({
-              text: `音声データです。書き起こしと要約とタスク抽出をして。ユーザーメモ:${text} 出力JSON:{summary, tags, fullText}`,
-            });
-          } else {
-            promptParts.push({
-              text: `画像/PDFです。内容を分析して。ユーザーメモ:${text} 出力JSON:{summary, tags, fullText}`,
-            });
-          }
-        } else {
-          promptParts.push({
-            text: `以下のテキストを整理・分析して。${text} 出力JSON:{summary, tags, fullText}`,
-          });
-        }
-
-        const result = await model.generateContent(promptParts);
-        const aiData = JSON.parse(result.response.text());
-        const finalContent = file
-          ? `【解析済み】${text}\n\n${aiData.fullText}`
-          : text;
-
-        const embedModel = getEmbeddingModel(apiKey);
-        const embedResult = await embedModel.embedContent(finalContent);
-        const embedding = embedResult.embedding.values;
-
-        await updateDoc(docRef, {
-          text: finalContent,
-          aiSummary: aiData.summary,
-          tags: aiData.tags,
-          embedding: embedding,
-        });
-
-        const newMem: Memory = {
-          id: docRef.id,
-          userId: currentUser.value.uid,
-          text: finalContent,
-          aiSummary: aiData.summary,
-          tags: aiData.tags,
-          createdAt: new Date(),
-          hasImage: !!file,
-          fileType: file?.type,
-          embedding: embedding,
-        };
-        memories.value.unshift(newMem);
-
-        // リコメンド
-        const relatedMemories = memories.value
-          .filter((m) => m.id !== docRef.id && m.embedding)
-          .map((m) => ({
-            ...m,
-            score: m.embedding ? cosineSimilarity(embedding, m.embedding) : 0,
-          }))
-          .filter((m) => m.score > 0.65)
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 3);
-
-        return relatedMemories;
+      if (!apiKey) {
+        await updateDoc(docRef, { aiSummary: "APIキー未設定" });
+        return null;
       }
-    } catch (e) {
-      console.error("Add memory error:", e);
-      alert("保存エラー");
-      return null;
+
+      const modelName = await getSmartModelName(apiKey);
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: { responseMimeType: "application/json" },
+      });
+
+      let promptParts: any[] = [];
+      if (file) {
+        const filePart = await fileToGenerativePart(file);
+        promptParts.push(filePart);
+        promptParts.push({
+          text: "画像を分析して。出力JSON:{summary, tags, fullText}",
+        });
+      } else {
+        promptParts.push({
+          text: `テキストを整理して。${text} 出力JSON:{summary, tags, fullText}`,
+        });
+      }
+
+      const res = await model.generateContent(promptParts);
+      let aiData;
+      try {
+        aiData = JSON.parse(res.response.text());
+      } catch {
+        aiData = { summary: text.substring(0, 30), tags: [], fullText: text };
+      }
+
+      const finalText = file
+        ? `【解析済み】${text}\n\n${aiData.fullText || ""}`
+        : text;
+
+      const embModel = getEmbeddingModel(apiKey);
+      const embResult = await embModel.embedContent(finalText);
+      const embedding = embResult.embedding.values;
+
+      await updateDoc(docRef, {
+        text: finalText,
+        aiSummary: aiData.summary,
+        tags: aiData.tags,
+        embedding: embedding,
+      });
+
+      memories.value.unshift({
+        id: docRef.id,
+        userId: currentUser.value.uid,
+        text: finalText,
+        aiSummary: aiData.summary,
+        tags: aiData.tags,
+        createdAt: new Date(),
+        hasImage: !!file,
+        fileType: file?.type,
+        embedding: embedding,
+      });
+
+      return memories.value
+        .filter((m) => m.id !== docRef.id && m.embedding)
+        .map((m) => ({
+          ...m,
+          score: cosineSimilarity(embedding, m.embedding!),
+        }))
+        .filter((m) => m.score > 0.65)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+    } catch (e: any) {
+      console.error("AI Error:", e);
+      alert("AIエラー: " + e.message);
     } finally {
-      isSaving.value = false; // ★保存終了
+      isSaving.value = false;
     }
     return null;
   };
@@ -375,73 +391,77 @@ export function useMyBrain() {
     if (!(await checkAndIncrementUsage())) return;
     isSaving.value = true;
     try {
-      const functions = getFunctions();
-      const scrapeFunc = httpsCallable(functions, "scrapeUrl");
-      const result: any = await scrapeFunc({ url });
-
-      if (result.data.success) {
-        const { title, content } = result.data;
-        const fullText = `【WEB記事】${title}\nURL: ${url}\n\n${content}`;
-        await addMemory(fullText);
+      const func = httpsCallable(getFunctions(), "scrapeUrl");
+      const res: any = await func({ url });
+      if (res.data.success) {
+        await addMemory(
+          `【WEB】${res.data.title}\nURL: ${url}\n\n${res.data.content}`,
+        );
       }
     } catch (e: any) {
-      alert("記事の読み込みに失敗しました: " + e.message);
+      alert("URL読込失敗: " + e.message);
     } finally {
       isSaving.value = false;
     }
   };
 
-  const askBrain = async (question: string): Promise<string> => {
+  const askBrain = async (question: string) => {
     if (!(await checkAndIncrementUsage())) return "";
     isAiThinking.value = true;
-
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error("APIキーがありません");
+
       const embedModel = getEmbeddingModel(apiKey);
       const qEmbed = await embedModel.embedContent(question);
       const qVec = qEmbed.embedding.values;
 
-      const scoredMemories = memories.value
+      const context = memories.value
         .map((m) => ({
           ...m,
           score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
         }))
-        .sort((a, b) => b.score - a.score);
-
-      const context = scoredMemories
+        .sort((a, b) => b.score - a.score)
         .slice(0, 20)
-        .map((m) => `- ${m.text.slice(0, 500)}`)
-        .join("\n\n");
+        .map((m) => `- ${m.text.slice(0, 300)}`)
+        .join("\n");
 
+      const modelName = await getSmartModelName(apiKey);
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: modelName });
       const prompt = `あなたは「第2の脳」です。記憶データ:${context}\n質問:${question}\n回答はJSON形式 {"answer": "回答", "mermaid": "図解コード(任意)", "action": null} で。`;
 
-      const result = await model.generateContent(prompt);
-      const data = JSON.parse(
-        result.response
-          .text()
-          .replace(/```json|```/g, "")
-          .trim(),
-      );
+      const res = await model.generateContent(prompt);
+      let json;
+      try {
+        json = JSON.parse(
+          res.response
+            .text()
+            .replace(/```json|```/g, "")
+            .trim(),
+        );
+      } catch {
+        json = { answer: res.response.text(), mermaid: null };
+      }
 
-      const logData = {
+      const log = {
         userId: currentUser.value!.uid,
-        question: question,
-        answer: data.answer,
-        mermaidCode: data.mermaid || null,
+        question,
+        answer: json.answer,
+        mermaidCode: json.mermaid,
         createdAt: serverTimestamp(),
       };
-      const logRef = await addDoc(collection(db, "chat_logs"), logData);
+      const ref = await addDoc(collection(db, "chat_logs"), log);
       chatLogs.value.push({
-        id: logRef.id,
-        ...logData,
+        id: ref.id,
+        ...log,
         createdAt: new Date(),
       } as any);
-
-      return data.answer;
+      return json.answer;
     } catch (e: any) {
-      return "エラー: " + e.message;
+      console.error(e);
+      alert("AIエラー: " + e.message);
+      return "エラーが発生しました";
     } finally {
       isAiThinking.value = false;
     }
@@ -480,7 +500,7 @@ export function useMyBrain() {
   return {
     currentUser,
     memories,
-    filteredMemories,
+    filteredMemories, // ← これを返すための定義を追加しました
     chatLogs,
     loading,
     isAiThinking,
@@ -491,12 +511,11 @@ export function useMyBrain() {
     logout,
     addMemory,
     addUrlMemory,
-    askBrain,
-    selectTag,
-    startSubscription,
-    // ▼ ここに追加しました！
     updateMemory,
     deleteMemory,
+    askBrain,
     deleteChatLog,
+    selectTag,
+    startSubscription,
   };
 }
