@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useInputFooter } from "./useInputFooter";
+import { useMyBrain } from "@/composables/useMyBrain";
 
 const props = defineProps<{
   modelValue: "memo" | "chat" | "url";
@@ -15,7 +16,6 @@ const inputMode = computed({
   set: (val) => emit("update:modelValue", val),
 });
 
-// ★修正: 第2引数を削除
 const {
   inputText,
   selectedFile,
@@ -28,6 +28,14 @@ const {
   clearFile,
   handleSend,
 } = useInputFooter(props.modelValue);
+
+// ▼ 課金ステータス表示用
+const { currentUser, startSubscription } = useMyBrain();
+
+const remainingCount = computed(() => {
+  if (currentUser.value?.isPro) return 9999;
+  return 5 - (currentUser.value?.dailyUsage || 0);
+});
 </script>
 
 <template>
@@ -35,6 +43,30 @@ const {
     class="fixed bottom-0 w-full bg-slate-900/90 backdrop-blur border-t border-slate-800 p-4 pb-8 z-30 transition-all"
   >
     <div class="max-w-md mx-auto">
+      <div class="flex items-center justify-between px-4 mb-2">
+        <div class="text-[10px] font-bold text-slate-400">
+          <span v-if="currentUser?.isPro" class="text-yellow-400"
+            >★ PRO Plan</span
+          >
+          <span v-else>
+            Free: 残り
+            <span
+              :class="remainingCount === 0 ? 'text-red-500' : 'text-white'"
+              >{{ remainingCount }}</span
+            >
+            / 5回
+          </span>
+        </div>
+
+        <button
+          v-if="!currentUser?.isPro"
+          @click="startSubscription"
+          class="text-[10px] bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 py-1 rounded-full font-bold shadow-lg hover:opacity-90 transition"
+        >
+          🚀 PROにアップグレード (¥1,000/月)
+        </button>
+      </div>
+
       <div
         class="flex gap-2 mb-4 justify-center bg-slate-800 p-1 rounded-full w-fit mx-auto"
       >
@@ -121,7 +153,7 @@ const {
           <input
             type="file"
             ref="fileInputRef"
-            accept="image/*, application/pdf, text/plain"
+            accept="image/*, application/pdf, text/plain, audio/*"
             class="hidden"
             @change="handleFileSelect"
           />
@@ -141,7 +173,7 @@ const {
             inputMode === 'url'
               ? 'URLを入力...'
               : inputMode === 'memo'
-                ? '記憶...'
+                ? '記憶/画像/音声を...'
                 : '質問...'
           "
           @keydown.enter.prevent="handleSend(inputMode)"

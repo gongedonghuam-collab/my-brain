@@ -3,7 +3,6 @@ import { useMyBrain } from "@/composables/useMyBrain";
 
 type InputMode = "memo" | "chat" | "url";
 
-// ★修正: emit 引数を削除（使っていないため）
 export function useInputFooter(inputMode: InputMode) {
   const { addMemory, addUrlMemory, askBrain, isAiThinking } = useMyBrain();
 
@@ -74,7 +73,17 @@ export function useInputFooter(inputMode: InputMode) {
       inputText.value = "";
       const file = selectedFile.value;
       clearFile();
-      await addMemory(text, file);
+
+      // リコメンドを受け取る
+      const related = await addMemory(text, file);
+
+      if (related && related.length > 0) {
+        const summaries = related.map((m) => `・${m.aiSummary}`).join("\n");
+        alert(`保存しました！\n\n💡 関連する過去の記憶:\n${summaries}`);
+      } else if (related !== null) {
+        // nullでなければ保存成功（リコメンドなし）
+        // 特に何も出さないか、軽くトーストを出すなど
+      }
     } else if (mode === "url") {
       inputText.value = "";
       await addUrlMemory(text);

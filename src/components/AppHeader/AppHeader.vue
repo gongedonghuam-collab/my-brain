@@ -1,8 +1,16 @@
 <script setup lang="ts">
-// ロジックファイルを読み込む
 import { useAppHeader } from "./useAppHeader";
 
-// ログアウト機能を取り出す
+// ★あなたのLINEログインチャンネルIDを入れてください
+const LINE_LOGIN_CHANNEL_ID = "2008915242";
+const REDIRECT_URI = window.location.origin + "/app";
+
+const startLineLogin = () => {
+  // LINEの認証画面へ飛ばすURL
+  const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${LINE_LOGIN_CHANNEL_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=randomstate123&scope=profile%20openid`;
+  window.location.href = url;
+};
+
 const { logout } = useAppHeader();
 </script>
 
@@ -12,11 +20,20 @@ const { logout } = useAppHeader();
   >
     <div class="font-black text-lg tracking-tight">🧠 My Brain</div>
 
-    <button
-      @click="logout"
-      class="text-xs font-bold text-slate-500 hover:text-white transition"
-    >
-      ログアウト
-    </button>
+    <div class="flex items-center gap-3">
+      <button
+        @click="startLineLogin"
+        class="text-[10px] bg-[#06C755] text-white px-3 py-1.5 rounded-full font-bold hover:opacity-90 transition flex items-center gap-1"
+      >
+        <span>💬</span> LINE連携
+      </button>
+
+      <button
+        @click="logout"
+        class="text-xs font-bold text-slate-500 hover:text-white transition"
+      >
+        ログアウト
+      </button>
+    </div>
   </header>
 </template>

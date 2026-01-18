@@ -4,6 +4,7 @@ import HomeView from "../views/HomeView/HomeView.vue";
 import LoginView from "../views/LoginView/LoginView.vue";
 import VerifyEmailView from "../views/VerifyEmailView/VerifyEmailView.vue";
 import LandingView from "../views/LandingView/LandingView.vue";
+import LegalView from "../views/LegalView/LegalView.vue"; // 追加
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -12,13 +13,13 @@ const router = createRouter({
       path: "/",
       name: "landing",
       component: LandingView,
-      meta: { public: true }, // 誰でも見れる
+      meta: { public: true },
     },
     {
       path: "/app",
       name: "home",
       component: HomeView,
-      meta: { requiresAuth: true }, // ログイン必須
+      meta: { requiresAuth: true },
     },
     {
       path: "/login",
@@ -32,12 +33,18 @@ const router = createRouter({
       component: VerifyEmailView,
       meta: { requiresAuth: true },
     },
+    // 追加
+    {
+      path: "/legal",
+      name: "legal",
+      component: LegalView,
+      meta: { public: true },
+    },
   ],
 });
 
 router.beforeEach(async (to, from, next) => {
   const auth = getAuth();
-  // 認証状態の確定を待つ
   const currentUser = await new Promise<User | null>((resolve) => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       unsubscribe();
@@ -47,29 +54,21 @@ router.beforeEach(async (to, from, next) => {
 
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
 
-  // 1. トップページ(LP)にアクセスした時
   if (to.path === "/") {
     if (currentUser) {
-      // ログイン済みならアプリへ転送
       next("/app");
       return;
     } else {
-      // 未ログインならLPを表示
       next();
       return;
     }
   }
 
-  // 2. ログインが必要なページ (/appなど) に未ログインでアクセス
   if (requiresAuth && !currentUser) {
     next("/login");
-  }
-  // 3. ログイン画面 (/login) にログイン済みでアクセス
-  else if (to.path === "/login" && currentUser) {
+  } else if (to.path === "/login" && currentUser) {
     next("/app");
-  }
-  // 4. それ以外
-  else {
+  } else {
     next();
   }
 });

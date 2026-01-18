@@ -14,10 +14,20 @@ import {
   orderBy,
   serverTimestamp,
   where,
+  onSnapshot,
+  increment,
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// ★ここにStripeの商品ID (price_xxxx) を入れてください
+const STRIPE_PRICE_ID = "price_XXXXXXXXXXXXXXXXXXXXXXXX";
+
+// ★ここに無条件でPRO扱いにするメールアドレスを入れてください
+const ADMIN_EMAILS = [
+  "gongedonghuam@gmail.com", // あなたのアドレス
+];
 
 export interface Memory {
   id: string;
@@ -51,6 +61,12 @@ export interface User {
   email: string;
   displayName?: string;
   photoURL?: string | null;
+  // ▼ 課金・制限用データ
+  isPro?: boolean;
+  dailyUsage?: number;
+  lastUsageDate?: string;
+  stripeId?: string;
+  role?: string;
 }
 
 const currentUser = ref<User | null>(null);
@@ -60,7 +76,7 @@ const loading = ref(false);
 const isAiThinking = ref(false);
 const activeTag = ref<string | null>(null);
 
-// 画像Base64変換
+// ファイルをBase64に変換
 const fileToGenerativePart = async (file: File) => {
   return new Promise<{ inlineData: { data: string; mimeType: string } }>(
     (resolve, reject) => {
@@ -75,7 +91,7 @@ const fileToGenerativePart = async (file: File) => {
   );
 };
 
-// コサイン類似度計算
+// コサイン類似度 (関連度計算)
 const cosineSimilarity = (vecA: number[], vecB: number[]) => {
   if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
   let dotProduct = 0;
@@ -97,6 +113,7 @@ export function useMyBrain() {
 
   const getSmartModelName = async (apiKey: string): Promise<string> => {
     try {
+      // Proユーザーなら高性能モデルを使うなどの分岐も可能
       const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
       const listResponse = await fetch(listUrl);
       if (!listResponse.ok) return "gemini-1.5-flash";
@@ -104,6 +121,7 @@ export function useMyBrain() {
       const generationModels = (listData.models || []).filter((m: any) =>
         m.supportedGenerationMethods?.includes("generateContent"),
       );
+      // Flashモデルを優先
       const flash = generationModels.find((m: any) =>
         m.name.includes("gemini-1.5-flash"),
       );
@@ -114,27 +132,115 @@ export function useMyBrain() {
     }
   };
 
+  // ----------------------------------------------------
+  // ▼ 1. 課金・制限ロジック
+  // ----------------------------------------------------
+  const checkAndIncrementUsage = async (): Promise<boolean> => {
+    if (!currentUser.value) return false;
+
+    // Proユーザーは無制限
+    if (currentUser.value.isPro) return true;
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const userRef = doc(db, "users", currentUser.value.uid);
+
+    // 確実な判定のため最新データを取得
+    const snap = await getDoc(userRef);
+    const data = snap.data();
+
+    let currentCount = 0;
+
+    // 日付が変わっていたらリセット
+    if (data?.lastUsageDate !== todayStr) {
+      currentCount = 0;
+      await updateDoc(userRef, {
+        dailyUsage: 0,
+        lastUsageDate: todayStr,
+      });
+    } else {
+      currentCount = data?.dailyUsage || 0;
+    }
+
+    // 制限チェック (5回)
+    if (currentCount >= 5) {
+      alert(
+        "本日の無料枠（5回）を使い切りました。\nProプランで無制限に解放しましょう！🚀",
+      );
+      return false;
+    }
+
+    // カウントアップ
+    await updateDoc(userRef, {
+      dailyUsage: increment(1),
+      lastUsageDate: todayStr,
+    });
+
+    return true;
+  };
+
+  // Stripe Checkoutへ遷移
+  const startSubscription = async () => {
+    if (!currentUser.value) return;
+
+    // Extensionが監視するコレクションへ書き込み
+    const sessionsRef = collection(
+      db,
+      "users",
+      currentUser.value.uid,
+      "checkout_sessions",
+    );
+    const docRef = await addDoc(sessionsRef, {
+      price: STRIPE_PRICE_ID,
+      success_url: window.location.origin + "/app",
+      cancel_url: window.location.origin + "/app",
+    });
+
+    // URL発行を待機
+    onSnapshot(docRef, (snap) => {
+      const { url } = snap.data() || {};
+      if (url) {
+        window.location.assign(url);
+      }
+    });
+  };
+
+  // ----------------------------------------------------
+  // ▼ 2. 認証・初期化 (修正版)
+  // ----------------------------------------------------
   const initAuth = () => {
     onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          currentUser.value = {
-            uid: user.uid,
-            email: user.email || "",
-            displayName: data.displayName,
-            photoURL: user.photoURL || undefined,
-          };
-        } else {
-          const newUser = {
-            uid: user.uid,
-            email: user.email || "",
-            createdAt: serverTimestamp(),
-          };
-          await setDoc(doc(db, "users", user.uid), newUser);
-          currentUser.value = newUser;
-        }
+        // ★修正: まずユーザーIDを確定させて、データ取得ができる状態にする
+        currentUser.value = {
+          uid: user.uid,
+          email: user.email || "",
+          displayName: user.displayName || undefined,
+          photoURL: user.photoURL || undefined,
+          isPro: false, // 仮のデフォルト値
+          dailyUsage: 0,
+        };
+
+        // 並行して詳細データを監視
+        onSnapshot(doc(db, "users", user.uid), (docSnap) => {
+          const data = docSnap.data();
+          if (data && currentUser.value) {
+            const isAdmin = ADMIN_EMAILS.includes(user.email || "");
+            const isSubscribed =
+              !!data.stripeId || data.role === "pro" || isAdmin;
+
+            currentUser.value = {
+              ...currentUser.value, // uid等を維持
+              displayName: data.displayName || currentUser.value.displayName,
+              isPro: isSubscribed,
+              dailyUsage: data.dailyUsage || 0,
+              lastUsageDate: data.lastUsageDate,
+              stripeId: data.stripeId,
+              role: data.role,
+            };
+          }
+        });
+
+        // ユーザーIDがセットされた状態でデータ取得を実行
         await Promise.all([fetchMemories(), fetchChatLogs()]);
       } else {
         currentUser.value = null;
@@ -149,14 +255,14 @@ export function useMyBrain() {
     window.location.reload();
   };
 
-  // 2. データ取得
+  // ----------------------------------------------------
+  // ▼ 3. データ取得
+  // ----------------------------------------------------
   const fetchMemories = async () => {
     if (!currentUser.value) return;
     loading.value = true;
     try {
-      // ★修正: limit(500) を削除し、全件取得するように変更
-      // ※件数が多い場合、初回の読み込みに少し時間がかかる可能性がありますが、
-      // 取得後はクライアント側でキャッシュされるため高速に動作します。
+      // 全件取得 (新しい順)
       let q = query(
         collection(db, "memories"),
         where("userId", "==", currentUser.value.uid),
@@ -184,7 +290,7 @@ export function useMyBrain() {
         collection(db, "chat_logs"),
         where("userId", "==", currentUser.value.uid),
         orderBy("createdAt", "desc"),
-        limit(50), // チャット履歴は表示用なので50件制限のままでOK
+        limit(50),
       );
       const snap = await getDocs(q);
       chatLogs.value = snap.docs
@@ -204,15 +310,29 @@ export function useMyBrain() {
     return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
   });
 
-  // 3. メモ追加
+  // ----------------------------------------------------
+  // ▼ 4. メモ追加 (AI解析・音声対応・リコメンド)
+  // ----------------------------------------------------
   const addMemory = async (text: string, file?: File | null) => {
-    if (!currentUser.value) return;
+    // 制限チェック
+    const canUse = await checkAndIncrementUsage();
+    if (!canUse) return null;
+
+    if (!currentUser.value) return null;
     isAiThinking.value = true;
 
     try {
       const isImage = file?.type.startsWith("image/");
       const isPdf = file?.type === "application/pdf";
-      const fileTypeLabel = isImage ? "画像" : isPdf ? "PDF" : "ファイル";
+      const isAudio = file?.type.startsWith("audio/");
+
+      const fileTypeLabel = isImage
+        ? "画像"
+        : isPdf
+          ? "PDF"
+          : isAudio
+            ? "音声"
+            : "ファイル";
       const initialText = file ? `(${fileTypeLabel}解析中...) ${text}` : text;
 
       const docRef = await addDoc(collection(db, "memories"), {
@@ -239,13 +359,29 @@ export function useMyBrain() {
         if (file) {
           const filePart = await fileToGenerativePart(file);
           promptParts.push(filePart);
-          promptParts.push({
-            text: `
-            画像/資料を分析して記憶データを作成してください。
-            ユーザーメモ: ${text}
-            出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "全テキスト"}
-          `,
-          });
+
+          // ★音声(議事録)対応
+          if (isAudio) {
+            promptParts.push({
+              text: `
+                これは会議や独り言の音声データです。以下の指示に従って処理してください。
+                1. 内容を詳細に書き起こし・要約してください。
+                2. 決定事項やネクストアクション（タスク）があれば抽出してください。
+                3. ユーザーのメモ: ${text}
+                
+                出力形式: JSON {"summary": "20字以内のタイトル", "tags": ["議事録", "音声メモ"], "fullText": "## 要約\n...\n\n## 書き起こし\n...\n\n## タスク\n- [ ] ..."}
+              `,
+            });
+          } else {
+            // 画像・PDF用
+            promptParts.push({
+              text: `
+                画像/資料を分析して記憶データを作成してください。
+                ユーザーメモ: ${text}
+                出力形式: JSON {"summary": "20字要約", "tags": ["タグ"], "fullText": "全テキスト"}
+              `,
+            });
+          }
         } else {
           promptParts.push({
             text: `
@@ -282,18 +418,38 @@ export function useMyBrain() {
           createdAt: new Date(),
           hasImage: !!file,
           fileType: file?.type,
+          embedding: embedding,
         };
         memories.value.unshift(newMem);
+
+        // ★「芋づる式」リコメンドロジック
+        // 類似度が高い(0.65以上)過去のメモを探す
+        const relatedMemories = memories.value
+          .filter((m) => m.id !== docRef.id && m.embedding)
+          .map((m) => ({
+            ...m,
+            score: m.embedding ? cosineSimilarity(embedding, m.embedding) : 0,
+          }))
+          .filter((m) => m.score > 0.65)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3); // Top 3
+
+        return relatedMemories; // 関連メモを返す
       }
     } catch (e) {
       console.error("Add memory error:", e);
       alert("保存エラー");
+      return null;
     } finally {
       isAiThinking.value = false;
     }
+    return null;
   };
 
   const addUrlMemory = async (url: string) => {
+    const canUse = await checkAndIncrementUsage();
+    if (!canUse) return;
+
     if (!currentUser.value) return;
     isAiThinking.value = true;
 
@@ -305,6 +461,7 @@ export function useMyBrain() {
       if (result.data.success) {
         const { title, content } = result.data;
         const fullText = `【WEB記事】${title}\nURL: ${url}\n\n${content}`;
+        // URL保存もEmbedding対象にするため addMemory を経由して保存
         await addMemory(fullText);
       }
     } catch (e: any) {
@@ -337,8 +494,13 @@ export function useMyBrain() {
     chatLogs.value = chatLogs.value.filter((l) => l.id !== id);
   };
 
-  // 4. チャット機能
+  // ----------------------------------------------------
+  // ▼ 5. チャット機能
+  // ----------------------------------------------------
   const askBrain = async (question: string): Promise<string> => {
+    const canUse = await checkAndIncrementUsage();
+    if (!canUse) return "";
+
     if (!question.trim() || !currentUser.value) return "";
     isAiThinking.value = true;
 
@@ -459,5 +621,6 @@ export function useMyBrain() {
     askBrain,
     deleteChatLog,
     selectTag,
+    startSubscription, // 追加
   };
 }

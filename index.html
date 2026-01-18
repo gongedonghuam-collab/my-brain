@@ -3,54 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="/logo.png?v=3" />
-    <link rel="apple-touch-icon" href="/logo.png?v=3" />
-
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-
     <title>My Brain</title>
-    <meta
-      name="description"
-      content="AIがあなたの記憶をサポートする、あなただけの第2の脳。"
-    />
-    <meta name="theme-color" content="#0f172a" />
-
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta
-      name="apple-mobile-web-app-status-bar-style"
-      content="black-translucent"
-    />
-    <meta name="apple-mobile-web-app-title" content="My Brain" />
-
-    <meta property="og:title" content="My Brain - AI Knowledge Base" />
-    <meta
-      property="og:description"
-      content="あなただけの第2の脳。AIが記憶・検索・思考をサポートします。"
-    />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://my-brain-145b1.web.app/" />
-    <meta
-      property="og:image"
-      content="https://my-brain-145b1.web.app/logo.png?v=3"
-    />
-    <meta property="og:site_name" content="My Brain" />
-    <meta name="twitter:card" content="summary" />
-
     <style>
       html,
       body {
         margin: 0;
         padding: 0;
-        background-color: #0f172a; /* Slate 950 */
-        height: 100vh; /* 100%ではなくvhを使う */
+        background-color: #0f172a;
+        height: 100vh;
         width: 100vw;
         overflow: hidden;
       }
-
       #loading-screen {
-        position: fixed; /* 画面に固定 */
+        position: fixed;
         top: 0;
         left: 0;
         width: 100%;
@@ -58,48 +27,12 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center; /* 完全な中央揃え */
+        justify-content: center;
+        background-color: #0f172a;
         color: white;
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         z-index: 9999;
-        /* 少しだけ上にずらすと視覚的に安定する */
-        padding-bottom: 50px;
+        transition: opacity 0.5s ease;
       }
-
-      .logo-container {
-        position: relative;
-        width: 120px;
-        height: 120px;
-        margin-bottom: 24px;
-        animation: float 3s ease-in-out infinite;
-      }
-
-      .app-logo {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        border-radius: 24px;
-        box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
-      }
-
-      .app-title {
-        font-size: 2rem;
-        font-weight: 900;
-        margin: 0 0 8px 0;
-        letter-spacing: -0.05em;
-        background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-      }
-
-      .app-desc {
-        color: #64748b;
-        font-size: 0.875rem;
-        font-weight: 700;
-        margin-bottom: 0;
-      }
-
       .loader {
         margin-top: 32px;
         width: 32px;
@@ -109,17 +42,6 @@
         border-top-color: #3b82f6;
         animation: spin 1s linear infinite;
       }
-
-      @keyframes float {
-        0%,
-        100% {
-          transform: translateY(0);
-        }
-        50% {
-          transform: translateY(-10px);
-        }
-      }
-
       @keyframes spin {
         to {
           transform: rotate(360deg);
@@ -128,16 +50,14 @@
     </style>
   </head>
   <body>
-    <div id="app">
-      <div id="loading-screen">
-        <div class="logo-container">
-          <img src="/logo.png?v=3" alt="My Brain Logo" class="app-logo" />
-        </div>
-        <h1 class="app-title">My Brain</h1>
-        <p class="app-desc">あなただけの第2の脳</p>
-        <div class="loader"></div>
-      </div>
+    <div id="app"></div>
+
+    <div id="loading-screen">
+      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
+      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
+      <div class="loader"></div>
     </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

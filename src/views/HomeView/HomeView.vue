@@ -2,6 +2,9 @@
 import { ref, onMounted, watch, nextTick } from "vue";
 import { useMyBrain, type Memory } from "@/composables/useMyBrain";
 import mermaid from "mermaid";
+import { httpsCallable, getFunctions } from "firebase/functions";
+import { getApp } from "firebase/app"; // ★追加: アプリ取得用
+import { useRouter, useRoute } from "vue-router";
 
 import AppHeader from "@/components/AppHeader/AppHeader.vue";
 import TagFilter from "@/components/TagFilter/TagFilter.vue";
@@ -11,28 +14,58 @@ import InputFooter from "@/components/InputFooter/InputFooter.vue";
 import MemoryModal from "@/components/MemoryModal/MemoryModal.vue";
 
 const { initAuth, chatLogs, isAiThinking } = useMyBrain();
-
 const inputMode = ref<"memo" | "chat" | "url">("memo");
 const editingMemory = ref<Memory | null>(null);
 const chatContainerRef = ref<HTMLElement | null>(null);
 
-onMounted(() => {
+// 通知表示用のフラグ
+const showSuccessToast = ref(false);
+
+const route = useRoute();
+const router = useRouter();
+
+onMounted(async () => {
   initAuth();
-  // Mermaidの初期設定（エラー抑制）
   mermaid.initialize({
     startOnLoad: false,
     theme: "dark",
     securityLevel: "loose",
     suppressErrorRendering: true,
   });
+
+  // ▼ LINEログインからのコールバック処理
+  const code = route.query.code as string;
+  if (code) {
+    // URLをクリーンにする
+    window.history.replaceState({}, document.title, "/app");
+
+    try {
+      // ★修正: ここでリージョン "asia-northeast1" を指定する！
+      const functions = getFunctions(getApp(), "asia-northeast1");
+      const linkFunc = httpsCallable(functions, "linkLineAccount");
+
+      // バックエンド連携
+      await linkFunc({
+        code,
+        redirectUri: window.location.origin + "/app",
+      });
+
+      showSuccessToast.value = true;
+      setTimeout(() => {
+        showSuccessToast.value = false;
+      }, 5000);
+    } catch (e) {
+      console.error(e);
+      alert(
+        "連携に失敗しました。\n(開発者用メモ: Cloud Functionsのログを確認してください)",
+      );
+    }
+  }
 });
 
-// ■ 強制スクロール関数
 const scrollToBottom = async () => {
   if (inputMode.value !== "chat") return;
-
-  await nextTick(); // DOM更新待ち
-  // 念のため少し待ってからスクロール（画像の読み込みなどを考慮）
+  await nextTick();
   setTimeout(() => {
     if (chatContainerRef.value) {
       chatContainerRef.value.scrollTo({
@@ -43,16 +76,10 @@ const scrollToBottom = async () => {
   }, 100);
 };
 
-// 1. チャットログが増えたらスクロール
 watch(chatLogs, scrollToBottom, { deep: true });
-
-// 2. AI思考開始/終了時もスクロール
 watch(isAiThinking, scrollToBottom);
-
-// 3. モード切替時もチャットならスクロール
 watch(inputMode, (newMode) => {
   if (newMode === "chat") {
-    // 切り替え直後は描画が追いつかないことがあるので、即時と遅延の2回実行
     nextTick(() => {
       if (chatContainerRef.value) {
         chatContainerRef.value.scrollTop = chatContainerRef.value.scrollHeight;
@@ -72,7 +99,24 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
 </script>
 
 <template>
-  <div class="h-screen flex flex-col bg-slate-950 text-slate-200 font-sans">
+  <div
+    class="h-screen flex flex-col bg-slate-950 text-slate-200 font-sans relative"
+  >
+    <Transition name="toast">
+      <div
+        v-if="showSuccessToast"
+        class="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-green-500 text-white px-6 py-4 rounded-full shadow-2xl flex items-center gap-3 border-2 border-green-400 w-[90%] max-w-sm"
+      >
+        <span class="text-2xl">✅</span>
+        <div>
+          <p class="font-bold text-sm">LINE連携に成功しました！</p>
+          <p class="text-xs opacity-90">
+            公式アカウントにメッセージを送ってみましょう
+          </p>
+        </div>
+      </div>
+    </Transition>
+
     <AppHeader />
     <TagFilter />
 
@@ -126,5 +170,16 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
   50% {
     opacity: 0.7;
   }
+}
+
+/* トーストのアニメーション */
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -20px);
 }
 </style>
