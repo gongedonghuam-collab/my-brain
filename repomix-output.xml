@@ -3131,409 +3131,6 @@ export default defineConfig({
 });
 </file>
 
-<file path="functions/lib/index.js">
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.lineWebhook = exports.linkLineAccount = exports.scrapeUrl = void 0;
-const https_1 = require("firebase-functions/v2/https");
-const v2_1 = require("firebase-functions/v2");
-const params_1 = require("firebase-functions/params");
-const admin = __importStar(require("firebase-admin"));
-const axios_1 = __importDefault(require("axios"));
-const cheerio = __importStar(require("cheerio"));
-const line = __importStar(require("@line/bot-sdk"));
-const generative_ai_1 = require("@google/generative-ai");
-if (admin.apps.length === 0) {
-    admin.initializeApp();
-}
-const db = admin.firestore();
-(0, v2_1.setGlobalOptions)({ region: "asia-northeast1", memory: "1GiB" });
-const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN");
-const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET");
-const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID");
-const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET");
-const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
-// 1. URLスクレイピング
-exports.scrapeUrl = (0, https_1.onCall)(async (request) => {
-    if (!request.auth)
-        throw new https_1.HttpsError("unauthenticated", "Login required");
-    const { url } = request.data;
-    try {
-        const response = await axios_1.default.get(url, {
-            headers: { "User-Agent": "Mozilla/5.0..." },
-            timeout: 10000,
-        });
-        const $ = cheerio.load(response.data);
-        $("script").remove();
-        $("style").remove();
-        const title = $("title").text().trim() || "No Title";
-        let content = "";
-        $("p, h1, h2, article").each((_, el) => {
-            const text = $(el).text().trim();
-            if (text.length > 20)
-                content += text + "\n";
-        });
-        return { success: true, title, content: content.slice(0, 50000) };
-    }
-    catch (error) {
-        throw new https_1.HttpsError("internal", error.message);
-    }
-});
-// 2. LINE連携 (アカウント紐付け) ★ここが追加されました
-exports.linkLineAccount = (0, https_1.onCall)({ secrets: [lineLoginChannelId, lineLoginChannelSecret] }, async (request) => {
-    if (!request.auth)
-        throw new https_1.HttpsError("unauthenticated", "Login required");
-    const { code, redirectUri } = request.data;
-    try {
-        const params = new URLSearchParams();
-        params.append("grant_type", "authorization_code");
-        params.append("code", code);
-        params.append("redirect_uri", redirectUri);
-        params.append("client_id", lineLoginChannelId.value());
-        params.append("client_secret", lineLoginChannelSecret.value());
-        const tokenRes = await axios_1.default.post("https://api.line.me/oauth2/v2.1/token", params);
-        const { access_token } = tokenRes.data;
-        const profileRes = await axios_1.default.get("https://api.line.me/v2/profile", {
-            headers: { Authorization: `Bearer ${access_token}` },
-        });
-        await db.collection("users").doc(request.auth.uid).set({
-            isLineLinked: true,
-            lineUserId: profileRes.data.userId,
-            lineDisplayName: profileRes.data.displayName,
-        }, { merge: true });
-        return { success: true };
-    }
-    catch (error) {
-        throw new https_1.HttpsError("internal", "LINE連携失敗");
-    }
-});
-// 3. LINE Webhook (ボット機能) ★ここが追加されました
-exports.lineWebhook = (0, https_1.onRequest)({ secrets: [lineBotToken, lineBotSecret, geminiApiKey] }, async (req, res) => {
-    const token = lineBotToken.value();
-    const client = new line.Client({ channelAccessToken: token });
-    const events = req.body.events;
-    for (const event of events) {
-        if (event.type !== "message")
-            continue;
-        const lineUserId = event.source.userId;
-        if (!lineUserId)
-            continue;
-        // LINE IDからユーザーを特定
-        const usersSnap = await db
-            .collection("users")
-            .where("lineUserId", "==", lineUserId)
-            .limit(1)
-            .get();
-        if (usersSnap.empty) {
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: "アプリでLINE連携を行ってください🙇‍♂️",
-            });
-            continue;
-        }
-        const uid = usersSnap.docs[0].id;
-        try {
-            if (event.message.type === "text") {
-                await saveMemoryFromLine(uid, event.message.text, null);
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "📝 メモしました！",
-                });
-            }
-            else if (event.message.type === "image") {
-                const stream = await client.getMessageContent(event.message.id);
-                const chunks = [];
-                for await (const chunk of stream)
-                    chunks.push(chunk);
-                const buffer = Buffer.concat(chunks);
-                await saveMemoryFromLine(uid, "LINE画像", {
-                    data: buffer.toString("base64"),
-                    mimeType: "image/jpeg",
-                });
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "📷 画像を保存しました！",
-                });
-            }
-        }
-        catch (e) {
-            console.error(e);
-        }
-    }
-    res.json({ success: true });
-});
-async function saveMemoryFromLine(uid, text, image) {
-    const apiKey = geminiApiKey.value();
-    const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    let promptParts = [];
-    if (image) {
-        promptParts.push({ inlineData: image });
-        promptParts.push({
-            text: "画像を分析して記憶データを作成。出力JSON: {summary, tags, fullText}",
-        });
-    }
-    else {
-        promptParts.push({
-            text: `テキストを整理。内容: ${text} 出力JSON: {summary, tags, fullText}`,
-        });
-    }
-    const result = await model.generateContent(promptParts);
-    const jsonStr = result.response
-        .text()
-        .replace(/```json|```/g, "")
-        .trim();
-    let aiData;
-    try {
-        aiData = JSON.parse(jsonStr);
-    }
-    catch (_a) {
-        aiData = { fullText: text, summary: text.substring(0, 20), tags: ["LINE"] };
-    }
-    const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
-    const embedRes = await embedModel.embedContent(aiData.fullText || text);
-    await db.collection("memories").add({
-        userId: uid,
-        text: aiData.fullText || text,
-        aiSummary: aiData.summary,
-        tags: [...(aiData.tags || []), "LINE"],
-        embedding: embedRes.embedding.values,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        hasImage: !!image,
-        source: "LINE",
-    });
-}
-</file>
-
-<file path="functions/index.ts">
-import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
-import { setGlobalOptions } from "firebase-functions/v2";
-import { defineSecret } from "firebase-functions/params";
-import * as admin from "firebase-admin";
-import axios from "axios";
-import * as cheerio from "cheerio";
-import * as line from "@line/bot-sdk";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-}
-
-const db = admin.firestore();
-setGlobalOptions({ region: "asia-northeast1", memory: "1GiB" });
-
-const lineBotToken = defineSecret("LINE_BOT_TOKEN");
-const lineBotSecret = defineSecret("LINE_BOT_SECRET");
-const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
-const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
-const geminiApiKey = defineSecret("GEMINI_API_KEY");
-
-// 1. URLスクレイピング
-export const scrapeUrl = onCall(async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
-  const { url } = request.data;
-  try {
-    const response = await axios.get(url, {
-      headers: { "User-Agent": "Mozilla/5.0..." },
-      timeout: 10000,
-    });
-    const $ = cheerio.load(response.data);
-    $("script").remove();
-    $("style").remove();
-    const title = $("title").text().trim() || "No Title";
-    let content = "";
-    $("p, h1, h2, article").each((_, el) => {
-      const text = $(el).text().trim();
-      if (text.length > 20) content += text + "\n";
-    });
-    return { success: true, title, content: content.slice(0, 50000) };
-  } catch (error: any) {
-    throw new HttpsError("internal", error.message);
-  }
-});
-
-// 2. LINE連携 (アカウント紐付け) ★ここが追加されました
-export const linkLineAccount = onCall(
-  { secrets: [lineLoginChannelId, lineLoginChannelSecret] },
-  async (request) => {
-    if (!request.auth)
-      throw new HttpsError("unauthenticated", "Login required");
-    const { code, redirectUri } = request.data;
-    try {
-      const params = new URLSearchParams();
-      params.append("grant_type", "authorization_code");
-      params.append("code", code);
-      params.append("redirect_uri", redirectUri);
-      params.append("client_id", lineLoginChannelId.value());
-      params.append("client_secret", lineLoginChannelSecret.value());
-
-      const tokenRes = await axios.post(
-        "https://api.line.me/oauth2/v2.1/token",
-        params,
-      );
-      const { access_token } = tokenRes.data;
-      const profileRes = await axios.get("https://api.line.me/v2/profile", {
-        headers: { Authorization: `Bearer ${access_token}` },
-      });
-
-      await db.collection("users").doc(request.auth.uid).set(
-        {
-          isLineLinked: true,
-          lineUserId: profileRes.data.userId,
-          lineDisplayName: profileRes.data.displayName,
-        },
-        { merge: true },
-      );
-
-      return { success: true };
-    } catch (error: any) {
-      throw new HttpsError("internal", "LINE連携失敗");
-    }
-  },
-);
-
-// 3. LINE Webhook (ボット機能) ★ここが追加されました
-export const lineWebhook = onRequest(
-  { secrets: [lineBotToken, lineBotSecret, geminiApiKey] },
-  async (req, res) => {
-    const token = lineBotToken.value();
-    const client = new line.Client({ channelAccessToken: token });
-    const events = req.body.events;
-
-    for (const event of events) {
-      if (event.type !== "message") continue;
-      const lineUserId = event.source.userId;
-      if (!lineUserId) continue;
-
-      // LINE IDからユーザーを特定
-      const usersSnap = await db
-        .collection("users")
-        .where("lineUserId", "==", lineUserId)
-        .limit(1)
-        .get();
-      if (usersSnap.empty) {
-        await client.replyMessage(event.replyToken, {
-          type: "text",
-          text: "アプリでLINE連携を行ってください🙇‍♂️",
-        });
-        continue;
-      }
-      const uid = usersSnap.docs[0].id;
-
-      try {
-        if (event.message.type === "text") {
-          await saveMemoryFromLine(uid, event.message.text, null);
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: "📝 メモしました！",
-          });
-        } else if (event.message.type === "image") {
-          const stream = await client.getMessageContent(event.message.id);
-          const chunks: any[] = [];
-          for await (const chunk of stream) chunks.push(chunk);
-          const buffer = Buffer.concat(chunks);
-          await saveMemoryFromLine(uid, "LINE画像", {
-            data: buffer.toString("base64"),
-            mimeType: "image/jpeg",
-          });
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: "📷 画像を保存しました！",
-          });
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    res.json({ success: true });
-  },
-);
-
-async function saveMemoryFromLine(
-  uid: string,
-  text: string,
-  image: { data: string; mimeType: string } | null,
-) {
-  const apiKey = geminiApiKey.value();
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-  let promptParts: any[] = [];
-  if (image) {
-    promptParts.push({ inlineData: image });
-    promptParts.push({
-      text: "画像を分析して記憶データを作成。出力JSON: {summary, tags, fullText}",
-    });
-  } else {
-    promptParts.push({
-      text: `テキストを整理。内容: ${text} 出力JSON: {summary, tags, fullText}`,
-    });
-  }
-
-  const result = await model.generateContent(promptParts);
-  const jsonStr = result.response
-    .text()
-    .replace(/```json|```/g, "")
-    .trim();
-  let aiData;
-  try {
-    aiData = JSON.parse(jsonStr);
-  } catch {
-    aiData = { fullText: text, summary: text.substring(0, 20), tags: ["LINE"] };
-  }
-
-  const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
-  const embedRes = await embedModel.embedContent(aiData.fullText || text);
-
-  await db.collection("memories").add({
-    userId: uid,
-    text: aiData.fullText || text,
-    aiSummary: aiData.summary,
-    tags: [...(aiData.tags || []), "LINE"],
-    embedding: embedRes.embedding.values,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    hasImage: !!image,
-    source: "LINE",
-  });
-}
-</file>
-
 <file path="src/components/AppHeader/AppHeader.vue">
 <script setup lang="ts">
 import { useAppHeader } from "./useAppHeader";
@@ -4312,6 +3909,471 @@ p {
 </html>
 </file>
 
+<file path="functions/lib/index.js">
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.lineWebhook = exports.linkLineAccount = exports.scrapeUrl = void 0;
+const https_1 = require("firebase-functions/v2/https");
+const v2_1 = require("firebase-functions/v2");
+const params_1 = require("firebase-functions/params");
+const admin = __importStar(require("firebase-admin"));
+const axios_1 = __importDefault(require("axios"));
+const cheerio = __importStar(require("cheerio"));
+const line = __importStar(require("@line/bot-sdk"));
+const generative_ai_1 = require("@google/generative-ai");
+if (admin.apps.length === 0) {
+    admin.initializeApp();
+}
+const db = admin.firestore();
+(0, v2_1.setGlobalOptions)({ region: "asia-northeast1", memory: "1GiB" });
+const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN");
+const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET");
+const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID");
+const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET");
+const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
+// URLスクレイピング
+exports.scrapeUrl = (0, https_1.onCall)(async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    const { url } = request.data;
+    try {
+        const response = await axios_1.default.get(url, {
+            headers: { "User-Agent": "Mozilla/5.0..." },
+            timeout: 10000,
+        });
+        const $ = cheerio.load(response.data);
+        $("script").remove();
+        $("style").remove();
+        const title = $("title").text().trim() || "No Title";
+        let content = "";
+        $("p, h1, h2, article").each((_, el) => {
+            const text = $(el).text().trim();
+            if (text.length > 20)
+                content += text + "\n";
+        });
+        return { success: true, title, content: content.slice(0, 50000) };
+    }
+    catch (error) {
+        throw new https_1.HttpsError("internal", error.message);
+    }
+});
+// LINE連携
+exports.linkLineAccount = (0, https_1.onCall)({ secrets: [lineLoginChannelId, lineLoginChannelSecret] }, async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    const { code, redirectUri } = request.data;
+    try {
+        const params = new URLSearchParams();
+        params.append("grant_type", "authorization_code");
+        params.append("code", code);
+        params.append("redirect_uri", redirectUri);
+        params.append("client_id", lineLoginChannelId.value());
+        params.append("client_secret", lineLoginChannelSecret.value());
+        const tokenRes = await axios_1.default.post("https://api.line.me/oauth2/v2.1/token", params);
+        const { access_token } = tokenRes.data;
+        const profileRes = await axios_1.default.get("https://api.line.me/v2/profile", {
+            headers: { Authorization: `Bearer ${access_token}` },
+        });
+        await db.collection("users").doc(request.auth.uid).set({
+            isLineLinked: true,
+            lineUserId: profileRes.data.userId,
+            lineDisplayName: profileRes.data.displayName,
+        }, { merge: true });
+        return { success: true };
+    }
+    catch (error) {
+        throw new https_1.HttpsError("internal", "LINE連携失敗");
+    }
+});
+// LINE Webhook
+exports.lineWebhook = (0, https_1.onRequest)({ secrets: [lineBotToken, lineBotSecret, geminiApiKey] }, async (req, res) => {
+    const token = lineBotToken.value();
+    const client = new line.Client({ channelAccessToken: token });
+    const events = req.body.events;
+    for (const event of events) {
+        if (event.type !== "message")
+            continue;
+        const lineUserId = event.source.userId;
+        if (!lineUserId)
+            continue;
+        const usersSnap = await db
+            .collection("users")
+            .where("lineUserId", "==", lineUserId)
+            .limit(1)
+            .get();
+        if (usersSnap.empty) {
+            await client.replyMessage(event.replyToken, {
+                type: "text",
+                text: "アプリでLINE連携を行ってください🙇‍♂️",
+            });
+            continue;
+        }
+        const uid = usersSnap.docs[0].id;
+        try {
+            if (event.message.type === "text") {
+                await saveMemoryFromLine(uid, event.message.text, null);
+                await client.replyMessage(event.replyToken, {
+                    type: "text",
+                    text: "📝 メモしました！",
+                });
+            }
+            else if (event.message.type === "image") {
+                const stream = await client.getMessageContent(event.message.id);
+                const chunks = [];
+                for await (const chunk of stream)
+                    chunks.push(chunk);
+                const buffer = Buffer.concat(chunks);
+                await saveMemoryFromLine(uid, "LINE画像", {
+                    data: buffer.toString("base64"),
+                    mimeType: "image/jpeg",
+                });
+                await client.replyMessage(event.replyToken, {
+                    type: "text",
+                    text: "📷 画像を保存しました！",
+                });
+            }
+        }
+        catch (e) {
+            console.error(e);
+        }
+    }
+    res.json({ success: true });
+});
+// ★追加: 利用可能なモデルを自動判定する関数
+async function getSmartModelName(apiKey) {
+    try {
+        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+        const listResponse = await axios_1.default.get(listUrl);
+        const models = listResponse.data.models || [];
+        const viableModels = models.filter((m) => { var _a; return (_a = m.supportedGenerationMethods) === null || _a === void 0 ? void 0 : _a.includes("generateContent"); });
+        const preferredOrder = [
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-pro",
+            "gemini-pro",
+        ];
+        for (const pref of preferredOrder) {
+            const found = viableModels.find((m) => m.name.includes(pref));
+            if (found)
+                return found.name.replace("models/", "");
+        }
+        if (viableModels.length > 0) {
+            return viableModels[0].name.replace("models/", "");
+        }
+        return "gemini-1.5-flash";
+    }
+    catch (e) {
+        console.warn("Model fetch failed in Functions:", e);
+        return "gemini-1.5-flash";
+    }
+}
+async function saveMemoryFromLine(uid, text, image) {
+    const apiKey = geminiApiKey.value();
+    // ★修正: モデル名を動的に取得
+    const modelName = await getSmartModelName(apiKey);
+    const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: modelName });
+    let promptParts = [];
+    if (image) {
+        promptParts.push({ inlineData: image });
+        promptParts.push({
+            text: "画像を分析して記憶データを作成。出力JSON: {summary, tags, fullText}",
+        });
+    }
+    else {
+        promptParts.push({
+            text: `テキストを整理。内容: ${text} 出力JSON: {summary, tags, fullText}`,
+        });
+    }
+    const result = await model.generateContent(promptParts);
+    const jsonStr = result.response
+        .text()
+        .replace(/```json|```/g, "")
+        .trim();
+    let aiData;
+    try {
+        aiData = JSON.parse(jsonStr);
+    }
+    catch (_a) {
+        aiData = { fullText: text, summary: text.substring(0, 20), tags: ["LINE"] };
+    }
+    const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
+    const embedRes = await embedModel.embedContent(aiData.fullText || text);
+    await db.collection("memories").add({
+        userId: uid,
+        text: aiData.fullText || text,
+        aiSummary: aiData.summary,
+        tags: [...(aiData.tags || []), "LINE"],
+        embedding: embedRes.embedding.values,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        hasImage: !!image,
+        source: "LINE",
+    });
+}
+</file>
+
+<file path="functions/index.ts">
+import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
+import { setGlobalOptions } from "firebase-functions/v2";
+import { defineSecret } from "firebase-functions/params";
+import * as admin from "firebase-admin";
+import axios from "axios";
+import * as cheerio from "cheerio";
+import * as line from "@line/bot-sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
+
+const db = admin.firestore();
+setGlobalOptions({ region: "asia-northeast1", memory: "1GiB" });
+
+const lineBotToken = defineSecret("LINE_BOT_TOKEN");
+const lineBotSecret = defineSecret("LINE_BOT_SECRET");
+const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
+const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
+
+// URLスクレイピング
+export const scrapeUrl = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const { url } = request.data;
+  try {
+    const response = await axios.get(url, {
+      headers: { "User-Agent": "Mozilla/5.0..." },
+      timeout: 10000,
+    });
+    const $ = cheerio.load(response.data);
+    $("script").remove();
+    $("style").remove();
+    const title = $("title").text().trim() || "No Title";
+    let content = "";
+    $("p, h1, h2, article").each((_, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 20) content += text + "\n";
+    });
+    return { success: true, title, content: content.slice(0, 50000) };
+  } catch (error: any) {
+    throw new HttpsError("internal", error.message);
+  }
+});
+
+// LINE連携
+export const linkLineAccount = onCall(
+  { secrets: [lineLoginChannelId, lineLoginChannelSecret] },
+  async (request) => {
+    if (!request.auth)
+      throw new HttpsError("unauthenticated", "Login required");
+    const { code, redirectUri } = request.data;
+    try {
+      const params = new URLSearchParams();
+      params.append("grant_type", "authorization_code");
+      params.append("code", code);
+      params.append("redirect_uri", redirectUri);
+      params.append("client_id", lineLoginChannelId.value());
+      params.append("client_secret", lineLoginChannelSecret.value());
+
+      const tokenRes = await axios.post(
+        "https://api.line.me/oauth2/v2.1/token",
+        params,
+      );
+      const { access_token } = tokenRes.data;
+      const profileRes = await axios.get("https://api.line.me/v2/profile", {
+        headers: { Authorization: `Bearer ${access_token}` },
+      });
+      await db.collection("users").doc(request.auth.uid).set(
+        {
+          isLineLinked: true,
+          lineUserId: profileRes.data.userId,
+          lineDisplayName: profileRes.data.displayName,
+        },
+        { merge: true },
+      );
+      return { success: true };
+    } catch (error: any) {
+      throw new HttpsError("internal", "LINE連携失敗");
+    }
+  },
+);
+
+// LINE Webhook
+export const lineWebhook = onRequest(
+  { secrets: [lineBotToken, lineBotSecret, geminiApiKey] },
+  async (req, res) => {
+    const token = lineBotToken.value();
+    const client = new line.Client({ channelAccessToken: token });
+    const events = req.body.events;
+
+    for (const event of events) {
+      if (event.type !== "message") continue;
+      const lineUserId = event.source.userId;
+      if (!lineUserId) continue;
+
+      const usersSnap = await db
+        .collection("users")
+        .where("lineUserId", "==", lineUserId)
+        .limit(1)
+        .get();
+      if (usersSnap.empty) {
+        await client.replyMessage(event.replyToken, {
+          type: "text",
+          text: "アプリでLINE連携を行ってください🙇‍♂️",
+        });
+        continue;
+      }
+      const uid = usersSnap.docs[0].id;
+
+      try {
+        if (event.message.type === "text") {
+          await saveMemoryFromLine(uid, event.message.text, null);
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: "📝 メモしました！",
+          });
+        } else if (event.message.type === "image") {
+          const stream = await client.getMessageContent(event.message.id);
+          const chunks: any[] = [];
+          for await (const chunk of stream) chunks.push(chunk);
+          const buffer = Buffer.concat(chunks);
+          await saveMemoryFromLine(uid, "LINE画像", {
+            data: buffer.toString("base64"),
+            mimeType: "image/jpeg",
+          });
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: "📷 画像を保存しました！",
+          });
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    res.json({ success: true });
+  },
+);
+
+// ★追加: 利用可能なモデルを自動判定する関数
+async function getSmartModelName(apiKey: string): Promise<string> {
+  try {
+    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const listResponse = await axios.get(listUrl);
+    const models = listResponse.data.models || [];
+
+    const viableModels = models.filter((m: any) =>
+      m.supportedGenerationMethods?.includes("generateContent"),
+    );
+
+    const preferredOrder = [
+      "gemini-1.5-flash",
+      "gemini-1.5-flash-latest",
+      "gemini-1.5-pro",
+      "gemini-pro",
+    ];
+
+    for (const pref of preferredOrder) {
+      const found = viableModels.find((m: any) => m.name.includes(pref));
+      if (found) return found.name.replace("models/", "");
+    }
+
+    if (viableModels.length > 0) {
+      return viableModels[0].name.replace("models/", "");
+    }
+    return "gemini-1.5-flash";
+  } catch (e) {
+    console.warn("Model fetch failed in Functions:", e);
+    return "gemini-1.5-flash";
+  }
+}
+
+async function saveMemoryFromLine(
+  uid: string,
+  text: string,
+  image: { data: string; mimeType: string } | null,
+) {
+  const apiKey = geminiApiKey.value();
+  // ★修正: モデル名を動的に取得
+  const modelName = await getSmartModelName(apiKey);
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: modelName });
+
+  let promptParts: any[] = [];
+  if (image) {
+    promptParts.push({ inlineData: image });
+    promptParts.push({
+      text: "画像を分析して記憶データを作成。出力JSON: {summary, tags, fullText}",
+    });
+  } else {
+    promptParts.push({
+      text: `テキストを整理。内容: ${text} 出力JSON: {summary, tags, fullText}`,
+    });
+  }
+
+  const result = await model.generateContent(promptParts);
+  const jsonStr = result.response
+    .text()
+    .replace(/```json|```/g, "")
+    .trim();
+  let aiData;
+  try {
+    aiData = JSON.parse(jsonStr);
+  } catch {
+    aiData = { fullText: text, summary: text.substring(0, 20), tags: ["LINE"] };
+  }
+
+  const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
+  const embedRes = await embedModel.embedContent(aiData.fullText || text);
+
+  await db.collection("memories").add({
+    userId: uid,
+    text: aiData.fullText || text,
+    aiSummary: aiData.summary,
+    tags: [...(aiData.tags || []), "LINE"],
+    embedding: embedRes.embedding.values,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    hasImage: !!image,
+    source: "LINE",
+  });
+}
+</file>
+
 <file path="src/components/InputFooter/InputFooter.vue">
 <script setup lang="ts">
 import { computed } from "vue";
@@ -4535,12 +4597,11 @@ import {
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import axios from "axios"; // 追加: モデル取得用
 
-// ★設定項目 (ID等を書き換えてください)
-const STRIPE_PRICE_ID = "price_1SqvJAFjyhW5lKcrgAmd48sB "; // あなたのStripe価格IDに変更してください
-const ADMIN_EMAILS = [
-  "gongedonghuam@gmail.com", // あなたのアドレス
-];
+// ★設定項目
+const STRIPE_PRICE_ID = "price_1SqvJAFjyhW5lKcrgAmd48sB";
+const ADMIN_EMAILS = ["gongedonghuam@gmail.com"];
 
 export interface Memory {
   id: string;
@@ -4590,7 +4651,6 @@ const isAiThinking = ref(false);
 const isSaving = ref(false);
 const activeTag = ref<string | null>(null);
 
-// ファイルをBase64に変換
 const fileToGenerativePart = async (file: File) => {
   return new Promise<{ inlineData: { data: string; mimeType: string } }>(
     (resolve, reject) => {
@@ -4605,7 +4665,6 @@ const fileToGenerativePart = async (file: File) => {
   );
 };
 
-// コサイン類似度
 const cosineSimilarity = (vecA: number[], vecB: number[]) => {
   if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
   let dotProduct = 0;
@@ -4625,14 +4684,44 @@ export function useMyBrain() {
     return genAI.getGenerativeModel({ model: "text-embedding-004" });
   };
 
+  // 動的に利用可能なモデルを取得する関数
   const getSmartModelName = async (apiKey: string): Promise<string> => {
-    // 常にFlashモデルを使用（コスト対策）
-    return "gemini-1.5-flash";
+    try {
+      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+      // axiosを使うかfetchを使うか統一が必要ですが、ここではfetchで実装します
+      const response = await fetch(listUrl);
+      if (!response.ok) throw new Error("Model fetch failed");
+
+      const data = await response.json();
+      const models = data.models || [];
+
+      const viableModels = models.filter((m: any) =>
+        m.supportedGenerationMethods?.includes("generateContent"),
+      );
+
+      const preferredOrder = [
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-pro",
+        "gemini-pro",
+      ];
+
+      for (const pref of preferredOrder) {
+        const found = viableModels.find((m: any) => m.name.includes(pref));
+        if (found) return found.name.replace("models/", "");
+      }
+
+      if (viableModels.length > 0) {
+        return viableModels[0].name.replace("models/", "");
+      }
+
+      return "gemini-1.5-flash";
+    } catch (e) {
+      console.warn("Model auto-detect failed, using default.", e);
+      return "gemini-1.5-flash";
+    }
   };
 
-  // ----------------------------------------------------
-  // ▼ 1. 課金・制限ロジック
-  // ----------------------------------------------------
   const checkAndIncrementUsage = async (): Promise<boolean> => {
     if (!currentUser.value) return false;
     if (currentUser.value.isPro) return true;
@@ -4683,9 +4772,6 @@ export function useMyBrain() {
     });
   };
 
-  // ----------------------------------------------------
-  // ▼ 2. 認証・初期化
-  // ----------------------------------------------------
   const initAuth = () => {
     onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -4733,9 +4819,6 @@ export function useMyBrain() {
     window.location.reload();
   };
 
-  // ----------------------------------------------------
-  // ▼ 3. データ取得
-  // ----------------------------------------------------
   const fetchMemories = async () => {
     if (!currentUser.value) return;
     loading.value = true;
@@ -4778,110 +4861,105 @@ export function useMyBrain() {
     activeTag.value = tag;
   };
 
+  // ★ここが復活しました
   const filteredMemories = computed(() => {
     if (!activeTag.value) return memories.value;
     return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
   });
 
-  // ----------------------------------------------------
-  // ▼ 4. メモ追加 (保存中ステータス・リコメンド)
-  // ----------------------------------------------------
   const addMemory = async (text: string, file?: File | null) => {
     if (!(await checkAndIncrementUsage())) return null;
-    isSaving.value = true; // ★保存開始
+    isSaving.value = true;
 
     if (!currentUser.value) return null;
 
     try {
-      const isAudio = file?.type.startsWith("audio/");
       const initText = file ? `(解析中...) ${text}` : text;
-
       const docRef = await addDoc(collection(db, "memories"), {
         userId: currentUser.value.uid,
         text: initText,
         createdAt: serverTimestamp(),
         tags: [],
-        aiSummary: "AI処理中...",
+        aiSummary: "保存中...",
         hasImage: !!file,
         fileType: file?.type || null,
       });
 
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (apiKey) {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-          model: "gemini-1.5-flash",
-          generationConfig: { responseMimeType: "application/json" },
-        });
-
-        let promptParts: any[] = [];
-        if (file) {
-          const filePart = await fileToGenerativePart(file);
-          promptParts.push(filePart);
-          if (isAudio) {
-            promptParts.push({
-              text: `音声データです。書き起こしと要約とタスク抽出をして。ユーザーメモ:${text} 出力JSON:{summary, tags, fullText}`,
-            });
-          } else {
-            promptParts.push({
-              text: `画像/PDFです。内容を分析して。ユーザーメモ:${text} 出力JSON:{summary, tags, fullText}`,
-            });
-          }
-        } else {
-          promptParts.push({
-            text: `以下のテキストを整理・分析して。${text} 出力JSON:{summary, tags, fullText}`,
-          });
-        }
-
-        const result = await model.generateContent(promptParts);
-        const aiData = JSON.parse(result.response.text());
-        const finalContent = file
-          ? `【解析済み】${text}\n\n${aiData.fullText}`
-          : text;
-
-        const embedModel = getEmbeddingModel(apiKey);
-        const embedResult = await embedModel.embedContent(finalContent);
-        const embedding = embedResult.embedding.values;
-
-        await updateDoc(docRef, {
-          text: finalContent,
-          aiSummary: aiData.summary,
-          tags: aiData.tags,
-          embedding: embedding,
-        });
-
-        const newMem: Memory = {
-          id: docRef.id,
-          userId: currentUser.value.uid,
-          text: finalContent,
-          aiSummary: aiData.summary,
-          tags: aiData.tags,
-          createdAt: new Date(),
-          hasImage: !!file,
-          fileType: file?.type,
-          embedding: embedding,
-        };
-        memories.value.unshift(newMem);
-
-        // リコメンド
-        const relatedMemories = memories.value
-          .filter((m) => m.id !== docRef.id && m.embedding)
-          .map((m) => ({
-            ...m,
-            score: m.embedding ? cosineSimilarity(embedding, m.embedding) : 0,
-          }))
-          .filter((m) => m.score > 0.65)
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 3);
-
-        return relatedMemories;
+      if (!apiKey) {
+        await updateDoc(docRef, { aiSummary: "APIキー未設定" });
+        return null;
       }
-    } catch (e) {
-      console.error("Add memory error:", e);
-      alert("保存エラー");
-      return null;
+
+      const modelName = await getSmartModelName(apiKey);
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: { responseMimeType: "application/json" },
+      });
+
+      let promptParts: any[] = [];
+      if (file) {
+        const filePart = await fileToGenerativePart(file);
+        promptParts.push(filePart);
+        promptParts.push({
+          text: "画像を分析して。出力JSON:{summary, tags, fullText}",
+        });
+      } else {
+        promptParts.push({
+          text: `テキストを整理して。${text} 出力JSON:{summary, tags, fullText}`,
+        });
+      }
+
+      const res = await model.generateContent(promptParts);
+      let aiData;
+      try {
+        aiData = JSON.parse(res.response.text());
+      } catch {
+        aiData = { summary: text.substring(0, 30), tags: [], fullText: text };
+      }
+
+      const finalText = file
+        ? `【解析済み】${text}\n\n${aiData.fullText || ""}`
+        : text;
+
+      const embModel = getEmbeddingModel(apiKey);
+      const embResult = await embModel.embedContent(finalText);
+      const embedding = embResult.embedding.values;
+
+      await updateDoc(docRef, {
+        text: finalText,
+        aiSummary: aiData.summary,
+        tags: aiData.tags,
+        embedding: embedding,
+      });
+
+      memories.value.unshift({
+        id: docRef.id,
+        userId: currentUser.value.uid,
+        text: finalText,
+        aiSummary: aiData.summary,
+        tags: aiData.tags,
+        createdAt: new Date(),
+        hasImage: !!file,
+        fileType: file?.type,
+        embedding: embedding,
+      });
+
+      return memories.value
+        .filter((m) => m.id !== docRef.id && m.embedding)
+        .map((m) => ({
+          ...m,
+          score: cosineSimilarity(embedding, m.embedding!),
+        }))
+        .filter((m) => m.score > 0.65)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+    } catch (e: any) {
+      console.error("AI Error:", e);
+      alert("AIエラー: " + e.message);
     } finally {
-      isSaving.value = false; // ★保存終了
+      isSaving.value = false;
     }
     return null;
   };
@@ -4890,73 +4968,77 @@ export function useMyBrain() {
     if (!(await checkAndIncrementUsage())) return;
     isSaving.value = true;
     try {
-      const functions = getFunctions();
-      const scrapeFunc = httpsCallable(functions, "scrapeUrl");
-      const result: any = await scrapeFunc({ url });
-
-      if (result.data.success) {
-        const { title, content } = result.data;
-        const fullText = `【WEB記事】${title}\nURL: ${url}\n\n${content}`;
-        await addMemory(fullText);
+      const func = httpsCallable(getFunctions(), "scrapeUrl");
+      const res: any = await func({ url });
+      if (res.data.success) {
+        await addMemory(
+          `【WEB】${res.data.title}\nURL: ${url}\n\n${res.data.content}`,
+        );
       }
     } catch (e: any) {
-      alert("記事の読み込みに失敗しました: " + e.message);
+      alert("URL読込失敗: " + e.message);
     } finally {
       isSaving.value = false;
     }
   };
 
-  const askBrain = async (question: string): Promise<string> => {
+  const askBrain = async (question: string) => {
     if (!(await checkAndIncrementUsage())) return "";
     isAiThinking.value = true;
-
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error("APIキーがありません");
+
       const embedModel = getEmbeddingModel(apiKey);
       const qEmbed = await embedModel.embedContent(question);
       const qVec = qEmbed.embedding.values;
 
-      const scoredMemories = memories.value
+      const context = memories.value
         .map((m) => ({
           ...m,
           score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
         }))
-        .sort((a, b) => b.score - a.score);
-
-      const context = scoredMemories
+        .sort((a, b) => b.score - a.score)
         .slice(0, 20)
-        .map((m) => `- ${m.text.slice(0, 500)}`)
-        .join("\n\n");
+        .map((m) => `- ${m.text.slice(0, 300)}`)
+        .join("\n");
 
+      const modelName = await getSmartModelName(apiKey);
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: modelName });
       const prompt = `あなたは「第2の脳」です。記憶データ:${context}\n質問:${question}\n回答はJSON形式 {"answer": "回答", "mermaid": "図解コード(任意)", "action": null} で。`;
 
-      const result = await model.generateContent(prompt);
-      const data = JSON.parse(
-        result.response
-          .text()
-          .replace(/```json|```/g, "")
-          .trim(),
-      );
+      const res = await model.generateContent(prompt);
+      let json;
+      try {
+        json = JSON.parse(
+          res.response
+            .text()
+            .replace(/```json|```/g, "")
+            .trim(),
+        );
+      } catch {
+        json = { answer: res.response.text(), mermaid: null };
+      }
 
-      const logData = {
+      const log = {
         userId: currentUser.value!.uid,
-        question: question,
-        answer: data.answer,
-        mermaidCode: data.mermaid || null,
+        question,
+        answer: json.answer,
+        mermaidCode: json.mermaid,
         createdAt: serverTimestamp(),
       };
-      const logRef = await addDoc(collection(db, "chat_logs"), logData);
+      const ref = await addDoc(collection(db, "chat_logs"), log);
       chatLogs.value.push({
-        id: logRef.id,
-        ...logData,
+        id: ref.id,
+        ...log,
         createdAt: new Date(),
       } as any);
-
-      return data.answer;
+      return json.answer;
     } catch (e: any) {
-      return "エラー: " + e.message;
+      console.error(e);
+      alert("AIエラー: " + e.message);
+      return "エラーが発生しました";
     } finally {
       isAiThinking.value = false;
     }
@@ -4995,7 +5077,7 @@ export function useMyBrain() {
   return {
     currentUser,
     memories,
-    filteredMemories,
+    filteredMemories, // ← これを返すための定義を追加しました
     chatLogs,
     loading,
     isAiThinking,
@@ -5006,13 +5088,12 @@ export function useMyBrain() {
     logout,
     addMemory,
     addUrlMemory,
-    askBrain,
-    selectTag,
-    startSubscription,
-    // ▼ ここに追加しました！
     updateMemory,
     deleteMemory,
+    askBrain,
     deleteChatLog,
+    selectTag,
+    startSubscription,
   };
 }
 </file>
@@ -5155,68 +5236,68 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
 </file>
 
 <file path=".firebase/hosting.ZGlzdA.cache">
-sw.js,1768744639050,32944d0ed04657ff1ddea5ebd930eff4855e10dbff25a07797ccdcaaf4d6c036
-registerSW.js,1768744638359,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-workbox-8c29f6e4.js,1768744639051,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-manifest.webmanifest,1768744638359,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-index.html,1768744638359,99b19cb2cd222876a407fe56d91e5bd8fac7f29ea0df4f07d6a508b634308415
-firebase-messaging-sw.js,1768744637963,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-lp.html,1768744637967,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/stateDiagram-v2-4FDKWEC3-Cpsid5Kh.js,1768744638358,bc515e5c4f85864efa79ce59838e915a75b49edf773b4da8cbee0a9d510dca44
-assets/timeline-definition-IT6M3QCI-cz2iZhRF.js,1768744638358,3f05404d548b34a62bfb38373f08c4ca55113d93a63911be4c8bf575c4bd1b95
-assets/stateDiagram-FKZM4ZOC-jrN210ds.js,1768744638358,8ee7a69c1ddebcc9b17a95fbfebb41b2339347f139cb94953ce97c75c0f6fc42
-assets/xychartDiagram-PRI3JC2R-CuPuThVX.js,1768744638358,53fffbc19c4659f59b711f251b01b469a82d5bfea6f8fa1c1b7f2803278030b7
-assets/pieDiagram-ADFJNKIX-KhwPt9nZ.js,1768744638358,a1571df7f06ae51c560b4ba305070a5b82b104e5e5414b0b073525b9b3a44c83
-assets/sankeyDiagram-TZEHDZUN-Bc2d8ldy.js,1768744638358,d53fa783bbf20579457a3767446abb627fccf69a6881ab4e56f07463b26adf57
-assets/ordinal-Cboi1Yqb.js,1768744638358,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/min-DnL_6X_D.js,1768744638358,f89821dec8bab0c93c5b4d28c2e478cb1a9df6d3422a1117cdb335060aa41d37
-assets/requirementDiagram-UZGBJVZJ-CwwRKxDJ.js,1768744638358,25153d6d300e545509a1b0a0e1c7cd5353ed352cfbb76541a81ccc0cf670b84b
-assets/mindmap-definition-VGOIOE7T-D9--KpBk.js,1768744638358,aa8d5bc76bdff98b8c73f8722b686a637e304eaad1f1aa5b0e109c55bb5aca0b
-assets/infoDiagram-WHAUD3N6-C93FytB5.js,1768744638358,c534cf46aa7980a33f5c900f3a9b14f815b58c357e0b3dcf82469cb7d05cb15c
-assets/linear-Ba-a0uU6.js,1768744638359,e75e9532671585a0e7f6c2fca3fbfbcbbedb57d0f19e317f1a921e7fb8b04509
-assets/init-Gi6I4Gst.js,1768744638358,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/quadrantDiagram-AYHSOK5B-B8jT8Oj2.js,1768744638358,c69fa7c54b1de0b9a3f47e646d6c7e6456f50a6962ab650bcbaf1cf46bff0c1c
-assets/kanban-definition-3W4ZIXB7-BxHgJZS7.js,1768744638358,35005e1cc83bc61ea722738b332252d2ca7575d519cc036304da52b2cd1c6dca
-assets/graph-AmseoxIy.js,1768744638359,8adf7b6fa3552bea82957eee40cdd866182727e266f5b3891c66a8932fdff712
-assets/journeyDiagram-XKPGCS4Q-BpT6JEik.js,1768744638358,57159cec643c8c802d5daa8e0fe52aa6533697d13312dd63e7a72f8c5279330d
-assets/gitGraphDiagram-NY62KEGX-3Yk1i1M8.js,1768744638358,0d07f898b73bbfb091d14d7159bd6cf3341193309a9d06cf3289d81f09c66db2
-assets/layout-Cm8nQp08.js,1768744638359,04091c2c8e94825eb32cd4bf01f1dcf803d29ae69d17a02baecdecb2950de2a9
-assets/diagram-S2PKOQOG-BZP7LINz.js,1768744638358,aef18f31c78472d4650ebcbf289a9d00c03ac65eab28df38195d38180350c950
-assets/index-CFOlPi71.css,1768744638358,5652f6654c7ff91489ad5313544612c6621863d2c6fcc721cacb99ce5ea7c6d0
-assets/diagram-QEK2KX5R-IjuLFi4A.js,1768744638358,d547fbcbdaee31542058a7d892efa8b8fc1afa42ae75075ef7132f0cfb185a65
-assets/clone-BhrwQDpS.js,1768744638358,c1abd491c5969c1207977c06df2b931f29dc7a8badbdbdcc5b7d3a4c390c6e5b
-assets/defaultLocale-DX6XiGOO.js,1768744638358,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/erDiagram-Q2GNP2WA-BW15CDfo.js,1768744638358,e1f6b3ca03307363eba52787c210085bc9e9091c8ad0b42956739a856cf674eb
-assets/classDiagram-v2-WZHVMYZB-BRm_joRW.js,1768744638358,dd6f99378748b4afc2bebd68ecfa38b7c07ffac65afc8b377a64e43da95bbcb1
-assets/classDiagram-2ON5EDUG-BRm_joRW.js,1768744638358,dd6f99378748b4afc2bebd68ecfa38b7c07ffac65afc8b377a64e43da95bbcb1
-assets/chunk-QZHKN3VN-BfQBbwwL.js,1768744638358,f059f6f0401b20103e27e93e07bacd398518a4d8fcafa11cc94f47c2d4fb3136
-assets/chunk-TZMSLE5B-peXRDX04.js,1768744638358,ce8f2ceb641b8269f885e5662db249a2c92663c6d75b587f00a13c161a2f4887
-assets/dagre-6UL2VRFP-DVeFiL1_.js,1768744638359,9cc93e3489e223695890042d42a3380b5d7276f09c856a66ec7596294493274e
-assets/diagram-PSM6KHXK-BuuPxqUn.js,1768744638359,6f78348cbd38976b1fc36b44767a4bf11bd01a051173c1363a943d6a2e37e756
-assets/flowDiagram-NV44I4VS-DcvyLwZF.js,1768744638358,257a6c16e3d6c5bf050b101be7bd30d4564567468791ac844bc7e2f40709e0b7
-assets/sequenceDiagram-WL72ISMW-yctN2JWX.js,1768744638358,71c52a1fd5dc62e8cc7f7473524ad1af05775d5df4749bdeee19991776a2d86a
-assets/ganttDiagram-JELNMOA3-DEcwfemN.js,1768744638359,785eb36ba809f102a67fd9aa5647d650b1e2884bb7220a148e4bfad1e70f8e86
-assets/cose-bilkent-S5V4N54A-CIewKDjB.js,1768744638359,fd8d78cbfda240a34c89e70a0011aa570fca0afd0ae7dc1cb99b3040e0e324a4
-assets/chunk-FMBD7UC4-B2yvtEza.js,1768744638358,73c471d86bb64b1a3c5b818b5b54ec8cc975e002b06a9fdbb045c1c7a03ce289
-assets/chunk-QN33PNHL-DDG9TCE2.js,1768744638358,902e21ab48147edd855d57ce202be2a88dedfa131cba624f8fe32f1ea08f0dd6
-assets/chunk-DI55MBZ5-ZQovUnp3.js,1768744638358,146422dc40713039f372962662978b9f3dc574ab85952f1d3202d915f65341d5
-assets/chunk-55IACEB6-Dl5WYZwT.js,1768744638358,d6ba09fe58f840a8cf35796d1576af3ddc55dd845b26bfe55f712f07e89f67db
-assets/chunk-4BX2VUAB-Cnvyn9sM.js,1768744638358,3e868c2f34bfb055a633fb9fda6bc0a07f1f293179051fc1c7da6f2b6c432499
-assets/channel-yjR7IZ_s.js,1768744638358,65f5c0cbd3e77dc4bcc0ec75192ae3e9dced8858ec48207c93111bc8af5a4d18
-assets/chunk-B4BG7PRW-BfDZWE_n.js,1768744638358,6d912bce4b91055dadd944512a1e5fb15d9ad8feb1a737504b1f670d0fd647aa
-assets/arc-Dl26LpKY.js,1768744638358,2236a9d8b8ab55987532c83bad76978e53ebbd0583dbffaf5f46045987e33237
-assets/_baseUniq-DWS1ShIR.js,1768744638359,512afe0b308fa1e9ac1f1bad485fe8e69ea43c79eeaf34c50d8556aad914bb0f
-assets/blockDiagram-VD42YOAC-KOArX6bS.js,1768744638358,084e75112bef6211bffe2ead0cfb096915a0e3fb57d8e2c3848add807e4b3b9c
-assets/c4Diagram-YG6GDRKO-zL2evr8u.js,1768744638358,7131d9e20d915e756e32a59ead23baced5818a52c63f166bdbffe02f37374ff5
-assets/architectureDiagram-VXUJARFQ-aWGOy295.js,1768744638358,9d9a95e82a6414cff7d817061e82c112387e390dc9b75e0ec72b950ef987ef47
-assets/katex-Cu_Erd72.js,1768744638358,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-BX3F0QGp.js,1768744638359,22636b3d9ad8a2dcb4017b80fc19a719b231e1252801eda967ad043069272d3e
-assets/cytoscape.esm-CyJtwmzi.js,1768744638358,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-tcTL10-Y.js,1768744638359,de81921bb77dec8577837d4fddb5a8b2523a867d8c1d8bd448c0e3a299c9707d
-pwa-192x192.png,1768744637973,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1768744637980,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-apple-touch-icon.png,1768744637962,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-logo.png,1768744637966,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+registerSW.js,1768745932877,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+sw.js,1768745933559,09d2f64dd8b4bdacedf56898feae25bb6f91d94aa4c0810b4714425346a3b17b
+workbox-8c29f6e4.js,1768745933560,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+manifest.webmanifest,1768745932877,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+index.html,1768745932877,4faec3a3076e8bd5523306a7b00d4b91aae52abb474ac49c6b3635d235a2acea
+firebase-messaging-sw.js,1768745932505,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+lp.html,1768745932508,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/stateDiagram-v2-4FDKWEC3-Box_andd.js,1768745932877,894a29e36a9ff0f6d4fcd1a81e55ae6e707a579f8505aeaea26d5baf59d5c982
+assets/stateDiagram-FKZM4ZOC-sqQySMPZ.js,1768745932877,3b0927371e08f517923d8bc9d4785d693fcac8b70bb08c732d66c9bf4f5ed309
+assets/timeline-definition-IT6M3QCI-DqC8JRW7.js,1768745932877,08735f10310aa7d311a17a37f5eee75caf64f6f74b89237b04944a918e447471
+assets/xychartDiagram-PRI3JC2R-BBwNYNN8.js,1768745932877,dd24a55bfe80b0d86020fe2f6945c6bfc8670c58b1a99f3be5b5578f35a9291d
+assets/sankeyDiagram-TZEHDZUN-OrCHbXeA.js,1768745932877,ef2f0ff5038238937b7d6650b429568c36167f432023dd50d6abba3883dc5017
+assets/ordinal-Cboi1Yqb.js,1768745932877,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/pieDiagram-ADFJNKIX-DoWJfCI9.js,1768745932877,cc6e971b02c8440d7eda91312174baeb337b49596528098bc6154f1d353c5ca1
+assets/linear-Dn36c1wv.js,1768745932877,cfc3a676cc02d13717831f2bc8f93fe6314978e201712560e933cd5c8207c5c6
+assets/requirementDiagram-UZGBJVZJ-wKFLb0ra.js,1768745932877,15fcf9bc0c1865926b9d09ecb408ce1eea5f9b75966993f75266613f29257eaf
+assets/min-wjAmE_kr.js,1768745932877,1a552607c3cfc18449812fc33146a3eb8dcc0cd549a2d91af54a6fb0f791b7d1
+assets/quadrantDiagram-AYHSOK5B-CnphPhww.js,1768745932877,eea2d81deb83ada12922b40accf39437c1bc74a16060be7403fcc7c2c74dfca6
+assets/mindmap-definition-VGOIOE7T-CGNj6deO.js,1768745932877,97fb91fd9362e9ce53bbbbc59705cb319f350a6a1870e8af2a5b47172d9b4193
+assets/kanban-definition-3W4ZIXB7-Du_S5NF8.js,1768745932877,e96f7fa460572c1b19acab9e619e2c271649e91b5a43657559361564ccec3775
+assets/init-Gi6I4Gst.js,1768745932877,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/infoDiagram-WHAUD3N6-BQUNYyZq.js,1768745932877,f97da1c60be55c6fc6b7d5fc2dc397532680da25d716b553132856c23e5cc47b
+assets/layout-CpZxjoji.js,1768745932877,6b9343890729cb0b7fdd2a275a9430e1f9d7a5f8c69aef20203136536a73a8dc
+assets/journeyDiagram-XKPGCS4Q-Csm4FEMs.js,1768745932877,362d74b47a3871ed6afb0b5da98daa0e187a08627e617a77664cf435a75b5f9d
+assets/index-CFOlPi71.css,1768745932877,5652f6654c7ff91489ad5313544612c6621863d2c6fcc721cacb99ce5ea7c6d0
+assets/gitGraphDiagram-NY62KEGX-DyxLGfX9.js,1768745932877,0dd389ccddd460014a063c7876833ccb8e1b6fa4803603e95caff9401ed6a3fe
+assets/graph-DouvXQks.js,1768745932877,1487c2bf197b69376a82b836e898b03532e1b66bd76ef6a26ad13d94c7416115
+assets/diagram-S2PKOQOG-Daq_tsqG.js,1768745932877,aea1b374f38014e548ff800415ab49d84c8502b85a4ee349fa4d6201618add29
+assets/erDiagram-Q2GNP2WA-4GVetmhg.js,1768745932877,234336bd39b8cc21fd3013a46dfde4a4c452414b61f7fa0e61fe9bb260808711
+assets/diagram-QEK2KX5R-DZkTLNrp.js,1768745932877,c415f87dfaa82c847881a43025a9c4ad07001cc7c07be58b352f29165f89ed41
+assets/dagre-6UL2VRFP-B1_BcGDc.js,1768745932877,332c3e6433e16d4b0370da3c197b08c8083831404600a9b977a331db91c4fc27
+assets/defaultLocale-DX6XiGOO.js,1768745932877,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/clone-E1lyFtC3.js,1768745932877,f57f158aad06c43dbaab8f0df5e3cdb33757b8e2e2e7ef772f56d84fd4bf0f2c
+assets/diagram-PSM6KHXK-qjBuj-SX.js,1768745932877,639eb0711652243f0d4cb98edcca0a99d96a1a53926fafae2087771b850cee51
+assets/classDiagram-v2-WZHVMYZB-C6PGn7Vj.js,1768745932877,0a4ae7abda47739f048ea68ece08d4533e83e50c8b1e881185eef384747f48eb
+assets/classDiagram-2ON5EDUG-C6PGn7Vj.js,1768745932877,0a4ae7abda47739f048ea68ece08d4533e83e50c8b1e881185eef384747f48eb
+assets/chunk-TZMSLE5B-BQJDQQgs.js,1768745932877,7ecf26b6082a547d5c8938232e4467e1d277abeedd2b085a0844ff9f95092212
+assets/chunk-QZHKN3VN-B5OEjR3c.js,1768745932877,ce7dc20f47b75e2b6b478075342262065d327cc6b37e26be441c5217dab03b45
+assets/flowDiagram-NV44I4VS-kaj5DfMY.js,1768745932877,caee62554c4dbb4c81aacabb85c9715c25b13ed350d80b1d4fe11ef1e7b124dd
+assets/ganttDiagram-JELNMOA3-DRLJyqWz.js,1768745932877,161718da67e73c508d8287214b67e76431c9da8860e594d7ce58fc6a9b904a95
+assets/sequenceDiagram-WL72ISMW-BhSxZ68s.js,1768745932877,e72aedda14d3ecd88cf8f0b71836e7a1afee08ed134946927d46aa81175f6efe
+assets/chunk-QN33PNHL-CTEOXi_L.js,1768745932877,ae6b2c8e2f575428f0164a6027457d41b33bcb7110cdf93560432b1db0ceef6e
+assets/chunk-FMBD7UC4-BdXNSDyu.js,1768745932877,b80e2a05f93b675fb112599242a4762bb5c82b341174161ca6e704c7a719e3cd
+assets/cose-bilkent-S5V4N54A-ZOk90c1D.js,1768745932877,8eda20628ad1a90685181ea1cf5d7a63ca94c2864dbb775dd90d643ebb5d0cfd
+assets/chunk-55IACEB6-y_vsIPus.js,1768745932877,f86cb82beab97ef94baae0254ecb0fe78118cc031e0f9974d19e40a6b11abf1a
+assets/chunk-4BX2VUAB-DL1l8ON1.js,1768745932877,b15709d4fb8078a6fba3351d0141f6943e4cb8122579b6f8acecd57ed4f2ef44
+assets/chunk-DI55MBZ5-3rXz0IW9.js,1768745932877,fb9580c6fbcd493bed1b05673ba4292d7882ab21ad8b224cf548858c93694bd4
+assets/channel-aIdNOsRW.js,1768745932877,32d51aa0fc917edf639247af1e8dbcbc3912e8a8ffdf145ac3068c6c0dc92574
+assets/chunk-B4BG7PRW-C1jgl5Do.js,1768745932877,d2feee1f71e5d262b024dcba1a2d3699ee83536f226c5a03f6765e0dac9a591c
+assets/arc-DR8DXc2f.js,1768745932877,66ee6dc5de55d87deaee38972ba2f228cb6159ea9bda393d40d9554519000c7a
+assets/_baseUniq-DmUVekO7.js,1768745932877,483be6c628a98d8d736a8eea0b91e58a2807d02224ee787ea3d28e54c7813bc5
+assets/c4Diagram-YG6GDRKO-DQ0s_a8o.js,1768745932877,a4715055f0cae9f5f3d6caf21399e3dce275d83ec6bc7077ae2c2245af172226
+assets/blockDiagram-VD42YOAC-Dd_zVZrj.js,1768745932877,b073df216d397047234d0dd83907139aa3852da1e1fb4c7f69c78b242805f55e
+assets/architectureDiagram-VXUJARFQ-f7IL4Ocw.js,1768745932877,db9c04cf9e88f3d3746efdc67339cc180cfed0cf69d8c130800730a805f38e74
+assets/katex-Cu_Erd72.js,1768745932877,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-BXqL3RwW.js,1768745932877,e29f2c24e8f5c7f550cffe22c69d89d54f37b550fbcb4d2a2326df1888293f79
+assets/cytoscape.esm-CyJtwmzi.js,1768745932877,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-Cb5dYNUy.js,1768745932877,3ac74f6d38da589c13a9929f3934c7484395717dae68d501002972640011200e
+pwa-192x192.png,1768745932513,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1768745932519,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+logo.png,1768745932507,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1768745932504,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>

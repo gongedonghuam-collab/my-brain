@@ -23,7 +23,7 @@ const { logout } = useAppHeader();
     <div class="font-black text-lg tracking-tight text-white">🧠 My Brain</div>
 
     <div class="flex items-center gap-3">
-      <div
+      <!-- <div
         v-if="currentUser?.isLineLinked"
         class="text-[10px] bg-slate-700 text-slate-300 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 cursor-default border border-slate-600"
       >
@@ -36,7 +36,7 @@ const { logout } = useAppHeader();
         class="text-[10px] bg-[#06C755] text-white px-3 py-1.5 rounded-full font-bold hover:opacity-90 transition flex items-center gap-1"
       >
         <span>💬</span> LINE連携
-      </button>
+      </button> -->
 
       <button
         @click="logout"
