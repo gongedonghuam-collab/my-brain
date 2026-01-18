@@ -156,9 +156,14 @@ const goToLogin = () => {
           My Brain を開く
         </button>
 
-        <p class="fade-in-up delay-500 footer-text">
-          Designed by Takumi Yoshioka
-        </p>
+        <div class="fade-in-up delay-500 footer-container">
+          <div class="legal-links">
+            <router-link to="/legal" class="legal-link"
+              >特定商取引法に基づく表記</router-link
+            >
+          </div>
+          <p class="footer-text">Designed by Takumi Yoshioka</p>
+        </div>
       </section>
     </div>
   </div>
@@ -291,10 +296,29 @@ p {
   color: var(--primary);
   font-weight: bold;
 }
-.footer-text {
-  margin-top: 50px;
+/* フッター調整 */
+.footer-container {
+  margin-top: 60px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.legal-links {
+  margin-bottom: 10px;
+}
+.legal-link {
+  color: var(--text-gray);
   font-size: 0.8rem;
-  opacity: 0.5;
+  text-decoration: underline;
+  transition: color 0.3s;
+}
+.legal-link:hover {
+  color: white;
+}
+.footer-text {
+  font-size: 0.7rem;
+  opacity: 0.4;
 }
 
 /* アニメーション */
