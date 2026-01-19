@@ -21,18 +21,26 @@ const router = useRouter();
 
       <div class="space-y-8 text-sm leading-relaxed">
         <section>
-          <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
+          <h2 class="font-bold text-slate-100 mb-2">事業者名（屋号）</h2>
           <p>BlueCode</p>
         </section>
 
         <section>
+          <h2 class="font-bold text-slate-100 mb-2">代表者名（運営責任者）</h2>
+          <p>吉岡 拓海</p>
+        </section>
+
+        <section>
           <h2 class="font-bold text-slate-100 mb-2">所在地</h2>
-          <p>福岡県福岡市南区野間1丁目19-1</p>
+          <p>〒815-0041 福岡県福岡市南区野間1丁目19-1</p>
         </section>
 
         <section>
           <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
           <p>080-6423-6435</p>
+          <p class="text-xs text-slate-500 mt-1">
+            ※電話でのお問い合わせは受け付けておりません。お問い合わせはメールにてお願いいたします。
+          </p>
         </section>
 
         <section>
@@ -46,16 +54,48 @@ const router = useRouter();
         </section>
 
         <section>
-          <h2 class="font-bold text-slate-100 mb-2">支払方法と時期</h2>
+          <h2 class="font-bold text-slate-100 mb-2">商品代金以外の必要料金</h2>
           <p>
-            クレジットカード決済（Stripe）。初回申込時に決済され、以降毎月同日に自動更新されます。
+            当サイトの閲覧、コンテンツのダウンロード、お問い合わせ等の際の電子メールの送受信時などに、所定の通信料が発生いたします。
           </p>
         </section>
 
         <section>
-          <h2 class="font-bold text-slate-100 mb-2">キャンセル・解約</h2>
+          <h2 class="font-bold text-slate-100 mb-2">支払方法</h2>
+          <p>クレジットカード決済（Stripe）</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">代金の支払時期</h2>
           <p>
-            アプリ内の設定、またはStripeのカスタマーポータルよりいつでも解約可能です。次回更新日の前日までに手続きを行ってください。
+            初回申込時に決済され、以降毎月同日に自動的に決済が行われます。実際の引き落とし時期は、ご利用のクレジットカード会社の締め日や契約内容により異なります。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">
+            役務または商品の引渡時期
+          </h2>
+          <p>決済手続き完了後、直ちにご利用いただけます。</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">
+            返品・返金・キャンセルに関する特約
+          </h2>
+          <p>
+            デジタルコンテンツの性質上、返品・返金には応じられません。
+            解約はいつでも可能ですが、次回更新日までの残期間に対する返金は行われません。
+            解約をご希望の場合は、アプリ内の設定画面、またはStripeのカスタマーポータルより次回更新日の前日までにお手続きください。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">動作環境</h2>
+          <p>
+            推奨ブラウザ：Google Chrome 最新版、Safari 最新版、Microsoft Edge
+            最新版<br />
+            ※インターネット接続環境が必要です。
           </p>
         </section>
       </div>

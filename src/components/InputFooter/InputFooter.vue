@@ -3,9 +3,12 @@ import { computed } from "vue";
 import { useInputFooter } from "./useInputFooter";
 import { useMyBrain } from "@/composables/useMyBrain";
 
-const props = defineProps<{ modelValue: "memo" | "chat" | "url" }>();
+// ★修正: 'calendar' を追加
+const props = defineProps<{
+  modelValue: "memo" | "chat" | "url" | "calendar";
+}>();
 const emit = defineEmits<{
-  (e: "update:modelValue", val: "memo" | "chat" | "url"): void;
+  (e: "update:modelValue", val: "memo" | "chat" | "url" | "calendar"): void;
 }>();
 
 const inputMode = computed({
@@ -13,7 +16,6 @@ const inputMode = computed({
   set: (val) => emit("update:modelValue", val),
 });
 
-// マイク関連（isListening, toggleListening）を削除
 const {
   inputText,
   selectedFile,
@@ -22,7 +24,8 @@ const {
   handleFileSelect,
   clearFile,
   handleSend,
-} = useInputFooter(props.modelValue);
+} = useInputFooter(props.modelValue as any); // 型キャストでエラー回避
+
 const { currentUser, startSubscription, isSaving, isAiThinking } = useMyBrain();
 
 const remainingCount = computed(() =>
@@ -90,11 +93,13 @@ const remainingCount = computed(() =>
           :style="{
             left:
               inputMode === 'memo'
-                ? '4px'
+                ? '2px'
                 : inputMode === 'url'
-                  ? '33.3%'
-                  : '66.6%',
-            width: 'calc(33.3% - 5px)',
+                  ? '25%'
+                  : inputMode === 'chat'
+                    ? '50%'
+                    : '75%',
+            width: 'calc(25% - 4px)',
           }"
         ></div>
         <button
@@ -123,6 +128,15 @@ const remainingCount = computed(() =>
           ]"
         >
           🔍 会話
+        </button>
+        <button
+          @click="inputMode = 'calendar'"
+          :class="[
+            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
+            inputMode === 'calendar' ? 'text-orange-400' : 'text-slate-400',
+          ]"
+        >
+          📅 予定
         </button>
       </div>
 
@@ -179,13 +193,15 @@ const remainingCount = computed(() =>
               ? 'https://...'
               : inputMode === 'memo'
                 ? '何を記憶しますか？'
-                : 'AIに質問...'
+                : inputMode === 'calendar'
+                  ? 'カレンダーを見ながらメモ...'
+                  : 'AIに質問...'
           "
-          @keydown.enter.ctrl="handleSend(inputMode)"
+          @keydown.enter.ctrl="handleSend(inputMode as any)"
         ></textarea>
 
         <button
-          @click="handleSend(inputMode)"
+          @click="handleSend(inputMode as any)"
           :disabled="(!inputText && !selectedFile) || isSaving || isAiThinking"
           class="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg self-end mb-1"
         >

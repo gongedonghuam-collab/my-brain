@@ -1973,11 +1973,16 @@ onMounted(() => {
 </file>
 
 <file path="src/firebase.ts">
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth"; // ★修正: GoogleAuthProviderを追加
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import { getMessaging } from "firebase/messaging"; // 追加
+import { getMessaging } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -1989,19 +1994,31 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
-export const messaging = getMessaging(app); // 追加
+// アプリが既に初期化されているかチェック
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code == "failed-precondition") {
-    console.error("複数タブで開いているためオフライン機能が無効です");
-  } else if (err.code == "unimplemented") {
-    console.error("ブラウザが対応していません");
-  }
-});
+export const auth = getAuth(app);
+
+// Firestoreの初期化（重複防止）
+let dbInstance;
+try {
+  // すでに初期化済みなら取得するだけ
+  dbInstance = getFirestore(app);
+} catch (e) {
+  // まだなら設定付きで初期化
+  dbInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  });
+}
+export const db = dbInstance;
+
+export const storage = getStorage(app);
+export const messaging = getMessaging(app);
+
+// ★追加: ここが抜けているためエラーになっています
+export const googleProvider = new GoogleAuthProvider();
 </file>
 
 <file path="src/style.css">
@@ -2215,28 +2232,45 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // ユーザー自身だけが読み書きできるようにする共通関数
+    // ■ 共通関数：本人確認
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    // ■ 共通関数：データの正当性チェック（バリデーション）
+    // 文字列であり、かつ文字数が20,000文字以内であることを強制
+    function isValidText() {
+      return request.resource.data.text is string
+             && request.resource.data.text.size() > 0
+             && request.resource.data.text.size() < 20000;
+    }
+
     // 1. ユーザー情報
     match /users/{userId} {
+      // 自分のデータだけ読み書きOK
       allow read, write: if isOwner(userId);
+      
+      // 課金セッション（Stripe用）
+      match /checkout_sessions/{id} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // 2. メモ (My Brain)
     match /memories/{memoryId} {
-      // 作成時は、自分のIDを入れているかチェック
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      // 読み取り・更新・削除は、自分のデータのみ許可
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      // 読み取り・削除：保存されているデータの持ち主が自分ならOK
+      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      
+      // 作成・更新：これから保存するデータの持ち主が自分、かつテキスト形式が正しいならOK
+      allow create, update: if request.auth != null 
+                            && request.resource.data.userId == request.auth.uid
+                            && isValidText();
     }
 
-    // 3. チャットログ (My Brain)
+    // 3. チャットログ
     match /chat_logs/{logId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create, update: if request.auth != null && request.resource.data.userId == request.auth.uid;
     }
   }
 }
@@ -2630,18 +2664,26 @@ const router = useRouter();
 
       <div class="space-y-8 text-sm leading-relaxed">
         <section>
-          <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
+          <h2 class="font-bold text-slate-100 mb-2">事業者名（屋号）</h2>
           <p>BlueCode</p>
         </section>
 
         <section>
+          <h2 class="font-bold text-slate-100 mb-2">代表者名（運営責任者）</h2>
+          <p>吉岡 拓海</p>
+        </section>
+
+        <section>
           <h2 class="font-bold text-slate-100 mb-2">所在地</h2>
-          <p>福岡県福岡市南区野間1丁目19-1</p>
+          <p>〒815-0041 福岡県福岡市南区野間1丁目19-1</p>
         </section>
 
         <section>
           <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
           <p>080-6423-6435</p>
+          <p class="text-xs text-slate-500 mt-1">
+            ※電話でのお問い合わせは受け付けておりません。お問い合わせはメールにてお願いいたします。
+          </p>
         </section>
 
         <section>
@@ -2655,16 +2697,48 @@ const router = useRouter();
         </section>
 
         <section>
-          <h2 class="font-bold text-slate-100 mb-2">支払方法と時期</h2>
+          <h2 class="font-bold text-slate-100 mb-2">商品代金以外の必要料金</h2>
           <p>
-            クレジットカード決済（Stripe）。初回申込時に決済され、以降毎月同日に自動更新されます。
+            当サイトの閲覧、コンテンツのダウンロード、お問い合わせ等の際の電子メールの送受信時などに、所定の通信料が発生いたします。
           </p>
         </section>
 
         <section>
-          <h2 class="font-bold text-slate-100 mb-2">キャンセル・解約</h2>
+          <h2 class="font-bold text-slate-100 mb-2">支払方法</h2>
+          <p>クレジットカード決済（Stripe）</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">代金の支払時期</h2>
           <p>
-            アプリ内の設定、またはStripeのカスタマーポータルよりいつでも解約可能です。次回更新日の前日までに手続きを行ってください。
+            初回申込時に決済され、以降毎月同日に自動的に決済が行われます。実際の引き落とし時期は、ご利用のクレジットカード会社の締め日や契約内容により異なります。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">
+            役務または商品の引渡時期
+          </h2>
+          <p>決済手続き完了後、直ちにご利用いただけます。</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">
+            返品・返金・キャンセルに関する特約
+          </h2>
+          <p>
+            デジタルコンテンツの性質上、返品・返金には応じられません。
+            解約はいつでも可能ですが、次回更新日までの残期間に対する返金は行われません。
+            解約をご希望の場合は、アプリ内の設定画面、またはStripeのカスタマーポータルより次回更新日の前日までにお手続きください。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">動作環境</h2>
+          <p>
+            推奨ブラウザ：Google Chrome 最新版、Safari 最新版、Microsoft Edge
+            最新版<br />
+            ※インターネット接続環境が必要です。
           </p>
         </section>
       </div>
@@ -2686,7 +2760,7 @@ import {
 } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 import { useRouter } from "vue-router";
-import { googleProvider } from "@/../firebase"; // ★修正: 正しいパスに変更
+import { googleProvider } from "@/firebase";
 
 const router = useRouter();
 const isLoginMode = ref(true);
@@ -2701,8 +2775,18 @@ const db = getFirestore();
 const handleGoogleLogin = async () => {
   loading.value = true;
   try {
+    // ★重要: カレンダーの「読み書き」権限を追加
+    googleProvider.addScope("https://www.googleapis.com/auth/calendar.events");
+
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
+
+    // ★重要: カレンダー操作に必要なトークンを取り出して保存
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const token = credential?.accessToken;
+    if (token) {
+      localStorage.setItem("google_calendar_token", token);
+    }
 
     const userRef = doc(db, "users", user.uid);
     const userSnap = await getDoc(userRef);
@@ -3052,6 +3136,11 @@ if (loader) {
     "deploy": "vite build && firebase deploy"
   },
   "dependencies": {
+    "@fullcalendar/daygrid": "^6.1.20",
+    "@fullcalendar/interaction": "^6.1.20",
+    "@fullcalendar/list": "^6.1.20",
+    "@fullcalendar/timegrid": "^6.1.20",
+    "@fullcalendar/vue3": "^6.1.20",
     "@google/generative-ai": "^0.24.1",
     "@line/bot-sdk": "^10.5.0",
     "axios": "^1.13.2",
@@ -3129,58 +3218,6 @@ export default defineConfig({
     },
   },
 });
-</file>
-
-<file path="src/components/AppHeader/AppHeader.vue">
-<script setup lang="ts">
-import { useAppHeader } from "./useAppHeader";
-import { useMyBrain } from "@/composables/useMyBrain"; // 追加
-
-const { currentUser } = useMyBrain(); // ユーザー情報取得
-
-// ★設定項目
-const LINE_LOGIN_CHANNEL_ID = "2008915242";
-const REDIRECT_URI = window.location.origin + "/app";
-
-const startLineLogin = () => {
-  const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${LINE_LOGIN_CHANNEL_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=random123&scope=profile%20openid`;
-  window.location.href = url;
-};
-
-const { logout } = useAppHeader();
-</script>
-
-<template>
-  <header
-    class="h-14 px-4 flex items-center justify-between border-b border-slate-800 bg-slate-900/50 backdrop-blur z-20"
-  >
-    <div class="font-black text-lg tracking-tight text-white">🧠 My Brain</div>
-
-    <div class="flex items-center gap-3">
-      <div
-        v-if="currentUser?.isLineLinked"
-        class="text-[10px] bg-slate-700 text-slate-300 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 cursor-default border border-slate-600"
-      >
-        <span>✅</span> LINE連携済
-      </div>
-
-      <button
-        v-else
-        @click="startLineLogin"
-        class="text-[10px] bg-[#06C755] text-white px-3 py-1.5 rounded-full font-bold hover:opacity-90 transition flex items-center gap-1"
-      >
-        <span>💬</span> LINE連携
-      </button>
-
-      <button
-        @click="logout"
-        class="text-xs font-bold text-slate-500 hover:text-white transition"
-      >
-        ログアウト
-      </button>
-    </div>
-  </header>
-</template>
 </file>
 
 <file path="src/router/index.ts">
@@ -4374,15 +4411,70 @@ async function saveMemoryFromLine(
 }
 </file>
 
+<file path="src/components/AppHeader/AppHeader.vue">
+<script setup lang="ts">
+import { useAppHeader } from "./useAppHeader";
+import { useMyBrain } from "@/composables/useMyBrain"; // 追加
+
+const { currentUser } = useMyBrain(); // ユーザー情報取得
+
+// ★設定項目
+const LINE_LOGIN_CHANNEL_ID = "2008915242";
+const REDIRECT_URI = window.location.origin + "/app";
+
+const startLineLogin = () => {
+  const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${LINE_LOGIN_CHANNEL_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=random123&scope=profile%20openid`;
+  window.location.href = url;
+};
+
+const { logout } = useAppHeader();
+</script>
+
+<template>
+  <header
+    class="h-14 px-4 flex items-center justify-between border-b border-slate-800 bg-slate-900/50 backdrop-blur z-20"
+  >
+    <div class="font-black text-lg tracking-tight text-white">🧠 My Brain</div>
+
+    <div class="flex items-center gap-3">
+      <!-- <div
+        v-if="currentUser?.isLineLinked"
+        class="text-[10px] bg-slate-700 text-slate-300 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 cursor-default border border-slate-600"
+      >
+        <span>✅</span> LINE連携済
+      </div>
+
+      <button
+        v-else
+        @click="startLineLogin"
+        class="text-[10px] bg-[#06C755] text-white px-3 py-1.5 rounded-full font-bold hover:opacity-90 transition flex items-center gap-1"
+      >
+        <span>💬</span> LINE連携
+      </button> -->
+
+      <button
+        @click="logout"
+        class="text-xs font-bold text-slate-500 hover:text-white transition"
+      >
+        ログアウト
+      </button>
+    </div>
+  </header>
+</template>
+</file>
+
 <file path="src/components/InputFooter/InputFooter.vue">
 <script setup lang="ts">
 import { computed } from "vue";
 import { useInputFooter } from "./useInputFooter";
 import { useMyBrain } from "@/composables/useMyBrain";
 
-const props = defineProps<{ modelValue: "memo" | "chat" | "url" }>();
+// ★修正: 'calendar' を追加
+const props = defineProps<{
+  modelValue: "memo" | "chat" | "url" | "calendar";
+}>();
 const emit = defineEmits<{
-  (e: "update:modelValue", val: "memo" | "chat" | "url"): void;
+  (e: "update:modelValue", val: "memo" | "chat" | "url" | "calendar"): void;
 }>();
 
 const inputMode = computed({
@@ -4390,7 +4482,6 @@ const inputMode = computed({
   set: (val) => emit("update:modelValue", val),
 });
 
-// マイク関連（isListening, toggleListening）を削除
 const {
   inputText,
   selectedFile,
@@ -4399,7 +4490,8 @@ const {
   handleFileSelect,
   clearFile,
   handleSend,
-} = useInputFooter(props.modelValue);
+} = useInputFooter(props.modelValue as any); // 型キャストでエラー回避
+
 const { currentUser, startSubscription, isSaving, isAiThinking } = useMyBrain();
 
 const remainingCount = computed(() =>
@@ -4467,11 +4559,13 @@ const remainingCount = computed(() =>
           :style="{
             left:
               inputMode === 'memo'
-                ? '4px'
+                ? '2px'
                 : inputMode === 'url'
-                  ? '33.3%'
-                  : '66.6%',
-            width: 'calc(33.3% - 5px)',
+                  ? '25%'
+                  : inputMode === 'chat'
+                    ? '50%'
+                    : '75%',
+            width: 'calc(25% - 4px)',
           }"
         ></div>
         <button
@@ -4500,6 +4594,15 @@ const remainingCount = computed(() =>
           ]"
         >
           🔍 会話
+        </button>
+        <button
+          @click="inputMode = 'calendar'"
+          :class="[
+            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
+            inputMode === 'calendar' ? 'text-orange-400' : 'text-slate-400',
+          ]"
+        >
+          📅 予定
         </button>
       </div>
 
@@ -4556,13 +4659,15 @@ const remainingCount = computed(() =>
               ? 'https://...'
               : inputMode === 'memo'
                 ? '何を記憶しますか？'
-                : 'AIに質問...'
+                : inputMode === 'calendar'
+                  ? 'カレンダーを見ながらメモ...'
+                  : 'AIに質問...'
           "
-          @keydown.enter.ctrl="handleSend(inputMode)"
+          @keydown.enter.ctrl="handleSend(inputMode as any)"
         ></textarea>
 
         <button
-          @click="handleSend(inputMode)"
+          @click="handleSend(inputMode as any)"
           :disabled="(!inputText && !selectedFile) || isSaving || isAiThinking"
           class="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg self-end mb-1"
         >
@@ -4597,12 +4702,17 @@ import {
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import axios from "axios"; // 追加: モデル取得用
+import axios from "axios";
 
-// ★設定項目
+// ==========================================
+// ★ 設定エリア
+// ==========================================
 const STRIPE_PRICE_ID = "price_1SqvJAFjyhW5lKcrgAmd48sB";
 const ADMIN_EMAILS = ["gongedonghuam@gmail.com"];
 
+// ==========================================
+// ★ 型定義
+// ==========================================
 export interface Memory {
   id: string;
   userId: string;
@@ -4622,7 +4732,7 @@ export interface ChatLog {
   question: string;
   answer: string;
   createdAt: any;
-  mermaidCode?: string;
+  mermaidCode?: string | null; // null許容を明示
   action?: {
     title: string;
     date?: string;
@@ -4643,6 +4753,9 @@ export interface User {
   isLineLinked?: boolean;
 }
 
+// ==========================================
+// ★ アプリ全体で共有するデータ
+// ==========================================
 const currentUser = ref<User | null>(null);
 const memories = ref<Memory[]>([]);
 const chatLogs = ref<ChatLog[]>([]);
@@ -4650,6 +4763,10 @@ const loading = ref(false);
 const isAiThinking = ref(false);
 const isSaving = ref(false);
 const activeTag = ref<string | null>(null);
+
+// ==========================================
+// ★ ヘルパー関数
+// ==========================================
 
 const fileToGenerativePart = async (file: File) => {
   return new Promise<{ inlineData: { data: string; mimeType: string } }>(
@@ -4678,23 +4795,85 @@ const cosineSimilarity = (vecA: number[], vecB: number[]) => {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 };
 
+// カレンダー取得関数
+const fetchCalendarEvents = async () => {
+  const token = localStorage.getItem("google_calendar_token");
+  if (!token) return null;
+
+  try {
+    const now = new Date().toISOString();
+    const response = await axios.get(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${now}&maxResults=10&orderBy=startTime&singleEvents=true`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    const events = response.data.items || [];
+    if (events.length === 0) return "直近の予定はありません。";
+
+    return events
+      .map((ev: any) => {
+        const start = ev.start.dateTime || ev.start.date;
+        const summary = ev.summary || "(タイトルなし)";
+        return `- ${start}: ${summary}`;
+      })
+      .join("\n");
+  } catch (e) {
+    console.warn("Calendar fetch failed:", e);
+    // トークン切れの可能性が高いのでnullを返す
+    return null;
+  }
+};
+
+// カレンダー登録関数
+const addEventToGoogleCalendar = async (
+  title: string,
+  startDateTime: string,
+  endDateTime: string,
+) => {
+  const token = localStorage.getItem("google_calendar_token");
+  if (!token)
+    throw new Error(
+      "連携トークンがありません。一度ログアウトして再ログインしてください。",
+    );
+
+  const event = {
+    summary: title,
+    start: { dateTime: startDateTime },
+    end: { dateTime: endDateTime },
+  };
+
+  try {
+    await axios.post(
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+      event,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  } catch (e: any) {
+    // 401エラー（認証切れ）の場合は明示的なメッセージを投げる
+    if (e.response && e.response.status === 401) {
+      throw new Error("認証の有効期限が切れています。再ログインしてください。");
+    }
+    throw e;
+  }
+};
+
+// ==========================================
+// ★ メインロジック
+// ==========================================
 export function useMyBrain() {
   const getEmbeddingModel = (apiKey: string) => {
     const genAI = new GoogleGenerativeAI(apiKey);
     return genAI.getGenerativeModel({ model: "text-embedding-004" });
   };
 
-  // 動的に利用可能なモデルを取得する関数
   const getSmartModelName = async (apiKey: string): Promise<string> => {
     try {
       const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-      // axiosを使うかfetchを使うか統一が必要ですが、ここではfetchで実装します
       const response = await fetch(listUrl);
       if (!response.ok) throw new Error("Model fetch failed");
 
       const data = await response.json();
       const models = data.models || [];
-
       const viableModels = models.filter((m: any) =>
         m.supportedGenerationMethods?.includes("generateContent"),
       );
@@ -4711,10 +4890,8 @@ export function useMyBrain() {
         if (found) return found.name.replace("models/", "");
       }
 
-      if (viableModels.length > 0) {
+      if (viableModels.length > 0)
         return viableModels[0].name.replace("models/", "");
-      }
-
       return "gemini-1.5-flash";
     } catch (e) {
       console.warn("Model auto-detect failed, using default.", e);
@@ -4755,21 +4932,42 @@ export function useMyBrain() {
 
   const startSubscription = async () => {
     if (!currentUser.value) return;
-    const sessionsRef = collection(
-      db,
-      "users",
-      currentUser.value.uid,
-      "checkout_sessions",
+    const confirmed = confirm(
+      "PROプラン（月額1,000円）の決済画面へ移動しますか？",
     );
-    const docRef = await addDoc(sessionsRef, {
-      price: STRIPE_PRICE_ID,
-      success_url: window.location.origin + "/app",
-      cancel_url: window.location.origin + "/app",
-    });
-    onSnapshot(docRef, (snap) => {
-      const { url } = snap.data() || {};
-      if (url) window.location.assign(url);
-    });
+    if (!confirmed) return;
+
+    alert("決済画面を準備しています...少々お待ちください。");
+
+    try {
+      const sessionsRef = collection(
+        db,
+        "users",
+        currentUser.value.uid,
+        "checkout_sessions",
+      );
+
+      const docRef = await addDoc(sessionsRef, {
+        price: STRIPE_PRICE_ID,
+        success_url: window.location.origin + "/app",
+        cancel_url: window.location.origin + "/app",
+      });
+
+      onSnapshot(docRef, (snap) => {
+        const data = snap.data();
+        const url = data?.url;
+        const error = data?.error;
+
+        if (error) {
+          alert("決済エラーが発生しました: " + error.message);
+        } else if (url) {
+          window.location.assign(url);
+        }
+      });
+    } catch (e: any) {
+      console.error(e);
+      alert("エラーが発生しました: " + e.message);
+    }
   };
 
   const initAuth = () => {
@@ -4816,6 +5014,7 @@ export function useMyBrain() {
 
   const logout = async () => {
     await signOut(auth);
+    localStorage.removeItem("google_calendar_token");
     window.location.reload();
   };
 
@@ -4833,7 +5032,7 @@ export function useMyBrain() {
         (d) => ({ id: d.id, ...d.data() }) as Memory,
       );
     } catch (e) {
-      console.error("Fetch memories error:", e);
+      console.error("メモ取得エラー:", e);
     } finally {
       loading.value = false;
     }
@@ -4853,7 +5052,7 @@ export function useMyBrain() {
         .map((d) => ({ id: d.id, ...d.data() }) as ChatLog)
         .reverse();
     } catch (e) {
-      console.error("Fetch chat logs error:", e);
+      console.error("チャット取得エラー:", e);
     }
   };
 
@@ -4861,7 +5060,6 @@ export function useMyBrain() {
     activeTag.value = tag;
   };
 
-  // ★ここが復活しました
   const filteredMemories = computed(() => {
     if (!activeTag.value) return memories.value;
     return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
@@ -4907,7 +5105,7 @@ export function useMyBrain() {
         });
       } else {
         promptParts.push({
-          text: `テキストを整理して。${text} 出力JSON:{summary, tags, fullText}`,
+          text: `以下のテキストを整理して。${text} 出力JSON:{summary, tags, fullText}`,
         });
       }
 
@@ -4922,7 +5120,6 @@ export function useMyBrain() {
       const finalText = file
         ? `【解析済み】${text}\n\n${aiData.fullText || ""}`
         : text;
-
       const embModel = getEmbeddingModel(apiKey);
       const embResult = await embModel.embedContent(finalText);
       const embedding = embResult.embedding.values;
@@ -4955,9 +5152,10 @@ export function useMyBrain() {
         .filter((m) => m.score > 0.65)
         .sort((a, b) => b.score - a.score)
         .slice(0, 3);
-    } catch (e: any) {
-      console.error("AI Error:", e);
-      alert("AIエラー: " + e.message);
+    } catch (e) {
+      console.error("Add memory error:", e);
+      alert("保存エラー");
+      return null;
     } finally {
       isSaving.value = false;
     }
@@ -4972,73 +5170,136 @@ export function useMyBrain() {
       const res: any = await func({ url });
       if (res.data.success) {
         await addMemory(
-          `【WEB】${res.data.title}\nURL: ${url}\n\n${res.data.content}`,
+          `【WEB記事】${res.data.title}\nURL: ${url}\n\n${res.data.content}`,
         );
       }
     } catch (e: any) {
-      alert("URL読込失敗: " + e.message);
+      alert("記事の読み込みに失敗しました: " + e.message);
     } finally {
       isSaving.value = false;
     }
   };
 
-  const askBrain = async (question: string) => {
+  const askBrain = async (question: string): Promise<string> => {
     if (!(await checkAndIncrementUsage())) return "";
     isAiThinking.value = true;
+
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("APIキーがありません");
+      if (!apiKey) throw new Error("APIキーが設定されていません");
 
       const embedModel = getEmbeddingModel(apiKey);
       const qEmbed = await embedModel.embedContent(question);
       const qVec = qEmbed.embedding.values;
 
-      const context = memories.value
+      const scoredMemories = memories.value
         .map((m) => ({
           ...m,
           score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
         }))
-        .sort((a, b) => b.score - a.score)
+        .sort((a, b) => b.score - a.score);
+
+      const context = scoredMemories
         .slice(0, 20)
-        .map((m) => `- ${m.text.slice(0, 300)}`)
-        .join("\n");
+        .map((m) => `- ${m.text.slice(0, 500)}`)
+        .join("\n\n");
+
+      // カレンダー情報取得
+      const calendarEvents = await fetchCalendarEvents();
+      const calendarContext = calendarEvents
+        ? `\n【直近の予定】\n${calendarEvents}\n`
+        : "";
+
+      const nowStr = new Date().toLocaleString("ja-JP", {
+        timeZone: "Asia/Tokyo",
+      });
 
       const modelName = await getSmartModelName(apiKey);
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: modelName });
-      const prompt = `あなたは「第2の脳」です。記憶データ:${context}\n質問:${question}\n回答はJSON形式 {"answer": "回答", "mermaid": "図解コード(任意)", "action": null} で。`;
 
-      const res = await model.generateContent(prompt);
-      let json;
+      // ★プロンプト修正: 図解(mermaid)が不要な場合は必ず null を返すよう指示
+      const prompt = `
+あなたは「第2の脳」です。記憶と予定を元にサポートします。
+現在日時: ${nowStr}
+
+${calendarContext}
+
+【記憶データ】
+${context}
+
+【質問】
+${question}
+
+【出力形式（JSONのみ）】
+{
+  "answer": "回答テキスト",
+  "mermaid": null, 
+  "calendarAction": null
+}
+
+※図解が必要な場合のみ "mermaid" にコードを入れてください。**不要な場合は必ず null にしてください。**
+※予定登録が必要な場合のみ "calendarAction" に以下を入れてください。
+"calendarAction": {
+  "title": "予定名",
+  "start": "ISO8601開始日時",
+  "end": "ISO8601終了日時"
+}
+`;
+
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      let data;
       try {
-        json = JSON.parse(
-          res.response
-            .text()
-            .replace(/```json|```/g, "")
-            .trim(),
-        );
+        data = JSON.parse(text.replace(/```json|```/g, "").trim());
       } catch {
-        json = { answer: res.response.text(), mermaid: null };
+        // パース失敗時は全部テキストとして扱う（mermaidはnull）
+        data = { answer: text, mermaid: null, calendarAction: null };
       }
 
-      const log = {
+      // mermaidが空文字や変な文字列の場合もnullに強制変換
+      if (
+        !data.mermaid ||
+        data.mermaid === "null" ||
+        data.mermaid.length < 10
+      ) {
+        data.mermaid = null;
+      }
+
+      let finalAnswer = data.answer;
+
+      if (data.calendarAction) {
+        try {
+          await addEventToGoogleCalendar(
+            data.calendarAction.title,
+            data.calendarAction.start,
+            data.calendarAction.end,
+          );
+          finalAnswer += `\n\n✅ 予定を登録しました！\n📅 ${data.calendarAction.title}\n⏰ ${data.calendarAction.start}`;
+        } catch (calError: any) {
+          console.error(calError);
+          // エラーメッセージをユーザーに見やすく表示
+          finalAnswer += `\n\n⚠️ カレンダー登録エラー: ${calError.message}`;
+        }
+      }
+
+      const logData = {
         userId: currentUser.value!.uid,
-        question,
-        answer: json.answer,
-        mermaidCode: json.mermaid,
+        question: question,
+        answer: finalAnswer,
+        mermaidCode: data.mermaid || null, // nullを保証
         createdAt: serverTimestamp(),
       };
-      const ref = await addDoc(collection(db, "chat_logs"), log);
+      const logRef = await addDoc(collection(db, "chat_logs"), logData);
       chatLogs.value.push({
-        id: ref.id,
-        ...log,
+        id: logRef.id,
+        ...logData,
         createdAt: new Date(),
       } as any);
-      return json.answer;
+
+      return finalAnswer;
     } catch (e: any) {
-      console.error(e);
-      alert("AIエラー: " + e.message);
-      return "エラーが発生しました";
+      return "エラー: " + e.message;
     } finally {
       isAiThinking.value = false;
     }
@@ -5077,7 +5338,7 @@ export function useMyBrain() {
   return {
     currentUser,
     memories,
-    filteredMemories, // ← これを返すための定義を追加しました
+    filteredMemories,
     chatLogs,
     loading,
     isAiThinking,
@@ -5088,12 +5349,12 @@ export function useMyBrain() {
     logout,
     addMemory,
     addUrlMemory,
-    updateMemory,
-    deleteMemory,
     askBrain,
-    deleteChatLog,
     selectTag,
     startSubscription,
+    updateMemory,
+    deleteMemory,
+    deleteChatLog,
   };
 }
 </file>
@@ -5113,13 +5374,137 @@ import ChatList from "@/components/ChatList/ChatList.vue";
 import InputFooter from "@/components/InputFooter/InputFooter.vue";
 import MemoryModal from "@/components/MemoryModal/MemoryModal.vue";
 
-const { initAuth, chatLogs, isAiThinking } = useMyBrain();
-const inputMode = ref<"memo" | "chat" | "url">("memo");
+// FullCalendar 関連
+import FullCalendar from "@fullcalendar/vue3";
+import dayGridPlugin from "@fullcalendar/daygrid";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import listPlugin from "@fullcalendar/list";
+import type { CalendarOptions } from "@fullcalendar/core";
+import axios from "axios";
+
+const { initAuth, chatLogs, isAiThinking, currentUser } = useMyBrain();
+const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
 const editingMemory = ref<Memory | null>(null);
 const chatContainerRef = ref<HTMLElement | null>(null);
 const showSuccessToast = ref(false);
 const route = useRoute();
 const router = useRouter();
+
+const calendarLoading = ref(false);
+
+// ★カレンダー設定
+const calendarOptions = ref<CalendarOptions>({
+  plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
+  initialView: "dayGridMonth",
+  headerToolbar: {
+    left: "prev",
+    center: "title",
+    right: "next",
+  },
+  events: [] as any[],
+  locale: "ja",
+
+  // 親要素（計算された高さ）に合わせて100%埋める
+  height: "100%",
+  expandRows: true, // 行を均等に広げる
+  dayMaxEvents: true,
+
+  eventTimeFormat: {
+    hour: "numeric",
+    minute: "2-digit",
+    meridiem: false,
+    hour12: false,
+  } as const,
+
+  eventClick: (info: any) => {
+    alert(`📅 ${info.event.title}\n⏰ ${info.event.start?.toLocaleString()}`);
+  },
+  longPressDelay: 500,
+  handleWindowResize: true,
+
+  // カスタムイベント描画
+  eventContent: function (arg: any) {
+    return {
+      html: `<div class="fc-content-custom">
+              <div class="fc-marker" style="background-color: ${arg.event.backgroundColor}"></div>
+              <div class="fc-details">
+                <span class="fc-time-custom">${arg.timeText}</span>
+                <span class="fc-title-custom">${arg.event.title}</span>
+              </div>
+            </div>`,
+    };
+  },
+});
+
+// カレンダー取得処理
+const fetchAllCalendars = async () => {
+  const token = localStorage.getItem("google_calendar_token");
+  if (!token) return;
+
+  calendarLoading.value = true;
+  try {
+    let calendars = [{ id: "primary", backgroundColor: "#818cf8" }]; // Indigo
+
+    try {
+      const listRes = await axios.get(
+        "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (listRes.data.items) {
+        calendars = listRes.data.items.map((cal: any) => ({
+          id: cal.id,
+          backgroundColor: cal.backgroundColor || "#818cf8",
+        }));
+      }
+    } catch (e) {
+      console.warn("カレンダーリスト取得不可");
+    }
+
+    const now = new Date();
+    const timeMin = new Date(
+      now.getFullYear(),
+      now.getMonth() - 1,
+      1,
+    ).toISOString();
+    const timeMax = new Date(
+      now.getFullYear(),
+      now.getMonth() + 2,
+      0,
+    ).toISOString();
+
+    const promises = calendars.map((cal) =>
+      axios
+        .get(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            params: { timeMin, timeMax, singleEvents: true, maxResults: 250 },
+          },
+        )
+        .catch(() => ({ data: { items: [] } })),
+    );
+
+    const results = await Promise.all(promises);
+
+    const allEvents = results.flatMap((res, index) => {
+      const color = calendars[index].backgroundColor;
+      return (res.data.items || []).map((ev: any) => ({
+        title: ev.summary || "(なし)",
+        start: ev.start.dateTime || ev.start.date,
+        end: ev.end.dateTime || ev.end.date,
+        backgroundColor: color,
+        allDay: !ev.start.dateTime,
+      }));
+    });
+
+    calendarOptions.value.events = allEvents;
+  } catch (e) {
+    console.error("カレンダー取得エラー", e);
+  } finally {
+    calendarLoading.value = false;
+  }
+};
 
 onMounted(async () => {
   initAuth();
@@ -5134,15 +5519,34 @@ onMounted(async () => {
   if (code) {
     window.history.replaceState({}, document.title, "/app");
     try {
-      const functions = getFunctions(getApp(), "asia-northeast1"); // ★リージョン指定
+      const functions = getFunctions(getApp(), "asia-northeast1");
       const linkFunc = httpsCallable(functions, "linkLineAccount");
       await linkFunc({ code, redirectUri: window.location.origin + "/app" });
       showSuccessToast.value = true;
       setTimeout(() => (showSuccessToast.value = false), 5000);
     } catch (e) {
       console.error(e);
-      alert("LINE連携に失敗しました");
+      alert("LINE連携失敗");
     }
+  }
+
+  if (currentUser.value) {
+    fetchAllCalendars();
+  }
+});
+
+watch(inputMode, (newMode) => {
+  if (newMode === "chat") {
+    nextTick(() => {
+      if (chatContainerRef.value)
+        chatContainerRef.value.scrollTop = chatContainerRef.value.scrollHeight;
+    });
+    scrollToBottom();
+  } else if (newMode === "calendar") {
+    setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+      fetchAllCalendars();
+    }, 100);
   }
 });
 
@@ -5160,26 +5564,18 @@ const scrollToBottom = async () => {
 
 watch(chatLogs, scrollToBottom, { deep: true });
 watch(isAiThinking, scrollToBottom);
-watch(inputMode, (newMode) => {
-  if (newMode === "chat") {
-    nextTick(() => {
-      if (chatContainerRef.value)
-        chatContainerRef.value.scrollTop = chatContainerRef.value.scrollHeight;
-    });
-    scrollToBottom();
-  }
-});
+
 const onOpenDetail = (memo: Memory) => {
   editingMemory.value = memo;
 };
-const onModeChange = (newMode: "memo" | "chat" | "url") => {
+const onModeChange = (newMode: "memo" | "chat" | "url" | "calendar") => {
   inputMode.value = newMode;
 };
 </script>
 
 <template>
   <div
-    class="h-screen flex flex-col bg-slate-950 text-slate-200 font-sans relative"
+    class="h-[100dvh] flex flex-col bg-slate-950 text-slate-200 font-sans relative overflow-hidden"
   >
     <Transition name="toast">
       <div
@@ -5189,9 +5585,6 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
         <span class="text-2xl">✅</span>
         <div>
           <p class="font-bold text-sm">LINE連携完了！</p>
-          <p class="text-xs opacity-90">
-            公式アカウントにメッセージを送ってみましょう
-          </p>
         </div>
       </div>
     </Transition>
@@ -5201,13 +5594,46 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
 
     <main
       ref="chatContainerRef"
-      class="flex-1 overflow-y-auto p-4 space-y-6 pb-60 scrollbar-hide"
+      class="flex-1 overflow-y-auto scrollbar-hide transition-all"
+      :class="inputMode === 'calendar' ? 'p-0 md:p-6' : 'p-4 pb-72'"
     >
       <MemoList
         v-if="inputMode === 'memo' || inputMode === 'url'"
         @openDetail="onOpenDetail"
       />
       <ChatList v-if="inputMode === 'chat'" />
+
+      <div
+        v-if="inputMode === 'calendar'"
+        class="w-full h-full flex flex-col animate-fade-in relative md:max-w-6xl md:mx-auto"
+      >
+        <div
+          class="hidden md:block absolute top-[-50px] left-[-50px] w-64 h-64 bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none"
+        ></div>
+        <div
+          class="hidden md:block absolute bottom-[-50px] right-[-50px] w-80 h-80 bg-blue-600/10 rounded-full blur-[100px] pointer-events-none"
+        ></div>
+
+        <div
+          class="calendar-wrapper backdrop-blur-xl bg-slate-900/60 md:bg-slate-800/40 relative flex flex-col border-b md:border border-slate-700/30 md:rounded-3xl shadow-2xl overflow-hidden"
+        >
+          <div
+            v-if="calendarLoading"
+            class="absolute inset-0 bg-slate-950/60 z-20 flex items-center justify-center backdrop-blur-sm"
+          >
+            <div
+              class="animate-spin h-12 w-12 border-4 border-indigo-500 rounded-full border-t-transparent shadow-[0_0_20px_rgba(99,102,241,0.6)]"
+            ></div>
+          </div>
+
+          <div class="p-1 md:p-6 h-full">
+            <FullCalendar
+              :options="calendarOptions"
+              class="w-full h-full font-sans cyber-calendar"
+            />
+          </div>
+        </div>
+      </div>
     </main>
 
     <MemoryModal :memory="editingMemory" @close="editingMemory = null" />
@@ -5223,6 +5649,7 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
 .toast-enter-active,
 .toast-leave-active {
   transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -5232,72 +5659,296 @@ const onModeChange = (newMode: "memo" | "chat" | "url") => {
   opacity: 0;
   transform: translate(-50%, -20px);
 }
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* =========================================
+   ★ 高さ調整（ここが最重要修正ポイント）
+   ========================================= */
+.calendar-wrapper {
+  /* 計算式: 100dvh (画面全体) 
+    - 56px (Header)
+    - 45px (TagFilter) 
+    - 200px (Footer: 入力欄+タブ+Proバーの合計高さ目安) 
+    - 10px (余裕)
+    = 311px 程度引く
+  */
+  height: calc(100dvh - 310px);
+}
+
+@media (min-width: 768px) {
+  .calendar-wrapper {
+    /* PC: フッターが同じ高さでも画面が広いので少し余裕を持たせる */
+    height: calc(100dvh - 250px);
+  }
+}
+
+/* =========================================
+   ★ Cyber Glass Theme
+   ========================================= */
+.fc {
+  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --fc-border-color: rgba(255, 255, 255, 0.1);
+  --fc-today-bg-color: rgba(99, 102, 241, 0.15);
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: transparent;
+}
+
+/* ヘッダータイトル */
+.fc .fc-toolbar-title {
+  font-size: 1.1rem !important;
+  font-weight: 800 !important;
+  color: #f1f5f9;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
+}
+@media (min-width: 768px) {
+  .fc .fc-toolbar-title {
+    font-size: 1.5rem !important;
+  }
+}
+
+/* ボタン */
+.fc .fc-button {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #cbd5e1 !important;
+  border-radius: 12px !important;
+  padding: 0.3rem 0.6rem !important;
+  transition: all 0.2s;
+}
+.fc .fc-button:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+.fc .fc-button-active {
+  background-color: rgba(99, 102, 241, 0.4) !important;
+  border-color: rgba(99, 102, 241, 0.6) !important;
+  color: white !important;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.3) !important;
+}
+
+/* 曜日ヘッダー */
+.fc-col-header-cell-cushion {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 8px 0 !important;
+  letter-spacing: 0.05em;
+}
+@media (min-width: 768px) {
+  .fc-col-header-cell-cushion {
+    font-size: 0.85rem;
+  }
+}
+
+/* 日付セル */
+.fc-daygrid-day-number {
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 4px 8px !important;
+  opacity: 0.9;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+@media (min-width: 768px) {
+  .fc-daygrid-day-number {
+    font-size: 1rem;
+    padding: 8px 12px !important;
+  }
+}
+
+/* イベント */
+.fc-event {
+  border: none !important;
+  background: transparent !important;
+  margin-top: 2px !important;
+  cursor: pointer;
+}
+
+.fc-content-custom {
+  display: flex;
+  align-items: center;
+  background-color: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 2px 0;
+  border-radius: 4px;
+  overflow: hidden;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
+  width: 100%;
+}
+@media (min-width: 768px) {
+  .fc-content-custom {
+    padding: 3px 0;
+    border-radius: 6px;
+    background-color: rgba(51, 65, 85, 0.7);
+  }
+  .fc-content-custom:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    background-color: rgba(71, 85, 105, 0.9);
+    z-index: 10;
+  }
+}
+
+/* マーカー */
+.fc-marker {
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  margin-left: 4px;
+  margin-right: 4px;
+  box-shadow: 0 0 6px currentColor;
+  flex-shrink: 0;
+}
+@media (min-width: 768px) {
+  .fc-marker {
+    height: 16px;
+    width: 4px;
+    margin-left: 6px;
+    margin-right: 6px;
+  }
+}
+
+.fc-details {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+  padding-right: 4px;
+  width: 100%;
+}
+
+.fc-time-custom {
+  color: #94a3b8;
+  font-size: 0.65rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+@media (min-width: 768px) {
+  .fc-time-custom {
+    font-size: 0.75rem;
+    color: #cbd5e1;
+  }
+}
+
+.fc-title-custom {
+  color: #f1f5f9;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+@media (min-width: 768px) {
+  .fc-title-custom {
+    font-size: 0.75rem;
+  }
+}
+
+/* スマホ最適化 */
+@media (max-width: 640px) {
+  .fc-toolbar-title {
+    font-size: 1.1rem !important;
+  }
+  .fc-time-custom {
+    display: none;
+  }
+  .fc-marker {
+    margin-right: 4px;
+    margin-left: 4px;
+  }
+  .fc-button {
+    padding: 0.25rem 0.5rem !important;
+  }
+  .fc-daygrid-more-link {
+    font-size: 0.7rem;
+    color: #818cf8 !important;
+    font-weight: bold;
+  }
+}
 </style>
 </file>
 
 <file path=".firebase/hosting.ZGlzdA.cache">
-registerSW.js,1768745932877,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-sw.js,1768745933559,09d2f64dd8b4bdacedf56898feae25bb6f91d94aa4c0810b4714425346a3b17b
-workbox-8c29f6e4.js,1768745933560,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-manifest.webmanifest,1768745932877,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-index.html,1768745932877,4faec3a3076e8bd5523306a7b00d4b91aae52abb474ac49c6b3635d235a2acea
-firebase-messaging-sw.js,1768745932505,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-lp.html,1768745932508,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/stateDiagram-v2-4FDKWEC3-Box_andd.js,1768745932877,894a29e36a9ff0f6d4fcd1a81e55ae6e707a579f8505aeaea26d5baf59d5c982
-assets/stateDiagram-FKZM4ZOC-sqQySMPZ.js,1768745932877,3b0927371e08f517923d8bc9d4785d693fcac8b70bb08c732d66c9bf4f5ed309
-assets/timeline-definition-IT6M3QCI-DqC8JRW7.js,1768745932877,08735f10310aa7d311a17a37f5eee75caf64f6f74b89237b04944a918e447471
-assets/xychartDiagram-PRI3JC2R-BBwNYNN8.js,1768745932877,dd24a55bfe80b0d86020fe2f6945c6bfc8670c58b1a99f3be5b5578f35a9291d
-assets/sankeyDiagram-TZEHDZUN-OrCHbXeA.js,1768745932877,ef2f0ff5038238937b7d6650b429568c36167f432023dd50d6abba3883dc5017
-assets/ordinal-Cboi1Yqb.js,1768745932877,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/pieDiagram-ADFJNKIX-DoWJfCI9.js,1768745932877,cc6e971b02c8440d7eda91312174baeb337b49596528098bc6154f1d353c5ca1
-assets/linear-Dn36c1wv.js,1768745932877,cfc3a676cc02d13717831f2bc8f93fe6314978e201712560e933cd5c8207c5c6
-assets/requirementDiagram-UZGBJVZJ-wKFLb0ra.js,1768745932877,15fcf9bc0c1865926b9d09ecb408ce1eea5f9b75966993f75266613f29257eaf
-assets/min-wjAmE_kr.js,1768745932877,1a552607c3cfc18449812fc33146a3eb8dcc0cd549a2d91af54a6fb0f791b7d1
-assets/quadrantDiagram-AYHSOK5B-CnphPhww.js,1768745932877,eea2d81deb83ada12922b40accf39437c1bc74a16060be7403fcc7c2c74dfca6
-assets/mindmap-definition-VGOIOE7T-CGNj6deO.js,1768745932877,97fb91fd9362e9ce53bbbbc59705cb319f350a6a1870e8af2a5b47172d9b4193
-assets/kanban-definition-3W4ZIXB7-Du_S5NF8.js,1768745932877,e96f7fa460572c1b19acab9e619e2c271649e91b5a43657559361564ccec3775
-assets/init-Gi6I4Gst.js,1768745932877,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/infoDiagram-WHAUD3N6-BQUNYyZq.js,1768745932877,f97da1c60be55c6fc6b7d5fc2dc397532680da25d716b553132856c23e5cc47b
-assets/layout-CpZxjoji.js,1768745932877,6b9343890729cb0b7fdd2a275a9430e1f9d7a5f8c69aef20203136536a73a8dc
-assets/journeyDiagram-XKPGCS4Q-Csm4FEMs.js,1768745932877,362d74b47a3871ed6afb0b5da98daa0e187a08627e617a77664cf435a75b5f9d
-assets/index-CFOlPi71.css,1768745932877,5652f6654c7ff91489ad5313544612c6621863d2c6fcc721cacb99ce5ea7c6d0
-assets/gitGraphDiagram-NY62KEGX-DyxLGfX9.js,1768745932877,0dd389ccddd460014a063c7876833ccb8e1b6fa4803603e95caff9401ed6a3fe
-assets/graph-DouvXQks.js,1768745932877,1487c2bf197b69376a82b836e898b03532e1b66bd76ef6a26ad13d94c7416115
-assets/diagram-S2PKOQOG-Daq_tsqG.js,1768745932877,aea1b374f38014e548ff800415ab49d84c8502b85a4ee349fa4d6201618add29
-assets/erDiagram-Q2GNP2WA-4GVetmhg.js,1768745932877,234336bd39b8cc21fd3013a46dfde4a4c452414b61f7fa0e61fe9bb260808711
-assets/diagram-QEK2KX5R-DZkTLNrp.js,1768745932877,c415f87dfaa82c847881a43025a9c4ad07001cc7c07be58b352f29165f89ed41
-assets/dagre-6UL2VRFP-B1_BcGDc.js,1768745932877,332c3e6433e16d4b0370da3c197b08c8083831404600a9b977a331db91c4fc27
-assets/defaultLocale-DX6XiGOO.js,1768745932877,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/clone-E1lyFtC3.js,1768745932877,f57f158aad06c43dbaab8f0df5e3cdb33757b8e2e2e7ef772f56d84fd4bf0f2c
-assets/diagram-PSM6KHXK-qjBuj-SX.js,1768745932877,639eb0711652243f0d4cb98edcca0a99d96a1a53926fafae2087771b850cee51
-assets/classDiagram-v2-WZHVMYZB-C6PGn7Vj.js,1768745932877,0a4ae7abda47739f048ea68ece08d4533e83e50c8b1e881185eef384747f48eb
-assets/classDiagram-2ON5EDUG-C6PGn7Vj.js,1768745932877,0a4ae7abda47739f048ea68ece08d4533e83e50c8b1e881185eef384747f48eb
-assets/chunk-TZMSLE5B-BQJDQQgs.js,1768745932877,7ecf26b6082a547d5c8938232e4467e1d277abeedd2b085a0844ff9f95092212
-assets/chunk-QZHKN3VN-B5OEjR3c.js,1768745932877,ce7dc20f47b75e2b6b478075342262065d327cc6b37e26be441c5217dab03b45
-assets/flowDiagram-NV44I4VS-kaj5DfMY.js,1768745932877,caee62554c4dbb4c81aacabb85c9715c25b13ed350d80b1d4fe11ef1e7b124dd
-assets/ganttDiagram-JELNMOA3-DRLJyqWz.js,1768745932877,161718da67e73c508d8287214b67e76431c9da8860e594d7ce58fc6a9b904a95
-assets/sequenceDiagram-WL72ISMW-BhSxZ68s.js,1768745932877,e72aedda14d3ecd88cf8f0b71836e7a1afee08ed134946927d46aa81175f6efe
-assets/chunk-QN33PNHL-CTEOXi_L.js,1768745932877,ae6b2c8e2f575428f0164a6027457d41b33bcb7110cdf93560432b1db0ceef6e
-assets/chunk-FMBD7UC4-BdXNSDyu.js,1768745932877,b80e2a05f93b675fb112599242a4762bb5c82b341174161ca6e704c7a719e3cd
-assets/cose-bilkent-S5V4N54A-ZOk90c1D.js,1768745932877,8eda20628ad1a90685181ea1cf5d7a63ca94c2864dbb775dd90d643ebb5d0cfd
-assets/chunk-55IACEB6-y_vsIPus.js,1768745932877,f86cb82beab97ef94baae0254ecb0fe78118cc031e0f9974d19e40a6b11abf1a
-assets/chunk-4BX2VUAB-DL1l8ON1.js,1768745932877,b15709d4fb8078a6fba3351d0141f6943e4cb8122579b6f8acecd57ed4f2ef44
-assets/chunk-DI55MBZ5-3rXz0IW9.js,1768745932877,fb9580c6fbcd493bed1b05673ba4292d7882ab21ad8b224cf548858c93694bd4
-assets/channel-aIdNOsRW.js,1768745932877,32d51aa0fc917edf639247af1e8dbcbc3912e8a8ffdf145ac3068c6c0dc92574
-assets/chunk-B4BG7PRW-C1jgl5Do.js,1768745932877,d2feee1f71e5d262b024dcba1a2d3699ee83536f226c5a03f6765e0dac9a591c
-assets/arc-DR8DXc2f.js,1768745932877,66ee6dc5de55d87deaee38972ba2f228cb6159ea9bda393d40d9554519000c7a
-assets/_baseUniq-DmUVekO7.js,1768745932877,483be6c628a98d8d736a8eea0b91e58a2807d02224ee787ea3d28e54c7813bc5
-assets/c4Diagram-YG6GDRKO-DQ0s_a8o.js,1768745932877,a4715055f0cae9f5f3d6caf21399e3dce275d83ec6bc7077ae2c2245af172226
-assets/blockDiagram-VD42YOAC-Dd_zVZrj.js,1768745932877,b073df216d397047234d0dd83907139aa3852da1e1fb4c7f69c78b242805f55e
-assets/architectureDiagram-VXUJARFQ-f7IL4Ocw.js,1768745932877,db9c04cf9e88f3d3746efdc67339cc180cfed0cf69d8c130800730a805f38e74
-assets/katex-Cu_Erd72.js,1768745932877,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-BXqL3RwW.js,1768745932877,e29f2c24e8f5c7f550cffe22c69d89d54f37b550fbcb4d2a2326df1888293f79
-assets/cytoscape.esm-CyJtwmzi.js,1768745932877,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-Cb5dYNUy.js,1768745932877,3ac74f6d38da589c13a9929f3934c7484395717dae68d501002972640011200e
-pwa-192x192.png,1768745932513,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1768745932519,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-logo.png,1768745932507,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-apple-touch-icon.png,1768745932504,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+registerSW.js,1768829860846,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+manifest.webmanifest,1768829860846,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+sw.js,1768829861569,33253bc545ed8013ca352113cf3de34f859931aeb7a89f2a4c16df29e5e2ec04
+index.html,1768829860846,fd75707d9d700139b9c6ec4b368ddd1e78f3c31c054ec4d8910fc64e1815553c
+workbox-8c29f6e4.js,1768829861570,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+firebase-messaging-sw.js,1768829860407,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+assets/stateDiagram-v2-4FDKWEC3-CoAgtGgJ.js,1768829860845,f923acab5eed5c6942415279d679c730146c3770df3964f0e3de86b012a05bf7
+lp.html,1768829860410,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/timeline-definition-IT6M3QCI-DFj4wLg8.js,1768829860845,6b907dd595af269f87903122d3e5e79f675eddba4fcfd3af37177567bb0114c2
+assets/stateDiagram-FKZM4ZOC-BIiLVyKF.js,1768829860845,a46cd8750f839e8ab6b2ac28c643e73f8484e28bd8c232bf20092c7a4cff3c35
+assets/sankeyDiagram-TZEHDZUN-DGwZO6zj.js,1768829860846,867ed95928385d241052c38051aa1e09b23005f37f45082eb576cce9a7a0dfdd
+assets/pieDiagram-ADFJNKIX-O_tykCCt.js,1768829860846,9ce4bd011e39da70e5a709d50d215128b6546572fd9c4e251cbdc2d268b0c2bb
+assets/xychartDiagram-PRI3JC2R-D3SZ0FQp.js,1768829860846,e1837d95a61ac18d08d74a238a333f03f98da99efb143165ada80586451f2a4d
+assets/quadrantDiagram-AYHSOK5B-Ct8lHqdb.js,1768829860845,06972157f5f1dd607b2a509824d8e9493734ad3db90aade7d5c826a16869d890
+assets/ordinal-Cboi1Yqb.js,1768829860846,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/min-DJC6MWpc.js,1768829860846,41d0b73e583f8f9fd3af42c9097f8d9301b351f504a9436eb50004246dfbfdb4
+assets/requirementDiagram-UZGBJVZJ-BtfAt12U.js,1768829860845,b196975a2a1647d3c0f4110168a0f2118c2c199183b840b9b14d151c9f192f8a
+assets/init-Gi6I4Gst.js,1768829860846,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/linear-DHFRHVNG.js,1768829860846,55ef770c605ad85954ba4ca6303365ff923bc73ab22c706929388d033bf84bd7
+assets/mindmap-definition-VGOIOE7T-D3UUtSpk.js,1768829860846,fa4bc0e26a65080d7ebbc51be46765046f1a915cacf4c739d6788d7384e619c1
+assets/graph-NBAWMa6h.js,1768829860846,c6e1beb70e0a7fc9b624278a679ed5d9b0d5be4cb050239d212eb2d61812f7fd
+assets/kanban-definition-3W4ZIXB7-DIydhDxd.js,1768829860845,64a2d1cc38b1ffea3f490499dabf3a7301c9c5ba883d7d41d73e7750b1661348
+assets/infoDiagram-WHAUD3N6-CA1jDLfA.js,1768829860845,2ee88e342e9113ae59433e1255360e22ff4e1ccd9ce932a03f0f6e59e7e749f4
+assets/journeyDiagram-XKPGCS4Q-38MeZm-K.js,1768829860845,310a0bfc091809e5d756d35c3e51c656e1479db016679c1398f2b0fde151879b
+assets/layout-Cne_PGm7.js,1768829860846,5f75700514f154d471cffea9da753d4509e173a32e94fb0313859fec900b9e1a
+assets/gitGraphDiagram-NY62KEGX-V6GiUUrT.js,1768829860845,10c25dace0b0080e98a8338b1bbb3e3d98ea79cbc53f7fdecdf41efb36e2d319
+assets/index-DEUO7n-n.css,1768829860845,90f94f07dd63a9756dbccbbedbdacf600a6d5bec33028d55322671736855f919
+assets/diagram-S2PKOQOG-Cp1FeYC6.js,1768829860845,ae6de3865077e18d4029a2bd80c738289df197db888a49438d1ad372e092e003
+assets/erDiagram-Q2GNP2WA-DMzqZ9Yw.js,1768829860846,68ab782ae416e0bf86834362d06ffb1c4cea5977329914ce79ff236b9a7f9530
+assets/diagram-QEK2KX5R-Drleskal.js,1768829860845,686e66d575a432b2b3ebf8829447f5e2c23b0b1182969a4e1e2d26afd8298bfd
+assets/diagram-PSM6KHXK-N6KiDYaL.js,1768829860846,5b00c45f0d04de6665e8e806783f4378076e6943da8f3fd081936057dd438f11
+assets/defaultLocale-DX6XiGOO.js,1768829860846,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/dagre-6UL2VRFP-D0zzHmtT.js,1768829860846,5498279395df5571d62112937df04dd4194ab361070e27c7335da0475560adfe
+assets/clone-mH4XjhcJ.js,1768829860846,ecc8beee7dcecac814906a78ddaedd1f6aa267501a06a57c277159341427fc16
+assets/classDiagram-v2-WZHVMYZB-BOC3RnOU.js,1768829860845,0ad5562e739c60922155ebe8daf7ab13aa355c40545ea9bb365c0e62a70ed259
+assets/classDiagram-2ON5EDUG-BOC3RnOU.js,1768829860845,0ad5562e739c60922155ebe8daf7ab13aa355c40545ea9bb365c0e62a70ed259
+assets/chunk-TZMSLE5B-CQxo1R6j.js,1768829860845,3c36559abb74af9c9fbbf261bb99700a2af568f8f37a0099a7f6f555e8d87403
+assets/chunk-QZHKN3VN-DF_Gt1_g.js,1768829860846,2c86bcc2255fbc61d7d6a09a84d6f65d928c88167367e5ab9abb7c1473149cd9
+assets/flowDiagram-NV44I4VS-BwADcqO9.js,1768829860845,16a5b3ee2b405849032a26b8d619d1bef333da70d5154cb2a5997d0234461c79
+assets/sequenceDiagram-WL72ISMW-BJSmJ2kC.js,1768829860845,eeecc38796fc8a66d7963d8d223fa9f3286b8831610bcdf7db5900e8cbd2dc42
+assets/ganttDiagram-JELNMOA3-D3ebI4YF.js,1768829860846,ec3da3406359c23587b1e44f7a27926970a35d26719bf61b67cbadd83653ccf9
+assets/chunk-QN33PNHL-BbNdb7UJ.js,1768829860846,3727b07435db913f5ae6ae3eff993577fe8fd10d761488a844d3cf6fe4336ad0
+assets/chunk-FMBD7UC4-Dg7MlYVs.js,1768829860846,6aaf3af1245e07f37b034c73d4dc7112bf1d7faa78d3fab88a4753d3af03eb2c
+assets/chunk-55IACEB6-BjX_3FFy.js,1768829860846,ac018f9f892a712174f25f867fa0febe058a26caa467fddb12f4325d21e5b968
+assets/chunk-4BX2VUAB-Dg8LgFjp.js,1768829860846,a3d550371bf8a3580b26831a03b0299bcf6f191d86c4560a4de7cb364b1d3621
+assets/cose-bilkent-S5V4N54A-CnrAyl5X.js,1768829860846,2b4c61d40c4c66ef491412a2028afb4463f083a49f8941b998a69edb1d546dc1
+assets/channel-DRea1JRz.js,1768829860846,528ca305543f92b406b2c09c475636428dd68a9666e2555f2961b4eaab01dc9b
+assets/chunk-DI55MBZ5-CYrwnQqY.js,1768829860845,5bb3f18da02e4ef6d04ef1524d0d6fd7f905fad8ed619b5daa95abb2563494dc
+assets/chunk-B4BG7PRW-XlcL5ja9.js,1768829860845,3505c904a23a6e237a1276faa6b2654bc58fc6a5de868969c5ccab04be6dab27
+assets/arc-Dz3M3zL5.js,1768829860845,fc307f3d7f376e60c4072a7df3f88af18f23c1a68257dbfff6e41e59f546c9dc
+assets/_baseUniq-CLoNfZoE.js,1768829860846,fc9a7fae673b423d0ce52fb860aac9a5b3195f77a5bc3189e08bfa0bd7149894
+assets/c4Diagram-YG6GDRKO-B-u6Z5yQ.js,1768829860845,70217438de8fcf683364b5d5912116467d93041d8d63909e9a15c50df78dff62
+assets/blockDiagram-VD42YOAC--rc0xN-e.js,1768829860845,66ddd71445a4d2da1425fff6eebe670f605a177378789437a0e5b56bb2c2c94e
+assets/architectureDiagram-VXUJARFQ-tJ0Tcrcy.js,1768829860846,a66830a9e01f4391e31c096bdb8bb3464cf6975f58fb002a0d9fb47b5d6e9bdd
+assets/katex-Cu_Erd72.js,1768829860846,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-LKH_ukBB.js,1768829860846,d7f5422cdc28232444376288f059d5055853fd0bf019f9ee15cc53bd3b9de336
+assets/cytoscape.esm-CyJtwmzi.js,1768829860846,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-C6wHi7NK.js,1768829860846,d23d1cc6738cc97dbd29cc9aef115cc6be38b834f907aa61639ef4e6eea23533
+pwa-192x192.png,1768829860415,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1768829860420,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1768829860407,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+logo.png,1768829860409,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>

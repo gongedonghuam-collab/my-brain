@@ -2,28 +2,45 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // ユーザー自身だけが読み書きできるようにする共通関数
+    // ■ 共通関数：本人確認
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    // ■ 共通関数：データの正当性チェック（バリデーション）
+    // 文字列であり、かつ文字数が20,000文字以内であることを強制
+    function isValidText() {
+      return request.resource.data.text is string
+             && request.resource.data.text.size() > 0
+             && request.resource.data.text.size() < 20000;
+    }
+
     // 1. ユーザー情報
     match /users/{userId} {
+      // 自分のデータだけ読み書きOK
       allow read, write: if isOwner(userId);
+      
+      // 課金セッション（Stripe用）
+      match /checkout_sessions/{id} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // 2. メモ (My Brain)
     match /memories/{memoryId} {
-      // 作成時は、自分のIDを入れているかチェック
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      // 読み取り・更新・削除は、自分のデータのみ許可
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      // 読み取り・削除：保存されているデータの持ち主が自分ならOK
+      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      
+      // 作成・更新：これから保存するデータの持ち主が自分、かつテキスト形式が正しいならOK
+      allow create, update: if request.auth != null 
+                            && request.resource.data.userId == request.auth.uid
+                            && isValidText();
     }
 
-    // 3. チャットログ (My Brain)
+    // 3. チャットログ
     match /chat_logs/{logId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create, update: if request.auth != null && request.resource.data.userId == request.auth.uid;
     }
   }
 }

@@ -20,12 +20,17 @@ import {
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import axios from "axios"; // 追加: モデル取得用
+import axios from "axios";
 
-// ★設定項目
+// ==========================================
+// ★ 設定エリア
+// ==========================================
 const STRIPE_PRICE_ID = "price_1SqvJAFjyhW5lKcrgAmd48sB";
 const ADMIN_EMAILS = ["gongedonghuam@gmail.com"];
 
+// ==========================================
+// ★ 型定義
+// ==========================================
 export interface Memory {
   id: string;
   userId: string;
@@ -45,7 +50,7 @@ export interface ChatLog {
   question: string;
   answer: string;
   createdAt: any;
-  mermaidCode?: string;
+  mermaidCode?: string | null; // null許容を明示
   action?: {
     title: string;
     date?: string;
@@ -66,6 +71,9 @@ export interface User {
   isLineLinked?: boolean;
 }
 
+// ==========================================
+// ★ アプリ全体で共有するデータ
+// ==========================================
 const currentUser = ref<User | null>(null);
 const memories = ref<Memory[]>([]);
 const chatLogs = ref<ChatLog[]>([]);
@@ -73,6 +81,10 @@ const loading = ref(false);
 const isAiThinking = ref(false);
 const isSaving = ref(false);
 const activeTag = ref<string | null>(null);
+
+// ==========================================
+// ★ ヘルパー関数
+// ==========================================
 
 const fileToGenerativePart = async (file: File) => {
   return new Promise<{ inlineData: { data: string; mimeType: string } }>(
@@ -101,23 +113,85 @@ const cosineSimilarity = (vecA: number[], vecB: number[]) => {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 };
 
+// カレンダー取得関数
+const fetchCalendarEvents = async () => {
+  const token = localStorage.getItem("google_calendar_token");
+  if (!token) return null;
+
+  try {
+    const now = new Date().toISOString();
+    const response = await axios.get(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${now}&maxResults=10&orderBy=startTime&singleEvents=true`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    const events = response.data.items || [];
+    if (events.length === 0) return "直近の予定はありません。";
+
+    return events
+      .map((ev: any) => {
+        const start = ev.start.dateTime || ev.start.date;
+        const summary = ev.summary || "(タイトルなし)";
+        return `- ${start}: ${summary}`;
+      })
+      .join("\n");
+  } catch (e) {
+    console.warn("Calendar fetch failed:", e);
+    // トークン切れの可能性が高いのでnullを返す
+    return null;
+  }
+};
+
+// カレンダー登録関数
+const addEventToGoogleCalendar = async (
+  title: string,
+  startDateTime: string,
+  endDateTime: string,
+) => {
+  const token = localStorage.getItem("google_calendar_token");
+  if (!token)
+    throw new Error(
+      "連携トークンがありません。一度ログアウトして再ログインしてください。",
+    );
+
+  const event = {
+    summary: title,
+    start: { dateTime: startDateTime },
+    end: { dateTime: endDateTime },
+  };
+
+  try {
+    await axios.post(
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+      event,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  } catch (e: any) {
+    // 401エラー（認証切れ）の場合は明示的なメッセージを投げる
+    if (e.response && e.response.status === 401) {
+      throw new Error("認証の有効期限が切れています。再ログインしてください。");
+    }
+    throw e;
+  }
+};
+
+// ==========================================
+// ★ メインロジック
+// ==========================================
 export function useMyBrain() {
   const getEmbeddingModel = (apiKey: string) => {
     const genAI = new GoogleGenerativeAI(apiKey);
     return genAI.getGenerativeModel({ model: "text-embedding-004" });
   };
 
-  // 動的に利用可能なモデルを取得する関数
   const getSmartModelName = async (apiKey: string): Promise<string> => {
     try {
       const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-      // axiosを使うかfetchを使うか統一が必要ですが、ここではfetchで実装します
       const response = await fetch(listUrl);
       if (!response.ok) throw new Error("Model fetch failed");
 
       const data = await response.json();
       const models = data.models || [];
-
       const viableModels = models.filter((m: any) =>
         m.supportedGenerationMethods?.includes("generateContent"),
       );
@@ -134,10 +208,8 @@ export function useMyBrain() {
         if (found) return found.name.replace("models/", "");
       }
 
-      if (viableModels.length > 0) {
+      if (viableModels.length > 0)
         return viableModels[0].name.replace("models/", "");
-      }
-
       return "gemini-1.5-flash";
     } catch (e) {
       console.warn("Model auto-detect failed, using default.", e);
@@ -178,21 +250,42 @@ export function useMyBrain() {
 
   const startSubscription = async () => {
     if (!currentUser.value) return;
-    const sessionsRef = collection(
-      db,
-      "users",
-      currentUser.value.uid,
-      "checkout_sessions",
+    const confirmed = confirm(
+      "PROプラン（月額1,000円）の決済画面へ移動しますか？",
     );
-    const docRef = await addDoc(sessionsRef, {
-      price: STRIPE_PRICE_ID,
-      success_url: window.location.origin + "/app",
-      cancel_url: window.location.origin + "/app",
-    });
-    onSnapshot(docRef, (snap) => {
-      const { url } = snap.data() || {};
-      if (url) window.location.assign(url);
-    });
+    if (!confirmed) return;
+
+    alert("決済画面を準備しています...少々お待ちください。");
+
+    try {
+      const sessionsRef = collection(
+        db,
+        "users",
+        currentUser.value.uid,
+        "checkout_sessions",
+      );
+
+      const docRef = await addDoc(sessionsRef, {
+        price: STRIPE_PRICE_ID,
+        success_url: window.location.origin + "/app",
+        cancel_url: window.location.origin + "/app",
+      });
+
+      onSnapshot(docRef, (snap) => {
+        const data = snap.data();
+        const url = data?.url;
+        const error = data?.error;
+
+        if (error) {
+          alert("決済エラーが発生しました: " + error.message);
+        } else if (url) {
+          window.location.assign(url);
+        }
+      });
+    } catch (e: any) {
+      console.error(e);
+      alert("エラーが発生しました: " + e.message);
+    }
   };
 
   const initAuth = () => {
@@ -239,6 +332,7 @@ export function useMyBrain() {
 
   const logout = async () => {
     await signOut(auth);
+    localStorage.removeItem("google_calendar_token");
     window.location.reload();
   };
 
@@ -256,7 +350,7 @@ export function useMyBrain() {
         (d) => ({ id: d.id, ...d.data() }) as Memory,
       );
     } catch (e) {
-      console.error("Fetch memories error:", e);
+      console.error("メモ取得エラー:", e);
     } finally {
       loading.value = false;
     }
@@ -276,7 +370,7 @@ export function useMyBrain() {
         .map((d) => ({ id: d.id, ...d.data() }) as ChatLog)
         .reverse();
     } catch (e) {
-      console.error("Fetch chat logs error:", e);
+      console.error("チャット取得エラー:", e);
     }
   };
 
@@ -284,7 +378,6 @@ export function useMyBrain() {
     activeTag.value = tag;
   };
 
-  // ★ここが復活しました
   const filteredMemories = computed(() => {
     if (!activeTag.value) return memories.value;
     return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
@@ -330,7 +423,7 @@ export function useMyBrain() {
         });
       } else {
         promptParts.push({
-          text: `テキストを整理して。${text} 出力JSON:{summary, tags, fullText}`,
+          text: `以下のテキストを整理して。${text} 出力JSON:{summary, tags, fullText}`,
         });
       }
 
@@ -345,7 +438,6 @@ export function useMyBrain() {
       const finalText = file
         ? `【解析済み】${text}\n\n${aiData.fullText || ""}`
         : text;
-
       const embModel = getEmbeddingModel(apiKey);
       const embResult = await embModel.embedContent(finalText);
       const embedding = embResult.embedding.values;
@@ -378,9 +470,10 @@ export function useMyBrain() {
         .filter((m) => m.score > 0.65)
         .sort((a, b) => b.score - a.score)
         .slice(0, 3);
-    } catch (e: any) {
-      console.error("AI Error:", e);
-      alert("AIエラー: " + e.message);
+    } catch (e) {
+      console.error("Add memory error:", e);
+      alert("保存エラー");
+      return null;
     } finally {
       isSaving.value = false;
     }
@@ -395,73 +488,136 @@ export function useMyBrain() {
       const res: any = await func({ url });
       if (res.data.success) {
         await addMemory(
-          `【WEB】${res.data.title}\nURL: ${url}\n\n${res.data.content}`,
+          `【WEB記事】${res.data.title}\nURL: ${url}\n\n${res.data.content}`,
         );
       }
     } catch (e: any) {
-      alert("URL読込失敗: " + e.message);
+      alert("記事の読み込みに失敗しました: " + e.message);
     } finally {
       isSaving.value = false;
     }
   };
 
-  const askBrain = async (question: string) => {
+  const askBrain = async (question: string): Promise<string> => {
     if (!(await checkAndIncrementUsage())) return "";
     isAiThinking.value = true;
+
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("APIキーがありません");
+      if (!apiKey) throw new Error("APIキーが設定されていません");
 
       const embedModel = getEmbeddingModel(apiKey);
       const qEmbed = await embedModel.embedContent(question);
       const qVec = qEmbed.embedding.values;
 
-      const context = memories.value
+      const scoredMemories = memories.value
         .map((m) => ({
           ...m,
           score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
         }))
-        .sort((a, b) => b.score - a.score)
+        .sort((a, b) => b.score - a.score);
+
+      const context = scoredMemories
         .slice(0, 20)
-        .map((m) => `- ${m.text.slice(0, 300)}`)
-        .join("\n");
+        .map((m) => `- ${m.text.slice(0, 500)}`)
+        .join("\n\n");
+
+      // カレンダー情報取得
+      const calendarEvents = await fetchCalendarEvents();
+      const calendarContext = calendarEvents
+        ? `\n【直近の予定】\n${calendarEvents}\n`
+        : "";
+
+      const nowStr = new Date().toLocaleString("ja-JP", {
+        timeZone: "Asia/Tokyo",
+      });
 
       const modelName = await getSmartModelName(apiKey);
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: modelName });
-      const prompt = `あなたは「第2の脳」です。記憶データ:${context}\n質問:${question}\n回答はJSON形式 {"answer": "回答", "mermaid": "図解コード(任意)", "action": null} で。`;
 
-      const res = await model.generateContent(prompt);
-      let json;
+      // ★プロンプト修正: 図解(mermaid)が不要な場合は必ず null を返すよう指示
+      const prompt = `
+あなたは「第2の脳」です。記憶と予定を元にサポートします。
+現在日時: ${nowStr}
+
+${calendarContext}
+
+【記憶データ】
+${context}
+
+【質問】
+${question}
+
+【出力形式（JSONのみ）】
+{
+  "answer": "回答テキスト",
+  "mermaid": null, 
+  "calendarAction": null
+}
+
+※図解が必要な場合のみ "mermaid" にコードを入れてください。**不要な場合は必ず null にしてください。**
+※予定登録が必要な場合のみ "calendarAction" に以下を入れてください。
+"calendarAction": {
+  "title": "予定名",
+  "start": "ISO8601開始日時",
+  "end": "ISO8601終了日時"
+}
+`;
+
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      let data;
       try {
-        json = JSON.parse(
-          res.response
-            .text()
-            .replace(/```json|```/g, "")
-            .trim(),
-        );
+        data = JSON.parse(text.replace(/```json|```/g, "").trim());
       } catch {
-        json = { answer: res.response.text(), mermaid: null };
+        // パース失敗時は全部テキストとして扱う（mermaidはnull）
+        data = { answer: text, mermaid: null, calendarAction: null };
       }
 
-      const log = {
+      // mermaidが空文字や変な文字列の場合もnullに強制変換
+      if (
+        !data.mermaid ||
+        data.mermaid === "null" ||
+        data.mermaid.length < 10
+      ) {
+        data.mermaid = null;
+      }
+
+      let finalAnswer = data.answer;
+
+      if (data.calendarAction) {
+        try {
+          await addEventToGoogleCalendar(
+            data.calendarAction.title,
+            data.calendarAction.start,
+            data.calendarAction.end,
+          );
+          finalAnswer += `\n\n✅ 予定を登録しました！\n📅 ${data.calendarAction.title}\n⏰ ${data.calendarAction.start}`;
+        } catch (calError: any) {
+          console.error(calError);
+          // エラーメッセージをユーザーに見やすく表示
+          finalAnswer += `\n\n⚠️ カレンダー登録エラー: ${calError.message}`;
+        }
+      }
+
+      const logData = {
         userId: currentUser.value!.uid,
-        question,
-        answer: json.answer,
-        mermaidCode: json.mermaid,
+        question: question,
+        answer: finalAnswer,
+        mermaidCode: data.mermaid || null, // nullを保証
         createdAt: serverTimestamp(),
       };
-      const ref = await addDoc(collection(db, "chat_logs"), log);
+      const logRef = await addDoc(collection(db, "chat_logs"), logData);
       chatLogs.value.push({
-        id: ref.id,
-        ...log,
+        id: logRef.id,
+        ...logData,
         createdAt: new Date(),
       } as any);
-      return json.answer;
+
+      return finalAnswer;
     } catch (e: any) {
-      console.error(e);
-      alert("AIエラー: " + e.message);
-      return "エラーが発生しました";
+      return "エラー: " + e.message;
     } finally {
       isAiThinking.value = false;
     }
@@ -500,7 +656,7 @@ export function useMyBrain() {
   return {
     currentUser,
     memories,
-    filteredMemories, // ← これを返すための定義を追加しました
+    filteredMemories,
     chatLogs,
     loading,
     isAiThinking,
@@ -511,11 +667,11 @@ export function useMyBrain() {
     logout,
     addMemory,
     addUrlMemory,
-    updateMemory,
-    deleteMemory,
     askBrain,
-    deleteChatLog,
     selectTag,
     startSubscription,
+    updateMemory,
+    deleteMemory,
+    deleteChatLog,
   };
 }

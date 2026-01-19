@@ -10,6 +10,11 @@
     "deploy": "vite build && firebase deploy"
   },
   "dependencies": {
+    "@fullcalendar/daygrid": "^6.1.20",
+    "@fullcalendar/interaction": "^6.1.20",
+    "@fullcalendar/list": "^6.1.20",
+    "@fullcalendar/timegrid": "^6.1.20",
+    "@fullcalendar/vue3": "^6.1.20",
     "@google/generative-ai": "^0.24.1",
     "@line/bot-sdk": "^10.5.0",
     "axios": "^1.13.2",

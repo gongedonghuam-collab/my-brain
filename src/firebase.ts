@@ -1,8 +1,13 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth"; // ★修正: GoogleAuthProviderを追加
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import { getMessaging } from "firebase/messaging"; // 追加
+import { getMessaging } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -14,16 +19,28 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
-export const messaging = getMessaging(app); // 追加
+// アプリが既に初期化されているかチェック
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code == "failed-precondition") {
-    console.error("複数タブで開いているためオフライン機能が無効です");
-  } else if (err.code == "unimplemented") {
-    console.error("ブラウザが対応していません");
-  }
-});
+export const auth = getAuth(app);
+
+// Firestoreの初期化（重複防止）
+let dbInstance;
+try {
+  // すでに初期化済みなら取得するだけ
+  dbInstance = getFirestore(app);
+} catch (e) {
+  // まだなら設定付きで初期化
+  dbInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  });
+}
+export const db = dbInstance;
+
+export const storage = getStorage(app);
+export const messaging = getMessaging(app);
+
+// ★追加: ここが抜けているためエラーになっています
+export const googleProvider = new GoogleAuthProvider();
