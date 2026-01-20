@@ -1,16 +1,20 @@
-import { ref, onMounted } from "vue";
+import { ref, onMounted, type Ref } from "vue";
 import { useMyBrain } from "@/composables/useMyBrain";
 
-type InputMode = "memo" | "chat" | "url";
+type InputMode = "memo" | "chat" | "url" | "calendar";
 
-export function useInputFooter(inputMode: InputMode) {
-  const { addMemory, addUrlMemory, askBrain, isAiThinking } = useMyBrain();
+// ★修正: inputModeをRefで受け取る（これでタブ切り替えを追跡できる）
+export function useInputFooter(inputMode: Ref<InputMode>) {
+  const { addMemory, addUrlMemory, askBrain, isAiThinking, isSpeaking } =
+    useMyBrain();
 
   const inputText = ref("");
   const selectedFile = ref<File | null>(null);
   const filePreview = ref<string | null>(null);
   const fileInputRef = ref<HTMLInputElement | null>(null);
   const isListening = ref(false);
+  const isVoiceMode = ref(false);
+
   let recognition: any = null;
 
   onMounted(() => {
@@ -22,22 +26,32 @@ export function useInputFooter(inputMode: InputMode) {
       recognition.lang = "ja-JP";
       recognition.continuous = false;
       recognition.interimResults = true;
+
       recognition.onresult = (event: any) => {
-        inputText.value = Array.from(event.results)
+        const transcript = Array.from(event.results)
           .map((r: any) => r[0].transcript)
           .join("");
+        inputText.value = transcript;
       };
+
       recognition.onend = () => {
         isListening.value = false;
+        // ★修正: inputMode.value (現在のタブ) を参照して送信する
+        if (isVoiceMode.value && inputText.value.trim()) {
+          handleSend(inputMode.value);
+        }
       };
     }
   });
 
   const toggleListening = () => {
     if (!recognition) return alert("音声入力未対応ブラウザです");
-    if (isListening.value) recognition.stop();
-    else {
+    if (isListening.value) {
+      recognition.stop();
+      isVoiceMode.value = false;
+    } else {
       isListening.value = true;
+      isVoiceMode.value = true; // 音声モードON
       recognition.start();
     }
   };
@@ -65,33 +79,45 @@ export function useInputFooter(inputMode: InputMode) {
     if (fileInputRef.value) fileInputRef.value.value = "";
   };
 
+  // テキスト入力を開始したら音声モードを解除
+  const handleInput = () => {
+    if (!isListening.value) {
+      isVoiceMode.value = false;
+    }
+  };
+
   const handleSend = async (mode: InputMode) => {
     const text = inputText.value.trim();
     if (!text && !selectedFile.value) return;
 
+    // 手動クリック送信の場合は音声モードではないとみなす（マイク経由の自動送信以外）
+    if (!isListening.value && !isVoiceMode.value) {
+      isVoiceMode.value = false;
+    }
+
+    const currentText = text;
+    inputText.value = "";
+
     if (mode === "memo") {
-      inputText.value = "";
       const file = selectedFile.value;
       clearFile();
-
-      // リコメンドを受け取る
-      const related = await addMemory(text, file);
-
+      const related = await addMemory(currentText, file);
       if (related && related.length > 0) {
         const summaries = related.map((m) => `・${m.aiSummary}`).join("\n");
         alert(`保存しました！\n\n💡 関連する過去の記憶:\n${summaries}`);
-      } else if (related !== null) {
-        // nullでなければ保存成功（リコメンドなし）
-        // 特に何も出さないか、軽くトーストを出すなど
       }
     } else if (mode === "url") {
-      inputText.value = "";
-      await addUrlMemory(text);
+      await addUrlMemory(currentText);
     } else {
-      // チャットモード
-      inputText.value = "";
+      // チャットモード (会話タブ or カレンダータブ)
       clearFile();
-      await askBrain(text);
+      // 音声モードかどうかを渡して、読み上げの有無を制御
+      await askBrain(currentText, isVoiceMode.value);
+    }
+
+    // 会話終了後は音声モードをリセットする（必要に応じて調整）
+    if (!isListening.value) {
+      isVoiceMode.value = false;
     }
   };
 
@@ -102,9 +128,11 @@ export function useInputFooter(inputMode: InputMode) {
     fileInputRef,
     isListening,
     isAiThinking,
+    isSpeaking,
     toggleListening,
     handleFileSelect,
     clearFile,
     handleSend,
+    handleInput, // ★追加: テキストエリアの入力監視用
   };
 }

@@ -1,7 +1,68 @@
 <script setup lang="ts">
+import { watch, onMounted, nextTick } from "vue";
 import { useChatList } from "./useChatList";
 
 const { chatLogs, isAiThinking, deleteChatLog } = useChatList();
+
+// 処理済みログIDを管理（二重実行防止）
+const animatedLogIds = new Set<string>();
+
+// タイピングアニメーション関数
+const animateText = (log: any) => {
+  // すでに表示済みなら何もしない
+  if (!log.displayAnswer) log.displayAnswer = "";
+  if (log.displayAnswer === log.answer) return;
+
+  const fullText = log.answer || "";
+  let currentIndex = 0;
+  const speed = 20; // 文字送りの速度
+
+  // アニメーションループ
+  const typeChar = () => {
+    if (currentIndex < fullText.length) {
+      log.displayAnswer += fullText.charAt(currentIndex);
+      currentIndex++;
+
+      // 自動スクロール
+      window.scrollTo(0, document.body.scrollHeight);
+      requestAnimationFrame(() => setTimeout(typeChar, speed));
+    } else {
+      log.isAnimating = false;
+      log.displayAnswer = fullText; // 最終的に全文をセット
+    }
+  };
+
+  typeChar();
+};
+
+// 監視: チャットログの「配列の長さ」が変わった時だけ実行
+watch(
+  () => chatLogs.value.length,
+  () => {
+    // 最新のログを取得
+    const lastLog = chatLogs.value[chatLogs.value.length - 1];
+
+    // アニメーション対象で、まだ実行していない場合
+    if (lastLog && lastLog.isAnimating && !animatedLogIds.has(lastLog.id)) {
+      animatedLogIds.add(lastLog.id);
+      lastLog.displayAnswer = ""; // 初期化
+      animateText(lastLog);
+    }
+  },
+);
+
+// マウント時: 過去ログは即時表示（アニメーションなし）
+onMounted(() => {
+  chatLogs.value.forEach((log) => {
+    // 過去ログはアニメーションさせない
+    log.displayAnswer = log.answer;
+    log.isAnimating = false;
+    animatedLogIds.add(log.id); // 処理済みとしてマーク
+  });
+
+  // 最下部へスクロール
+  window.scrollTo(0, document.body.scrollHeight);
+});
 </script>
 
 <template>
@@ -31,7 +92,12 @@ const { chatLogs, isAiThinking, deleteChatLog } = useChatList();
         <div
           class="bg-indigo-900/40 border border-indigo-500/20 text-indigo-100 px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed whitespace-pre-wrap w-full shadow-sm"
         >
-          {{ log.answer }}
+          {{ log.displayAnswer || log.answer }}
+
+          <span
+            v-if="log.isAnimating"
+            class="inline-block w-2 h-4 bg-indigo-400 ml-1 animate-pulse align-middle"
+          ></span>
         </div>
 
         <div v-if="log.mermaidCode" class="mermaid-container w-full mt-2">

@@ -2,45 +2,50 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // ■ 共通関数：本人確認
+    // 本人確認関数
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }
 
-    // ■ 共通関数：データの正当性チェック（バリデーション）
-    // 文字列であり、かつ文字数が20,000文字以内であることを強制
+    // テキスト検証関数
     function isValidText() {
       return request.resource.data.text is string
              && request.resource.data.text.size() > 0
              && request.resource.data.text.size() < 20000;
     }
 
-    // 1. ユーザー情報
     match /users/{userId} {
-      // 自分のデータだけ読み書きOK
       allow read, write: if isOwner(userId);
-      
-      // 課金セッション（Stripe用）
       match /checkout_sessions/{id} {
         allow read, write: if isOwner(userId);
       }
+      match /system/{docId} {
+        allow read: if isOwner(userId);
+      }
     }
 
-    // 2. メモ (My Brain)
     match /memories/{memoryId} {
-      // 読み取り・削除：保存されているデータの持ち主が自分ならOK
-      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-      
-      // 作成・更新：これから保存するデータの持ち主が自分、かつテキスト形式が正しいならOK
-      allow create, update: if request.auth != null 
-                            && request.resource.data.userId == request.auth.uid
-                            && isValidText();
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId) && isValidText();
+      allow update: if isOwner(resource.data.userId) && isValidText();
     }
 
-    // 3. チャットログ
     match /chat_logs/{logId} {
-      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create, update: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId);
+      allow update: if isOwner(resource.data.userId);
+    }
+
+    // ★修正: ToDoリストへの読み書き権限を追加
+    match /todos/{todoId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create, update: if isOwner(request.resource.data.userId);
+    }
+
+    // ★修正: 日刊レポートへの読み書き権限を追加
+    match /daily_reports/{reportId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create, update: if isOwner(request.resource.data.userId);
     }
   }
 }

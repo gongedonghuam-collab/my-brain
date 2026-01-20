@@ -3,7 +3,6 @@ import { computed } from "vue";
 import { useInputFooter } from "./useInputFooter";
 import { useMyBrain } from "@/composables/useMyBrain";
 
-// ★修正: 'calendar' を追加
 const props = defineProps<{
   modelValue: "memo" | "chat" | "url" | "calendar";
 }>();
@@ -16,6 +15,7 @@ const inputMode = computed({
   set: (val) => emit("update:modelValue", val),
 });
 
+// ★修正: inputMode (ComputedRef) をそのまま渡す
 const {
   inputText,
   selectedFile,
@@ -24,9 +24,13 @@ const {
   handleFileSelect,
   clearFile,
   handleSend,
-} = useInputFooter(props.modelValue as any); // 型キャストでエラー回避
+  isListening,
+  toggleListening,
+  handleInput, // ★追加
+} = useInputFooter(inputMode);
 
-const { currentUser, startSubscription, isSaving, isAiThinking } = useMyBrain();
+const { currentUser, startSubscription, isSaving, isAiThinking, isSpeaking } =
+  useMyBrain();
 
 const remainingCount = computed(() =>
   currentUser.value?.isPro ? 9999 : 5 - (currentUser.value?.dailyUsage || 0),
@@ -39,14 +43,22 @@ const remainingCount = computed(() =>
   >
     <div class="max-w-md mx-auto relative">
       <div
-        v-if="isSaving || isAiThinking"
+        v-if="isSaving || isAiThinking || isSpeaking"
         class="absolute -top-16 left-0 right-0 flex justify-center"
       >
         <div
           class="bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg font-bold text-xs flex items-center gap-2 animate-pulse"
         >
-          <span class="text-lg">{{ isSaving ? "🧠" : "🤖" }}</span>
-          {{ isSaving ? "脳に書き込み中..." : "AIが思考中..." }}
+          <span class="text-lg">{{
+            isSpeaking ? "🗣️" : isSaving ? "🧠" : "🤖"
+          }}</span>
+          {{
+            isSpeaking
+              ? "読み上げ中..."
+              : isSaving
+                ? "脳に書き込み中..."
+                : "AIが思考中..."
+          }}
         </div>
       </div>
 
@@ -184,19 +196,36 @@ const remainingCount = computed(() =>
           </button>
         </div>
 
+        <div v-if="inputMode === 'chat'" class="flex-shrink-0">
+          <button
+            @click="toggleListening"
+            class="w-10 h-10 flex items-center justify-center rounded-xl transition border"
+            :class="
+              isListening
+                ? 'bg-red-500/20 text-red-500 border-red-500 animate-pulse'
+                : 'bg-slate-800 text-slate-400 border-transparent hover:text-white'
+            "
+          >
+            🎙️
+          </button>
+        </div>
+
         <textarea
           v-model="inputText"
           rows="3"
           class="flex-1 bg-slate-800 border border-slate-700 text-white rounded-2xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 resize-none leading-relaxed text-sm"
           :placeholder="
-            inputMode === 'url'
-              ? 'https://...'
-              : inputMode === 'memo'
-                ? '何を記憶しますか？'
-                : inputMode === 'calendar'
-                  ? 'カレンダーを見ながらメモ...'
-                  : 'AIに質問...'
+            isListening
+              ? 'お話しください...'
+              : inputMode === 'url'
+                ? 'https://...'
+                : inputMode === 'memo'
+                  ? '何を記憶しますか？'
+                  : inputMode === 'calendar'
+                    ? 'カレンダーを見ながらメモ...'
+                    : 'AIに質問...'
           "
+          @input="handleInput"
           @keydown.enter.ctrl="handleSend(inputMode as any)"
         ></textarea>
 

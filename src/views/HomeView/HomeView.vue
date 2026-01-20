@@ -9,6 +9,7 @@ import ChatList from "@/components/ChatList/ChatList.vue";
 import InputFooter from "@/components/InputFooter/InputFooter.vue";
 import MemoryModal from "@/components/MemoryModal/MemoryModal.vue";
 import FullCalendar from "@fullcalendar/vue3";
+import BaseModal from "@/components/BaseModal/BaseModal.vue"; // 既存コンポーネント確認要だが、簡易モーダルを自作
 
 const {
   inputMode,
@@ -23,10 +24,20 @@ const {
   closeBottomSheet,
   onOpenDetail,
   onModeChange,
-  formatDateHeader,
   formatTimeRange,
-  deleteEvent, // ★取得
+  deleteEvent,
+  relatedMemories,
+  isSearchingMemories,
+  todos, // ★追加
+  toggleTodo, // ★追加
+  deleteTodo, // ★追加
+  dailyReports, // ★追加
+  isReportModalOpen, // ★追加
 } = useHomeView();
+
+// 最新のレポート
+const latestReport =
+  dailyReports.value.length > 0 ? dailyReports.value[0] : null;
 </script>
 
 <template>
@@ -48,11 +59,77 @@ const {
     <AppHeader />
     <TagFilter />
 
+    <div v-if="latestReport && !isReportModalOpen" class="px-4 pt-2">
+      <button
+        @click="isReportModalOpen = true"
+        class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-3 flex items-center justify-between shadow-lg"
+      >
+        <div class="flex items-center gap-2">
+          <span class="text-xl">📰</span>
+          <div class="text-left">
+            <div class="text-[10px] font-bold opacity-80">DAILY REPORT</div>
+            <div class="text-xs font-bold text-white">
+              {{ latestReport.date }} のまとめ
+            </div>
+          </div>
+        </div>
+        <span class="text-xs">→</span>
+      </button>
+    </div>
+
     <main
       ref="chatContainerRef"
       class="flex-1 overflow-y-auto scrollbar-hide transition-all"
       :class="inputMode === 'calendar' ? 'p-0 md:p-6' : 'p-4 pb-72'"
     >
+      <div v-if="inputMode === 'memo'" class="mb-6">
+        <div class="flex items-center gap-2 mb-2 px-1">
+          <span class="text-sm font-bold text-slate-400"
+            >🔥 TASKS (AI Extracted)</span
+          >
+        </div>
+        <div
+          v-if="todos.length === 0"
+          class="text-xs text-slate-600 px-2 py-4 border border-slate-800 rounded-xl text-center border-dashed"
+        >
+          タスクはありません
+        </div>
+        <div v-else class="space-y-2">
+          <div
+            v-for="todo in todos"
+            :key="todo.id"
+            class="flex items-center gap-3 bg-slate-900/50 p-3 rounded-xl border border-slate-800 transition"
+            :class="{ 'opacity-50': todo.isCompleted }"
+          >
+            <button
+              @click="toggleTodo(todo.id, todo.isCompleted)"
+              class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition"
+              :class="
+                todo.isCompleted
+                  ? 'bg-blue-500 border-blue-500'
+                  : 'border-slate-600'
+              "
+            >
+              <span v-if="todo.isCompleted" class="text-[10px] text-white"
+                >✓</span
+              >
+            </button>
+            <span
+              class="flex-1 text-sm font-bold truncate"
+              :class="{ 'line-through text-slate-500': todo.isCompleted }"
+            >
+              {{ todo.title }}
+            </span>
+            <button
+              @click="deleteTodo(todo.id)"
+              class="text-slate-600 hover:text-red-400"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      </div>
+
       <MemoList
         v-if="inputMode === 'memo' || inputMode === 'url'"
         @openDetail="onOpenDetail"
@@ -93,73 +170,202 @@ const {
     </main>
 
     <div
+      v-if="isReportModalOpen && latestReport"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      @click.self="isReportModalOpen = false"
+    >
+      <div
+        class="bg-slate-900 w-full max-w-md rounded-3xl p-6 shadow-2xl border border-slate-700 max-h-[80vh] overflow-y-auto"
+      >
+        <h2 class="text-xl font-bold text-white mb-1">📅 Daily Report</h2>
+        <p class="text-xs text-slate-400 mb-6">{{ latestReport.date }}</p>
+
+        <div class="space-y-6">
+          <div>
+            <h3 class="text-sm font-bold text-indigo-400 mb-2">総括</h3>
+            <p class="text-sm text-slate-300 leading-relaxed">
+              {{ latestReport.content }}
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-sm font-bold text-indigo-400 mb-2">ハイライト</h3>
+            <ul class="space-y-2">
+              <li
+                v-for="(h, i) in latestReport.highlights"
+                :key="i"
+                class="flex gap-2 text-sm text-slate-300"
+              >
+                <span class="text-indigo-500">•</span>
+                {{ h }}
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <button
+          @click="isReportModalOpen = false"
+          class="mt-8 w-full py-3 bg-slate-800 rounded-xl text-white font-bold"
+        >
+          閉じる
+        </button>
+      </div>
+    </div>
+
+    <div
       v-if="isBottomSheetOpen"
       class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity"
       @click="closeBottomSheet"
     ></div>
 
     <div
-      class="fixed bottom-0 left-0 w-full z-50 bg-[#1A1D26] rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transform transition-transform duration-300 ease-out flex flex-col max-h-[70vh] border-t border-slate-700/50"
+      class="fixed bottom-0 left-0 w-full z-50 bg-[#1A1D26] rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.6)] transform transition-transform duration-300 ease-out flex flex-col max-h-[85vh] border-t border-slate-700/50"
       :class="isBottomSheetOpen ? 'translate-y-0' : 'translate-y-full'"
     >
       <div
-        class="w-full flex justify-center pt-3 pb-1"
+        class="w-full flex justify-center pt-3 pb-2"
         @click="closeBottomSheet"
       >
-        <div class="w-12 h-1.5 bg-slate-600 rounded-full"></div>
+        <div class="w-10 h-1 bg-slate-600/50 rounded-full"></div>
       </div>
 
       <div
-        class="px-6 py-4 border-b border-slate-800 flex justify-between items-center"
+        class="px-6 pb-4 pt-1 border-b border-slate-800/50 flex justify-between items-end"
       >
-        <h3 class="text-lg font-bold text-white tracking-wide">
-          {{ formatDateHeader(selectedDateStr) }}
-        </h3>
+        <div>
+          <div
+            class="text-xs font-bold text-slate-400 mb-1 font-mono tracking-wider"
+          >
+            {{ selectedDateStr.split("-")[0] }}.{{
+              selectedDateStr.split("-")[1]
+            }}
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span class="text-4xl font-black text-white tracking-tighter">
+              {{ selectedDateStr.split("-")[2] }}
+            </span>
+            <span class="text-lg font-bold text-slate-500 uppercase">
+              {{
+                new Date(selectedDateStr).toLocaleDateString("en-US", {
+                  weekday: "short",
+                })
+              }}
+            </span>
+          </div>
+        </div>
+
         <button
           @click="closeBottomSheet"
-          class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white"
+          class="bg-slate-800/80 p-2 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition"
         >
-          ×
+          <span class="text-xl leading-none">×</span>
         </button>
       </div>
 
-      <div class="flex-1 overflow-y-auto p-4 space-y-3 pb-10">
-        <div
-          v-if="selectedDateEvents.length === 0"
-          class="text-center py-10 text-slate-500"
-        >
-          <p class="text-2xl mb-2">💤</p>
-          予定はありません
+      <div class="flex-1 overflow-y-auto p-5 pb-10">
+        <div class="space-y-4 mb-10">
+          <div
+            v-if="selectedDateEvents.length === 0"
+            class="flex flex-col items-center justify-center py-10 text-slate-600 opacity-60"
+          >
+            <span class="text-4xl mb-3">☕️</span>
+            <p class="text-xs font-bold tracking-widest">NO EVENTS</p>
+          </div>
+
+          <div
+            v-for="(ev, idx) in selectedDateEvents"
+            :key="idx"
+            class="relative pl-4 group"
+          >
+            <div
+              class="absolute left-[7px] top-2 bottom-[-16px] w-[2px] bg-slate-800 group-last:hidden"
+            ></div>
+            <div
+              class="absolute left-0 top-2 w-4 h-4 rounded-full border-2 border-[#1A1D26]"
+              :style="{ backgroundColor: ev.backgroundColor }"
+            ></div>
+
+            <div
+              class="ml-4 p-4 bg-slate-800/40 rounded-2xl border border-slate-700/30 flex justify-between items-start active:scale-[0.98] transition backdrop-blur-sm"
+            >
+              <div class="flex-1 min-w-0">
+                <div
+                  class="text-xs font-mono text-slate-400 mb-1 flex items-center gap-2"
+                >
+                  <span :style="{ color: ev.backgroundColor }">●</span>
+                  {{ formatTimeRange(ev) }}
+                </div>
+                <div class="text-base font-bold text-slate-100 leading-snug">
+                  {{ ev.title }}
+                </div>
+              </div>
+
+              <button
+                @click.stop="deleteEvent(ev.id)"
+                class="ml-2 w-8 h-8 flex items-center justify-center rounded-full text-slate-600 hover:text-rose-500 hover:bg-rose-500/10 transition"
+              >
+                🗑️
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div
-          v-for="(ev, idx) in selectedDateEvents"
-          :key="idx"
-          class="flex items-center gap-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 active:scale-[0.99] transition group"
-        >
-          <div
-            class="w-1 h-10 rounded-full shadow-[0_0_10px_currentColor]"
-            :style="{
-              backgroundColor: ev.backgroundColor,
-              color: ev.backgroundColor,
-            }"
-          ></div>
+        <div v-if="selectedDateEvents.length > 0">
+          <div class="flex items-center gap-2 mb-4 px-1 opacity-80">
+            <span class="text-lg">🧠</span>
+            <span class="text-xs font-bold text-slate-400 tracking-wider"
+              >RELATED MEMORIES</span
+            >
+          </div>
 
-          <div class="flex-1 min-w-0">
-            <div class="text-xs text-slate-400 font-bold mb-0.5">
-              {{ formatTimeRange(ev) }}
-            </div>
-            <div class="text-sm text-white font-bold truncate">
-              {{ ev.title }}
+          <div v-if="isSearchingMemories" class="flex justify-center py-6">
+            <div class="flex gap-1">
+              <div
+                class="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce"
+                style="animation-delay: 0s"
+              ></div>
+              <div
+                class="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce"
+                style="animation-delay: 0.1s"
+              ></div>
+              <div
+                class="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce"
+                style="animation-delay: 0.2s"
+              ></div>
             </div>
           </div>
 
-          <button
-            @click.stop="deleteEvent(ev.id)"
-            class="w-8 h-8 flex items-center justify-center rounded-full text-slate-500 hover:text-red-500 hover:bg-slate-700/50 transition"
-          >
-            🗑️
-          </button>
+          <div v-else class="grid gap-3">
+            <div
+              v-for="memo in relatedMemories"
+              :key="memo.id"
+              @click="onOpenDetail(memo)"
+              class="bg-gradient-to-br from-indigo-900/20 to-slate-800/30 border border-indigo-500/20 p-4 rounded-2xl hover:border-indigo-500/40 transition cursor-pointer"
+            >
+              <div class="flex justify-between items-start mb-2">
+                <span
+                  class="text-[9px] font-bold bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full"
+                >
+                  AI Summary
+                </span>
+                <span class="text-[10px] text-slate-500 font-mono">
+                  {{
+                    new Date(memo.createdAt?.toDate?.()).toLocaleDateString()
+                  }}
+                </span>
+              </div>
+              <p class="text-xs text-slate-300 leading-relaxed line-clamp-2">
+                {{ memo.aiSummary || memo.text }}
+              </p>
+            </div>
+
+            <div
+              v-if="relatedMemories.length === 0"
+              class="text-center py-4 text-xs text-slate-600"
+            >
+              関連する記憶はありませんでした
+            </div>
+          </div>
         </div>
       </div>
     </div>

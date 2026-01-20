@@ -1,5 +1,9 @@
-import { ref, onMounted, watch, nextTick, type Ref } from "vue";
-import { useMyBrain, type Memory } from "@/composables/useMyBrain";
+// src/views/HomeView/useHomeView.ts
+
+import { ref, onMounted, watch, nextTick, type Ref, computed } from "vue";
+import { useMyBrain } from "@/composables/useMyBrain";
+// ★修正: 型定義を types から読み込む
+import type { Memory, Todo, DailyReport } from "@/types";
 import mermaid from "mermaid";
 import { httpsCallable, getFunctions } from "firebase/functions";
 import { getApp } from "firebase/app";
@@ -13,137 +17,136 @@ import interactionPlugin from "@fullcalendar/interaction";
 import listPlugin from "@fullcalendar/list";
 import type { CalendarOptions } from "@fullcalendar/core";
 
+const GOOGLE_CALENDAR_COLORS: Record<string, string> = {
+  "1": "#7986cb",
+  "2": "#33b679",
+  "3": "#8e24aa",
+  "4": "#e67c73",
+  "5": "#f6c026",
+  "6": "#f4511e",
+  "7": "#039be5",
+  "8": "#616161",
+  "9": "#3f51b5",
+  "10": "#0b8043",
+  "11": "#d50000",
+};
+
 export function useHomeView() {
-  const { initAuth, chatLogs, isAiThinking, currentUser } = useMyBrain();
+  const {
+    initAuth,
+    chatLogs,
+    isAiThinking,
+    currentUser,
+    findRelatedMemories,
+    todos,
+    dailyReports,
+    toggleTodo,
+    deleteTodo,
+  } = useMyBrain();
   const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
   const editingMemory = ref<Memory | null>(null);
   const chatContainerRef = ref<HTMLElement | null>(null);
   const showSuccessToast = ref(false);
   const calendarLoading = ref(false);
-
+  const isReportModalOpen = ref(false);
   const route = useRoute();
   const router = useRouter();
-
-  // --- ボトムシート用ステート ---
   const isBottomSheetOpen = ref(false);
   const selectedDateStr = ref("");
   const selectedDateEvents = ref<any[]>([]);
+  const relatedMemories = ref<Memory[]>([]);
+  const isSearchingMemories = ref(false);
 
-  // ボトムシートを開く
-  const openBottomSheet = (dateStr: string) => {
+  const openBottomSheet = async (dateStr: string) => {
     selectedDateStr.value = dateStr;
+    relatedMemories.value = [];
+    isSearchingMemories.value = false;
     const events = (calendarOptions.value.events as any[]) || [];
-
     selectedDateEvents.value = events
       .filter((ev: any) => ev.start && ev.start.startsWith(dateStr))
       .sort(
         (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
       );
-
     isBottomSheetOpen.value = true;
+    if (selectedDateEvents.value.length > 0) {
+      isSearchingMemories.value = true;
+      const queryText = selectedDateEvents.value.map((e) => e.title).join(" ");
+      try {
+        relatedMemories.value = await findRelatedMemories(queryText);
+      } catch (e) {
+        console.error("Related search failed", e);
+      } finally {
+        isSearchingMemories.value = false;
+      }
+    }
   };
 
   const closeBottomSheet = () => {
     isBottomSheetOpen.value = false;
   };
 
-  // ★追加: 予定を削除する関数
   const deleteEvent = async (eventId: string) => {
     const token = localStorage.getItem("google_calendar_token");
-    if (!token)
-      return alert("認証トークンがありません。再ログインしてください。");
-
-    if (!confirm("この予定を削除してもよろしいですか？")) return;
-
+    if (!token) return alert("認証トークンがありません。");
+    if (!confirm("削除しますか？")) return;
     try {
-      // 1. GoogleカレンダーAPIを叩いて削除
       await axios.delete(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
-
-      // 2. ローカルの表示データから即座に削除（再取得を待たずにUI反映）
-      // ボトムシート内のリストから消す
       selectedDateEvents.value = selectedDateEvents.value.filter(
         (e) => e.id !== eventId,
       );
-
-      // カレンダー本体のデータからも消す
       const currentEvents = (calendarOptions.value.events as any[]) || [];
       calendarOptions.value.events = currentEvents.filter(
         (e: any) => e.id !== eventId,
       );
     } catch (e: any) {
-      console.error(e);
-      alert(
-        "削除に失敗しました: " +
-          (e.response?.data?.error?.message || e.message),
-      );
+      alert("削除失敗: " + e.message);
     }
   };
 
-  // --- カレンダー設定 ---
   const calendarOptions = ref<CalendarOptions>({
     plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
     initialView: "dayGridMonth",
-    headerToolbar: {
-      left: "prev",
-      center: "title",
-      right: "next",
-    },
+    headerToolbar: { left: "prev", center: "title", right: "next" },
     events: [] as any[],
     locale: "ja",
     height: "100%",
     expandRows: true,
     dayMaxEvents: 2,
-
     moreLinkClick: (arg) => {
-      const dateStr = arg.date.toISOString().split("T")[0];
-      openBottomSheet(dateStr);
+      openBottomSheet(arg.date.toISOString().split("T")[0]);
       return "void";
     },
-
     dateClick: (info) => {
       openBottomSheet(info.dateStr);
     },
-
     eventClick: (info) => {
       info.jsEvent.preventDefault();
-      const dateStr = info.event.startStr.split("T")[0];
-      openBottomSheet(dateStr);
+      openBottomSheet(info.event.startStr.split("T")[0]);
     },
-
     eventTimeFormat: {
       hour: "numeric",
       minute: "2-digit",
       meridiem: false,
       hour12: false,
-    } as const,
+    },
     longPressDelay: 500,
     handleWindowResize: true,
-
     eventContent: function (arg: any) {
       return {
-        html: `<div class="fc-content-custom">
-                <div class="fc-marker" style="background-color: ${arg.event.backgroundColor}"></div>
-                <div class="fc-details">
-                  <span class="fc-time-custom">${arg.timeText}</span>
-                  <span class="fc-title-custom">${arg.event.title}</span>
-                </div>
-              </div>`,
+        html: `<div class="fc-content-custom"><div class="fc-marker" style="background-color: ${arg.event.backgroundColor}"></div><div class="fc-details"><span class="fc-time-custom">${arg.timeText}</span><span class="fc-title-custom">${arg.event.title}</span></div></div>`,
       };
     },
   });
 
-  // --- カレンダーAPI取得 ---
   const fetchAllCalendars = async () => {
     const token = localStorage.getItem("google_calendar_token");
     if (!token) return;
-
     calendarLoading.value = true;
     try {
       let calendars = [{ id: "primary", backgroundColor: "#818cf8" }];
-
       try {
         const listRes = await axios.get(
           "https://www.googleapis.com/calendar/v3/users/me/calendarList",
@@ -156,7 +159,7 @@ export function useHomeView() {
           }));
         }
       } catch (e) {
-        console.warn("カレンダーリスト取得不可");
+        console.warn("List fetch failed");
       }
 
       const now = new Date();
@@ -170,7 +173,6 @@ export function useHomeView() {
         now.getMonth() + 2,
         0,
       ).toISOString();
-
       const promises = calendars.map((cal) =>
         axios
           .get(
@@ -182,30 +184,40 @@ export function useHomeView() {
           )
           .catch(() => ({ data: { items: [] } })),
       );
-
       const results = await Promise.all(promises);
-
       const allEvents = results.flatMap((res, index) => {
-        const color = calendars[index].backgroundColor;
-        return (res.data.items || []).map((ev: any) => ({
-          id: ev.id, // ★重要: 削除用にIDをマッピングに追加
-          title: ev.summary || "(なし)",
-          start: ev.start.dateTime || ev.start.date,
-          end: ev.end.dateTime || ev.end.date,
-          backgroundColor: color,
-          allDay: !ev.start.dateTime,
-        }));
+        const defaultColor = calendars[index].backgroundColor;
+        return (res.data.items || []).map((ev: any) => {
+          let bgColor = defaultColor;
+          if (ev.colorId && GOOGLE_CALENDAR_COLORS[ev.colorId])
+            bgColor = GOOGLE_CALENDAR_COLORS[ev.colorId];
+          return {
+            id: ev.id,
+            title: ev.summary || "(なし)",
+            start: ev.start.dateTime || ev.start.date,
+            end: ev.end.dateTime || ev.end.date,
+            backgroundColor: bgColor,
+            allDay: !ev.start.dateTime,
+          };
+        });
       });
-
       calendarOptions.value.events = allEvents;
-    } catch (e) {
-      console.error("カレンダー取得エラー", e);
+    } catch (e: any) {
+      if (e.response && e.response.status === 401) {
+        alert("認証切れ。再ログインしてください。");
+        localStorage.removeItem("google_calendar_token");
+        window.location.href = "/login";
+      } else if (e.response && e.response.status === 403) {
+        console.error("Google Calendar API 403 Forbidden:", e);
+        // 403エラーの場合、APIが有効になっていないか、スコープが足りない可能性があります。
+        // ここではアラートを出さずにコンソールログのみにするか、ユーザーに設定を確認するよう促すメッセージを表示します。
+        // alert("カレンダーの読み込みに失敗しました。Google Cloud ConsoleでAPIが有効か確認してください。");
+      }
     } finally {
       calendarLoading.value = false;
     }
   };
 
-  // --- チャットスクロール ---
   const scrollToBottom = async () => {
     if (inputMode.value !== "chat") return;
     await nextTick();
@@ -218,7 +230,6 @@ export function useHomeView() {
     }, 100);
   };
 
-  // --- ライフサイクル・監視 ---
   onMounted(async () => {
     initAuth();
     mermaid.initialize({
@@ -227,7 +238,6 @@ export function useHomeView() {
       securityLevel: "loose",
       suppressErrorRendering: true,
     });
-
     const code = route.query.code as string;
     if (code) {
       window.history.replaceState({}, document.title, "/app");
@@ -238,14 +248,10 @@ export function useHomeView() {
         showSuccessToast.value = true;
         setTimeout(() => (showSuccessToast.value = false), 5000);
       } catch (e) {
-        console.error(e);
         alert("LINE連携失敗");
       }
     }
-
-    if (currentUser.value) {
-      fetchAllCalendars();
-    }
+    if (currentUser.value) fetchAllCalendars();
   });
 
   watch(inputMode, (newMode) => {
@@ -267,21 +273,18 @@ export function useHomeView() {
   watch(chatLogs, scrollToBottom, { deep: true });
   watch(isAiThinking, scrollToBottom);
 
-  // --- ヘルパー ---
   const onOpenDetail = (memo: Memory) => {
     editingMemory.value = memo;
   };
   const onModeChange = (newMode: "memo" | "chat" | "url" | "calendar") => {
     inputMode.value = newMode;
   };
-
   const formatDateHeader = (dateStr: string) => {
     if (!dateStr) return "";
     const d = new Date(dateStr);
     const days = ["日", "月", "火", "水", "木", "金", "土"];
     return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${days[d.getDay()]})`;
   };
-
   const formatTimeRange = (ev: any) => {
     if (ev.allDay) return "終日";
     const start = new Date(ev.start);
@@ -307,6 +310,13 @@ export function useHomeView() {
     onModeChange,
     formatDateHeader,
     formatTimeRange,
-    deleteEvent, // ★エクスポート
+    deleteEvent,
+    relatedMemories,
+    isSearchingMemories,
+    todos,
+    dailyReports,
+    toggleTodo,
+    deleteTodo,
+    isReportModalOpen,
   };
 }

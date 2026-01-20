@@ -33,7 +33,6 @@ const router = createRouter({
       component: VerifyEmailView,
       meta: { requiresAuth: true },
     },
-    // 追加
     {
       path: "/legal",
       name: "legal",

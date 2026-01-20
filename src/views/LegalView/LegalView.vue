@@ -21,12 +21,12 @@ const router = useRouter();
 
       <div class="space-y-8 text-sm leading-relaxed">
         <section>
-          <h2 class="font-bold text-slate-100 mb-2">事業者名（屋号）</h2>
-          <p>BlueCode</p>
+          <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
+          <p>吉岡 拓海 (BlueCode)</p>
         </section>
 
         <section>
-          <h2 class="font-bold text-slate-100 mb-2">代表者名（運営責任者）</h2>
+          <h2 class="font-bold text-slate-100 mb-2">運営統括責任者</h2>
           <p>吉岡 拓海</p>
         </section>
 
@@ -39,7 +39,7 @@ const router = useRouter();
           <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
           <p>080-6423-6435</p>
           <p class="text-xs text-slate-500 mt-1">
-            ※電話でのお問い合わせは受け付けておりません。お問い合わせはメールにてお願いいたします。
+            受付時間 10:00-18:00（土日祝を除く）
           </p>
         </section>
 
@@ -61,32 +61,30 @@ const router = useRouter();
         </section>
 
         <section>
-          <h2 class="font-bold text-slate-100 mb-2">支払方法</h2>
+          <h2 class="font-bold text-slate-100 mb-2">お支払方法</h2>
           <p>クレジットカード決済（Stripe）</p>
         </section>
 
         <section>
-          <h2 class="font-bold text-slate-100 mb-2">代金の支払時期</h2>
+          <h2 class="font-bold text-slate-100 mb-2">お支払時期</h2>
           <p>
-            初回申込時に決済され、以降毎月同日に自動的に決済が行われます。実際の引き落とし時期は、ご利用のクレジットカード会社の締め日や契約内容により異なります。
+            初回お申込み時に即時決済され、以降毎月同日に自動的に決済が行われます。<br />
+            実際の引き落とし時期は、ご利用のクレジットカード会社の締め日や契約内容により異なります。
           </p>
         </section>
 
         <section>
-          <h2 class="font-bold text-slate-100 mb-2">
-            役務または商品の引渡時期
-          </h2>
+          <h2 class="font-bold text-slate-100 mb-2">商品の引渡時期</h2>
           <p>決済手続き完了後、直ちにご利用いただけます。</p>
         </section>
 
         <section>
           <h2 class="font-bold text-slate-100 mb-2">
-            返品・返金・キャンセルに関する特約
+            返品・キャンセルについて
           </h2>
           <p>
-            デジタルコンテンツの性質上、返品・返金には応じられません。
-            解約はいつでも可能ですが、次回更新日までの残期間に対する返金は行われません。
-            解約をご希望の場合は、アプリ内の設定画面、またはStripeのカスタマーポータルより次回更新日の前日までにお手続きください。
+            デジタルコンテンツの性質上、決済完了後の返品・返金には応じられません。<br />
+            解約はいつでも可能です。次回更新日の前日までにお手続きください。なお、日割り計算による返金は行われません。
           </p>
         </section>
 
