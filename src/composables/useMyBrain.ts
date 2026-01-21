@@ -18,13 +18,19 @@ import {
   increment,
   writeBatch,
 } from "firebase/firestore";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  signOut,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from "axios";
 import type { Memory, ChatLog, User, Todo, DailyReport } from "@/types";
 
-const STRIPE_PRICE_ID = "price_1SqvJAFjyhW5lKcrgAmd48sB";
+// ★修正: Payment Linkを直接指定（画像にあったURL）
+const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/6oU28r4Hi71dglzd1z6AM00";
 const ADMIN_EMAILS = ["gongedonghuam@gmail.com"];
 
 const currentUser = ref<User | null>(null);
@@ -38,7 +44,37 @@ const isSaving = ref(false);
 const isSpeaking = ref(false);
 const activeTag = ref<string | null>(null);
 
-// ヘルパー
+// --- ヘルパー: Google API トークンリフレッシュ ---
+const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
+  let token = localStorage.getItem("google_calendar_token");
+  if (!token) return null;
+
+  try {
+    return await callback(token);
+  } catch (e: any) {
+    if (e.response && e.response.status === 401) {
+      console.log("Token expired, refreshing...");
+      try {
+        const provider = new GoogleAuthProvider();
+        provider.addScope("https://www.googleapis.com/auth/calendar");
+        const result = await signInWithPopup(auth, provider);
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        const newToken = credential?.accessToken;
+
+        if (newToken) {
+          localStorage.setItem("google_calendar_token", newToken);
+          return await callback(newToken);
+        }
+      } catch (refreshError) {
+        console.error("Token refresh failed:", refreshError);
+        throw refreshError;
+      }
+    }
+    throw e;
+  }
+};
+
+// ヘルパー: 画像変換
 const fileToGenerativePart = async (file: File) => {
   return new Promise<{ inlineData: { data: string; mimeType: string } }>(
     (resolve, reject) => {
@@ -66,10 +102,9 @@ const cosineSimilarity = (vecA: number[], vecB: number[]) => {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 };
 
+// --- カレンダー関連 ---
 const fetchCalendarEvents = async () => {
-  const token = localStorage.getItem("google_calendar_token");
-  if (!token) return null;
-  try {
+  return await callGoogleApi(async (token) => {
     const now = new Date().toISOString();
     const response = await axios.get(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${now}&maxResults=10&orderBy=startTime&singleEvents=true`,
@@ -84,10 +119,7 @@ const fetchCalendarEvents = async () => {
         return `- ${start}: ${summary}`;
       })
       .join("\n");
-  } catch (e) {
-    console.warn("Calendar fetch failed:", e);
-    return null;
-  }
+  });
 };
 
 const addEventToGoogleCalendar = async (
@@ -96,29 +128,21 @@ const addEventToGoogleCalendar = async (
   endDateTime: string,
   colorId?: string,
 ) => {
-  const token = localStorage.getItem("google_calendar_token");
-  if (!token) throw new Error("連携トークンがありません。");
-  const event = {
-    summary: title,
-    start: { dateTime: startDateTime },
-    end: { dateTime: endDateTime },
-    colorId: colorId || "9",
-  };
-  try {
+  await callGoogleApi(async (token) => {
+    const event = {
+      summary: title,
+      start: { dateTime: startDateTime },
+      end: { dateTime: endDateTime },
+      colorId: colorId || "9",
+    };
     await axios.post(
       "https://www.googleapis.com/calendar/v3/calendars/primary/events",
       event,
       { headers: { Authorization: `Bearer ${token}` } },
     );
-  } catch (e: any) {
-    if (e.response && e.response.status === 401) {
-      throw new Error("認証の有効期限が切れています。再ログインしてください。");
-    }
-    throw e;
-  }
+  });
 };
 
-// 音声読み上げ
 const speakText = (text: string) => {
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
@@ -197,7 +221,6 @@ export function useMyBrain() {
     return true;
   };
 
-  // ★修正: ToDo自動抽出（JSONクリーニング強化）
   const generateTasksFromMemory = async (memoryId: string, text: string) => {
     if (!currentUser.value) return;
     try {
@@ -212,21 +235,17 @@ export function useMyBrain() {
         メモ: ${text}`;
 
       const result = await model.generateContent(prompt);
-
-      // ★Markdown記法を除去してパースする
       const rawText = result.response.text();
       const jsonStr = rawText.replace(/```json|```/g, "").trim();
 
       let data;
       try {
         data = JSON.parse(jsonStr);
-      } catch (e) {
-        console.error("JSON Parse Error in Tasks:", e);
+      } catch {
         data = { tasks: [] };
       }
 
       const tasks: string[] = data.tasks || [];
-
       if (tasks.length > 0) {
         const batch = writeBatch(db);
         tasks.forEach((taskTitle) => {
@@ -240,10 +259,25 @@ export function useMyBrain() {
           });
         });
         await batch.commit();
-        console.log("Tasks generated:", tasks);
       }
     } catch (e) {
       console.error("ToDo generation failed:", e);
+    }
+  };
+
+  const addManualTodo = async (title: string) => {
+    if (!currentUser.value || !title.trim()) return;
+    try {
+      await addDoc(collection(db, "todos"), {
+        userId: currentUser.value.uid,
+        title: title,
+        isCompleted: false,
+        sourceMemoryId: null,
+        createdAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error("Manual todo add failed:", e);
+      alert("タスクの追加に失敗しました");
     }
   };
 
@@ -287,11 +321,12 @@ export function useMyBrain() {
       });
       const prompt = `昨日のメモを元に日刊レポートを作成。出力JSON: { "content": "総括", "highlights": ["要点1"] }\nメモ: ${dailyMemories}`;
       const result = await model.generateContent(prompt);
-
-      const rawText = result.response.text();
-      const jsonStr = rawText.replace(/```json|```/g, "").trim();
-      const data = JSON.parse(jsonStr);
-
+      const data = JSON.parse(
+        result.response
+          .text()
+          .replace(/```json|```/g, "")
+          .trim(),
+      );
       await addDoc(collection(db, "daily_reports"), {
         userId: currentUser.value.uid,
         date: dateStr,
@@ -304,29 +339,16 @@ export function useMyBrain() {
     }
   };
 
+  // ★修正: Payment Linkへ直接リダイレクトする方式に変更
   const startSubscription = async () => {
     if (!currentUser.value) return;
     const confirmed = confirm(
-      "PROプラン（月額1,000円）の決済画面へ移動しますか？",
+      "PROプラン（月額980円）の決済画面へ移動しますか？",
     );
     if (!confirmed) return;
-    alert("決済画面を準備しています...");
-    try {
-      const docRef = await addDoc(
-        collection(db, "users", currentUser.value.uid, "checkout_sessions"),
-        {
-          price: STRIPE_PRICE_ID,
-          success_url: window.location.origin + "/app",
-          cancel_url: window.location.origin + "/app",
-        },
-      );
-      onSnapshot(docRef, (snap) => {
-        const data = snap.data();
-        if (data?.url) window.location.assign(data.url);
-      });
-    } catch (e: any) {
-      alert("エラーが発生しました: " + e.message);
-    }
+
+    // Stripe Payment Linkへ直接移動
+    window.location.href = STRIPE_PAYMENT_LINK;
   };
 
   const initAuth = () => {
@@ -359,7 +381,6 @@ export function useMyBrain() {
             };
           }
         });
-        // データの初期読み込みと監視
         await Promise.all([
           fetchMemories(),
           fetchChatLogs(),
@@ -423,18 +444,14 @@ export function useMyBrain() {
 
   const fetchTodos = async () => {
     if (!currentUser.value) return;
-    try {
-      const q = query(
-        collection(db, "todos"),
-        where("userId", "==", currentUser.value.uid),
-        orderBy("createdAt", "desc"),
-      );
-      onSnapshot(q, (snap) => {
-        todos.value = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Todo);
-      });
-    } catch (e) {
-      console.error("Fetch todos error:", e);
-    }
+    const q = query(
+      collection(db, "todos"),
+      where("userId", "==", currentUser.value.uid),
+      orderBy("createdAt", "desc"),
+    );
+    onSnapshot(q, (snap) => {
+      todos.value = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Todo);
+    });
   };
 
   const fetchReports = async () => {
@@ -466,13 +483,11 @@ export function useMyBrain() {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) return [];
       const genAI = new GoogleGenerativeAI(apiKey);
-
       const embedModel = genAI.getGenerativeModel({
         model: "text-embedding-004",
       });
       const result = await embedModel.embedContent(text);
       const vec = result.embedding.values;
-
       const candidates = memories.value
         .map((m) => ({
           ...m,
@@ -481,52 +496,48 @@ export function useMyBrain() {
         .filter((m) => m.score && m.score > 0.45)
         .sort((a, b) => (b.score || 0) - (a.score || 0))
         .slice(0, 10);
-
       if (candidates.length === 0) return [];
-
       const modelName = await getSmartModelName(apiKey);
       const model = genAI.getGenerativeModel({
         model: modelName,
         generationConfig: { responseMimeType: "application/json" },
       });
-
       const candidatesText = candidates
         .map((c) => `ID: ${c.id}\n内容: ${c.aiSummary || c.text.slice(0, 100)}`)
         .join("\n---\n");
       const prompt = `検索クエリ: ${text}\n候補:\n${candidatesText}\n文脈的に関連するIDを選んでJSONで返して: { "selectedIds": ["ID"] }`;
-
       const aiRes = await model.generateContent(prompt);
       const aiJson = JSON.parse(aiRes.response.text());
       const selectedIds: string[] = aiJson.selectedIds || [];
-
       const finalResults = candidates.filter((c) => selectedIds.includes(c.id));
       const highConfidenceResults = candidates.filter(
         (c) => (c.score || 0) > 0.85 && !selectedIds.includes(c.id),
       );
       const merged = [...finalResults, ...highConfidenceResults];
-      const uniqueResults = Array.from(
-        new Map(merged.map((m) => [m.id, m])).values(),
+      return Array.from(new Map(merged.map((m) => [m.id, m])).values()).slice(
+        0,
+        3,
       );
-
-      return uniqueResults.slice(0, 3);
     } catch (e) {
       return [];
     }
   };
 
-  const addMemory = async (text: string, file?: File | null) => {
+  // ★修正: 複数画像対応(File[]) & ローカル即時反映
+  const addMemory = async (text: string, files?: File[] | null) => {
     if (!(await checkAndIncrementUsage())) return null;
     isSaving.value = true;
     if (!currentUser.value) return null;
     try {
+      const hasImages = files && files.length > 0;
       const docRef = await addDoc(collection(db, "memories"), {
         userId: currentUser.value.uid,
-        text: file ? `(解析中...) ${text}` : text,
+        text: hasImages ? `(解析中...) ${text}` : text,
         createdAt: serverTimestamp(),
         tags: [],
         aiSummary: "保存中...",
-        hasImage: !!file,
-        fileType: file?.type || null,
+        hasImage: !!hasImages,
+        fileType: null, // ★修正: undefined ではなく null にする
       });
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) {
@@ -542,10 +553,13 @@ export function useMyBrain() {
       });
 
       let promptParts: any[] = [];
-      if (file) {
-        promptParts.push(await fileToGenerativePart(file));
+      if (files && files.length > 0) {
+        const imageParts = await Promise.all(
+          files.map((f) => fileToGenerativePart(f)),
+        );
+        promptParts.push(...imageParts);
         promptParts.push({
-          text: "画像を分析して。出力JSON:{summary, tags, fullText}",
+          text: `画像を分析して。出力JSON:{summary, tags, fullText}`,
         });
       } else {
         promptParts.push({
@@ -560,7 +574,7 @@ export function useMyBrain() {
         aiData = { summary: text.substring(0, 30), tags: [], fullText: text };
       }
 
-      const finalText = file
+      const finalText = hasImages
         ? `【解析済み】${text}\n\n${aiData.fullText || ""}`
         : text;
       const embModel = getEmbeddingModel(apiKey);
@@ -573,6 +587,8 @@ export function useMyBrain() {
         tags: aiData.tags,
         embedding: embedding,
       });
+
+      // ★修正: ローカル更新（unshiftで即時反映）
       memories.value.unshift({
         id: docRef.id,
         userId: currentUser.value.uid,
@@ -580,12 +596,11 @@ export function useMyBrain() {
         aiSummary: aiData.summary,
         tags: aiData.tags,
         createdAt: new Date(),
-        hasImage: !!file,
-        fileType: file?.type,
+        hasImage: !!hasImages,
+        fileType: null, // ★修正: undefined ではなく null にする
         embedding: embedding,
       });
 
-      // ★タスク生成を実行
       generateTasksFromMemory(docRef.id, finalText);
 
       return memories.value
@@ -614,6 +629,7 @@ export function useMyBrain() {
       if (res.data.success) {
         await addMemory(
           `【WEB記事】${res.data.title}\nURL: ${url}\n\n${res.data.content}`,
+          null,
         );
       }
     } catch (e: any) {
@@ -690,8 +706,6 @@ export function useMyBrain() {
         createdAt: serverTimestamp(),
       };
       const logRef = await addDoc(collection(db, "chat_logs"), logData);
-
-      // アニメーション用フラグを追加してチャットログに保存
       chatLogs.value.push({
         id: logRef.id,
         ...logData,
@@ -700,11 +714,7 @@ export function useMyBrain() {
         isAnimating: true,
       } as any);
 
-      // ★修正: voiceModeがtrueの時だけ喋る
-      if (voiceMode) {
-        speakText(finalAnswer);
-      }
-
+      if (voiceMode) speakText(finalAnswer);
       return finalAnswer;
     } catch (e: any) {
       return "エラー: " + e.message;
@@ -713,8 +723,13 @@ export function useMyBrain() {
     }
   };
 
+  // ★修正: メモ更新時にローカルのstateも即時反映
   const updateMemory = async (id: string, newText: string) => {
     await updateDoc(doc(db, "memories", id), { text: newText });
+    const index = memories.value.findIndex((m) => m.id === id);
+    if (index !== -1) {
+      memories.value[index].text = newText;
+    }
   };
   const deleteMemory = async (id: string) => {
     if (confirm("削除?")) {
@@ -766,5 +781,7 @@ export function useMyBrain() {
     toggleTodo,
     deleteTodo,
     speakText,
+    addManualTodo,
+    callGoogleApi,
   };
 }

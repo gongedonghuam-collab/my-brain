@@ -3,14 +3,14 @@ import { useMyBrain } from "@/composables/useMyBrain";
 
 type InputMode = "memo" | "chat" | "url" | "calendar";
 
-// ★修正: inputModeをRefで受け取る（これでタブ切り替えを追跡できる）
 export function useInputFooter(inputMode: Ref<InputMode>) {
   const { addMemory, addUrlMemory, askBrain, isAiThinking, isSpeaking } =
     useMyBrain();
 
   const inputText = ref("");
-  const selectedFile = ref<File | null>(null);
-  const filePreview = ref<string | null>(null);
+  // ★修正: 配列で管理
+  const selectedFiles = ref<File[]>([]);
+  const filePreviews = ref<string[]>([]);
   const fileInputRef = ref<HTMLInputElement | null>(null);
   const isListening = ref(false);
   const isVoiceMode = ref(false);
@@ -36,7 +36,6 @@ export function useInputFooter(inputMode: Ref<InputMode>) {
 
       recognition.onend = () => {
         isListening.value = false;
-        // ★修正: inputMode.value (現在のタブ) を参照して送信する
         if (isVoiceMode.value && inputText.value.trim()) {
           handleSend(inputMode.value);
         }
@@ -51,35 +50,39 @@ export function useInputFooter(inputMode: Ref<InputMode>) {
       isVoiceMode.value = false;
     } else {
       isListening.value = true;
-      isVoiceMode.value = true; // 音声モードON
+      isVoiceMode.value = true;
       recognition.start();
     }
   };
 
   const handleFileSelect = (e: Event) => {
     const target = e.target as HTMLInputElement;
-    if (target.files && target.files[0]) {
-      const file = target.files[0];
-      selectedFile.value = file;
-      if (file.type.startsWith("image/")) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          filePreview.value = e.target?.result as string;
-        };
-        reader.readAsDataURL(file);
-      } else {
-        filePreview.value = null;
-      }
+    if (target.files && target.files.length > 0) {
+      // 既存のリストに追加
+      const files = Array.from(target.files);
+      selectedFiles.value = [...selectedFiles.value, ...files];
+
+      // プレビュー生成
+      files.forEach((file) => {
+        if (file.type.startsWith("image/")) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            if (e.target?.result) {
+              filePreviews.value.push(e.target.result as string);
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      });
     }
   };
 
-  const clearFile = () => {
-    selectedFile.value = null;
-    filePreview.value = null;
+  const clearFiles = () => {
+    selectedFiles.value = [];
+    filePreviews.value = [];
     if (fileInputRef.value) fileInputRef.value.value = "";
   };
 
-  // テキスト入力を開始したら音声モードを解除
   const handleInput = () => {
     if (!isListening.value) {
       isVoiceMode.value = false;
@@ -88,9 +91,8 @@ export function useInputFooter(inputMode: Ref<InputMode>) {
 
   const handleSend = async (mode: InputMode) => {
     const text = inputText.value.trim();
-    if (!text && !selectedFile.value) return;
+    if (!text && selectedFiles.value.length === 0) return;
 
-    // 手動クリック送信の場合は音声モードではないとみなす（マイク経由の自動送信以外）
     if (!isListening.value && !isVoiceMode.value) {
       isVoiceMode.value = false;
     }
@@ -99,9 +101,9 @@ export function useInputFooter(inputMode: Ref<InputMode>) {
     inputText.value = "";
 
     if (mode === "memo") {
-      const file = selectedFile.value;
-      clearFile();
-      const related = await addMemory(currentText, file);
+      const files = [...selectedFiles.value];
+      clearFiles();
+      const related = await addMemory(currentText, files);
       if (related && related.length > 0) {
         const summaries = related.map((m) => `・${m.aiSummary}`).join("\n");
         alert(`保存しました！\n\n💡 関連する過去の記憶:\n${summaries}`);
@@ -109,13 +111,10 @@ export function useInputFooter(inputMode: Ref<InputMode>) {
     } else if (mode === "url") {
       await addUrlMemory(currentText);
     } else {
-      // チャットモード (会話タブ or カレンダータブ)
-      clearFile();
-      // 音声モードかどうかを渡して、読み上げの有無を制御
+      clearFiles();
       await askBrain(currentText, isVoiceMode.value);
     }
 
-    // 会話終了後は音声モードをリセットする（必要に応じて調整）
     if (!isListening.value) {
       isVoiceMode.value = false;
     }
@@ -123,16 +122,16 @@ export function useInputFooter(inputMode: Ref<InputMode>) {
 
   return {
     inputText,
-    selectedFile,
-    filePreview,
+    selectedFiles,
+    filePreviews,
     fileInputRef,
     isListening,
     isAiThinking,
     isSpeaking,
     toggleListening,
     handleFileSelect,
-    clearFile,
+    clearFiles,
     handleSend,
-    handleInput, // ★追加: テキストエリアの入力監視用
+    handleInput,
   };
 }

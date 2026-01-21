@@ -15,18 +15,17 @@ const inputMode = computed({
   set: (val) => emit("update:modelValue", val),
 });
 
-// ★修正: inputMode (ComputedRef) をそのまま渡す
 const {
   inputText,
-  selectedFile,
-  filePreview,
+  selectedFiles,
+  filePreviews,
   fileInputRef,
   handleFileSelect,
-  clearFile,
+  clearFiles,
   handleSend,
   isListening,
   toggleListening,
-  handleInput, // ★追加
+  handleInput,
 } = useInputFooter(inputMode);
 
 const { currentUser, startSubscription, isSaving, isAiThinking, isSpeaking } =
@@ -153,27 +152,38 @@ const remainingCount = computed(() =>
       </div>
 
       <div
-        v-if="selectedFile"
-        class="relative mb-2 inline-block animate-fade-in"
+        v-if="selectedFiles.length > 0"
+        class="relative mb-2 flex gap-2 overflow-x-auto pb-2 scrollbar-hide animate-fade-in"
       >
-        <img
-          v-if="filePreview"
-          :src="filePreview"
-          class="h-20 rounded-lg border border-slate-600 object-cover"
-        />
         <div
-          v-else
-          class="h-20 w-20 bg-slate-800 rounded-lg border border-slate-600 flex flex-col items-center justify-center p-2"
+          v-for="(preview, index) in filePreviews"
+          :key="index"
+          class="relative flex-shrink-0"
         >
-          <span class="text-2xl">📄</span
-          ><span
-            class="text-[8px] text-slate-400 truncate w-full text-center mt-1"
-            >{{ selectedFile.name }}</span
-          >
+          <img
+            :src="preview"
+            class="h-20 w-20 rounded-lg border border-slate-600 object-cover"
+          />
         </div>
+        <div
+          v-for="(file, index) in selectedFiles.slice(filePreviews.length)"
+          :key="'file' + index"
+          class="relative flex-shrink-0"
+        >
+          <div
+            class="h-20 w-20 bg-slate-800 rounded-lg border border-slate-600 flex flex-col items-center justify-center p-2"
+          >
+            <span class="text-2xl">📄</span>
+            <span
+              class="text-[8px] text-slate-400 truncate w-full text-center mt-1"
+              >{{ file.name }}</span
+            >
+          </div>
+        </div>
+
         <button
-          @click="clearFile"
-          class="absolute -top-2 -right-2 bg-slate-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-500"
+          @click="clearFiles"
+          class="absolute top-0 right-0 bg-slate-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-500 shadow-lg z-10"
         >
           ×
         </button>
@@ -186,6 +196,7 @@ const remainingCount = computed(() =>
             ref="fileInputRef"
             accept="image/*,application/pdf,text/plain,audio/*"
             class="hidden"
+            multiple
             @change="handleFileSelect"
           />
           <button
@@ -231,7 +242,11 @@ const remainingCount = computed(() =>
 
         <button
           @click="handleSend(inputMode as any)"
-          :disabled="(!inputText && !selectedFile) || isSaving || isAiThinking"
+          :disabled="
+            (!inputText && selectedFiles.length === 0) ||
+            isSaving ||
+            isAiThinking
+          "
           class="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg self-end mb-1"
         >
           ↑

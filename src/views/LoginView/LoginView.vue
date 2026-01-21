@@ -14,13 +14,13 @@ const db = getFirestore();
 const handleGoogleLogin = async () => {
   loading.value = true;
   try {
-    // ★重要: カレンダーの「読み書き」権限を追加
-    googleProvider.addScope("https://www.googleapis.com/auth/calendar.events");
+    // 権限を '.events' からカレンダー全体へのアクセスに変更
+    googleProvider.addScope("https://www.googleapis.com/auth/calendar");
 
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
 
-    // ★重要: カレンダー操作に必要なトークンを取り出して保存
+    // カレンダー操作に必要なトークンを取り出して保存
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const token = credential?.accessToken;
     if (token) {
@@ -114,6 +114,10 @@ const handleGoogleLogin = async () => {
           利用を開始することで、<br />
           <router-link to="/legal" class="underline hover:text-slate-400"
             >利用規約</router-link
+          >
+          および
+          <router-link to="/privacy" class="underline hover:text-slate-400"
+            >プライバシーポリシー</router-link
           >
           に同意したものとみなします。
         </p>

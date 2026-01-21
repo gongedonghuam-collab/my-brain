@@ -7,7 +7,7 @@ export interface Memory {
   tags?: string[];
   createdAt: any;
   hasImage?: boolean;
-  fileType?: string;
+  fileType?: string | null; // ★修正: null を許容するように変更
   embedding?: number[];
   sourceUrl?: string;
   score?: number;

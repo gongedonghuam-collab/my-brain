@@ -1,8 +1,5 @@
-// src/views/HomeView/useHomeView.ts
-
 import { ref, onMounted, watch, nextTick, type Ref, computed } from "vue";
 import { useMyBrain } from "@/composables/useMyBrain";
-// ★修正: 型定義を types から読み込む
 import type { Memory, Todo, DailyReport } from "@/types";
 import mermaid from "mermaid";
 import { httpsCallable, getFunctions } from "firebase/functions";
@@ -10,7 +7,6 @@ import { getApp } from "firebase/app";
 import { useRouter, useRoute } from "vue-router";
 import axios from "axios";
 
-// FullCalendar 関連
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
@@ -42,6 +38,7 @@ export function useHomeView() {
     dailyReports,
     toggleTodo,
     deleteTodo,
+    callGoogleApi, // ★追加: API呼び出しヘルパーを使用
   } = useMyBrain();
   const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
   const editingMemory = ref<Memory | null>(null);
@@ -86,14 +83,15 @@ export function useHomeView() {
   };
 
   const deleteEvent = async (eventId: string) => {
-    const token = localStorage.getItem("google_calendar_token");
-    if (!token) return alert("認証トークンがありません。");
     if (!confirm("削除しますか？")) return;
     try {
-      await axios.delete(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      // callGoogleApiでラップしてトークン切れに対応
+      await callGoogleApi(async (token) => {
+        await axios.delete(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      });
       selectedDateEvents.value = selectedDateEvents.value.filter(
         (e) => e.id !== eventId,
       );
@@ -142,25 +140,29 @@ export function useHomeView() {
   });
 
   const fetchAllCalendars = async () => {
-    const token = localStorage.getItem("google_calendar_token");
-    if (!token) return;
     calendarLoading.value = true;
     try {
-      let calendars = [{ id: "primary", backgroundColor: "#818cf8" }];
-      try {
-        const listRes = await axios.get(
-          "https://www.googleapis.com/calendar/v3/users/me/calendarList",
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        if (listRes.data.items) {
-          calendars = listRes.data.items.map((cal: any) => ({
-            id: cal.id,
-            backgroundColor: cal.backgroundColor || "#818cf8",
-          }));
+      // callGoogleApiを使ってカレンダーリストを取得
+      const calendars = await callGoogleApi(async (token) => {
+        let list = [{ id: "primary", backgroundColor: "#818cf8" }];
+        try {
+          const listRes = await axios.get(
+            "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (listRes.data.items) {
+            list = listRes.data.items.map((cal: any) => ({
+              id: cal.id,
+              backgroundColor: cal.backgroundColor || "#818cf8",
+            }));
+          }
+        } catch (e) {
+          console.warn("List fetch failed, using primary only");
         }
-      } catch (e) {
-        console.warn("List fetch failed");
-      }
+        return list;
+      });
+
+      if (!calendars) return; // トークンがない場合など
 
       const now = new Date();
       const timeMin = new Date(
@@ -173,19 +175,30 @@ export function useHomeView() {
         now.getMonth() + 2,
         0,
       ).toISOString();
-      const promises = calendars.map((cal) =>
-        axios
-          .get(
-            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`,
-            {
-              headers: { Authorization: `Bearer ${token}` },
-              params: { timeMin, timeMax, singleEvents: true, maxResults: 250 },
-            },
-          )
-          .catch(() => ({ data: { items: [] } })),
+
+      // 各カレンダーのイベントを取得（ここもcallGoogleApiでラップ）
+      const promises = calendars.map((cal: any) =>
+        callGoogleApi(async (token) => {
+          return axios
+            .get(
+              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+                params: {
+                  timeMin,
+                  timeMax,
+                  singleEvents: true,
+                  maxResults: 250,
+                },
+              },
+            )
+            .catch((e) => ({ data: { items: [] } })); // 個別のエラーは無視して空配列
+        }),
       );
+
       const results = await Promise.all(promises);
-      const allEvents = results.flatMap((res, index) => {
+      const allEvents = results.flatMap((res: any, index) => {
+        if (!res || !res.data) return [];
         const defaultColor = calendars[index].backgroundColor;
         return (res.data.items || []).map((ev: any) => {
           let bgColor = defaultColor;
@@ -203,16 +216,7 @@ export function useHomeView() {
       });
       calendarOptions.value.events = allEvents;
     } catch (e: any) {
-      if (e.response && e.response.status === 401) {
-        alert("認証切れ。再ログインしてください。");
-        localStorage.removeItem("google_calendar_token");
-        window.location.href = "/login";
-      } else if (e.response && e.response.status === 403) {
-        console.error("Google Calendar API 403 Forbidden:", e);
-        // 403エラーの場合、APIが有効になっていないか、スコープが足りない可能性があります。
-        // ここではアラートを出さずにコンソールログのみにするか、ユーザーに設定を確認するよう促すメッセージを表示します。
-        // alert("カレンダーの読み込みに失敗しました。Google Cloud ConsoleでAPIが有効か確認してください。");
-      }
+      console.error("Calendar fetch global error:", e);
     } finally {
       calendarLoading.value = false;
     }

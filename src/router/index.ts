@@ -5,6 +5,7 @@ import LoginView from "../views/LoginView/LoginView.vue";
 import VerifyEmailView from "../views/VerifyEmailView/VerifyEmailView.vue";
 import LandingView from "../views/LandingView/LandingView.vue";
 import LegalView from "../views/LegalView/LegalView.vue"; // 追加
+import PrivacyPolicy from "../views/PrivacyPolicy/PrivacyPolicy.vue";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -38,6 +39,12 @@ const router = createRouter({
       name: "legal",
       component: LegalView,
       meta: { public: true },
+    },
+    {
+      path: "/privacy", // ★このパスを追加
+      name: "privacy",
+      component: PrivacyPolicy,
+      meta: { public: true }, // ログインしていなくても見れるようにする
     },
   ],
 });

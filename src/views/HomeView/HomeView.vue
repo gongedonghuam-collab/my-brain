@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { useHomeView } from "./useHomeView";
+import { useMyBrain } from "@/composables/useMyBrain";
 
 // コンポーネント
 import AppHeader from "@/components/AppHeader/AppHeader.vue";
@@ -34,6 +36,16 @@ const {
   dailyReports, // ★追加
   isReportModalOpen, // ★追加
 } = useHomeView();
+
+// ★追加: 手動タスク追加用
+const { addManualTodo } = useMyBrain();
+const newTaskTitle = ref("");
+
+const submitTask = async () => {
+  if (!newTaskTitle.value.trim()) return;
+  await addManualTodo(newTaskTitle.value);
+  newTaskTitle.value = "";
+};
 
 // 最新のレポート
 const latestReport =
@@ -88,6 +100,23 @@ const latestReport =
             >🔥 TASKS (AI Extracted)</span
           >
         </div>
+
+        <div class="flex gap-2 mb-4">
+          <input
+            v-model="newTaskTitle"
+            @keydown.enter="submitTask"
+            type="text"
+            placeholder="タスクを追加..."
+            class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-blue-500 placeholder-slate-600"
+          />
+          <button
+            @click="submitTask"
+            class="bg-slate-800 text-white w-10 h-10 rounded-xl flex items-center justify-center hover:bg-slate-700 active:scale-95 transition"
+          >
+            ＋
+          </button>
+        </div>
+
         <div
           v-if="todos.length === 0"
           class="text-xs text-slate-600 px-2 py-4 border border-slate-800 rounded-xl text-center border-dashed"
