@@ -11,7 +11,7 @@ import ChatList from "@/components/ChatList/ChatList.vue";
 import InputFooter from "@/components/InputFooter/InputFooter.vue";
 import MemoryModal from "@/components/MemoryModal/MemoryModal.vue";
 import FullCalendar from "@fullcalendar/vue3";
-import BaseModal from "@/components/BaseModal/BaseModal.vue"; // 既存コンポーネント確認要だが、簡易モーダルを自作
+import BaseModal from "@/components/BaseModal/BaseModal.vue";
 
 const {
   inputMode,
@@ -30,14 +30,15 @@ const {
   deleteEvent,
   relatedMemories,
   isSearchingMemories,
-  todos, // ★追加
-  toggleTodo, // ★追加
-  deleteTodo, // ★追加
-  dailyReports, // ★追加
-  isReportModalOpen, // ★追加
+  todos,
+  toggleTodo,
+  deleteTodo,
+  dailyReports,
+  isReportModalOpen,
+  isCalendarConnected, // ★追加
+  reconnectCalendar, // ★追加
 } = useHomeView();
 
-// ★追加: 手動タスク追加用
 const { addManualTodo } = useMyBrain();
 const newTaskTitle = ref("");
 
@@ -47,7 +48,6 @@ const submitTask = async () => {
   newTaskTitle.value = "";
 };
 
-// 最新のレポート
 const latestReport =
   dailyReports.value.length > 0 ? dailyReports.value[0] : null;
 </script>
@@ -179,6 +179,21 @@ const latestReport =
         <div
           class="calendar-wrapper backdrop-blur-xl bg-slate-900/60 md:bg-slate-800/40 relative flex flex-col border-b md:border border-slate-700/30 md:rounded-3xl shadow-2xl overflow-hidden"
         >
+          <div
+            v-if="!isCalendarConnected"
+            class="absolute inset-0 bg-slate-950/80 z-30 flex flex-col items-center justify-center backdrop-blur-sm p-6 text-center"
+          >
+            <p class="text-slate-300 font-bold mb-4">
+              Googleカレンダーとの接続が切れました
+            </p>
+            <button
+              @click="reconnectCalendar"
+              class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2"
+            >
+              <span class="text-xl">🔄</span> 再接続する
+            </button>
+          </div>
+
           <div
             v-if="calendarLoading"
             class="absolute inset-0 bg-slate-950/60 z-20 flex items-center justify-center backdrop-blur-sm"

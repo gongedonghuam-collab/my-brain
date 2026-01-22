@@ -29,7 +29,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from "axios";
 import type { Memory, ChatLog, User, Todo, DailyReport } from "@/types";
 
-// ★修正: Payment Linkを直接指定（画像にあったURL）
+// Payment Linkを直接指定
 const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/6oU28r4Hi71dglzd1z6AM00";
 const ADMIN_EMAILS = ["gongedonghuam@gmail.com"];
 
@@ -44,16 +44,24 @@ const isSaving = ref(false);
 const isSpeaking = ref(false);
 const activeTag = ref<string | null>(null);
 
+// カレンダー接続状態管理
+const isCalendarConnected = ref(true);
+
 // --- ヘルパー: Google API トークンリフレッシュ ---
 const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
   let token = localStorage.getItem("google_calendar_token");
-  if (!token) return null;
+  if (!token) {
+    isCalendarConnected.value = false;
+    return null;
+  }
 
   try {
-    return await callback(token);
+    const res = await callback(token);
+    isCalendarConnected.value = true;
+    return res;
   } catch (e: any) {
     if (e.response && e.response.status === 401) {
-      console.log("Token expired, refreshing...");
+      console.log("Token expired, trying silent refresh...");
       try {
         const provider = new GoogleAuthProvider();
         provider.addScope("https://www.googleapis.com/auth/calendar");
@@ -63,14 +71,36 @@ const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
 
         if (newToken) {
           localStorage.setItem("google_calendar_token", newToken);
+          isCalendarConnected.value = true;
           return await callback(newToken);
         }
       } catch (refreshError) {
-        console.error("Token refresh failed:", refreshError);
-        throw refreshError;
+        console.warn("Token refresh blocked or failed:", refreshError);
+        isCalendarConnected.value = false;
+        return null;
       }
     }
+    console.error("API Call Error:", e);
     throw e;
+  }
+};
+
+// 手動再接続用
+const reconnectCalendar = async () => {
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.addScope("https://www.googleapis.com/auth/calendar");
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const token = credential?.accessToken;
+    if (token) {
+      localStorage.setItem("google_calendar_token", token);
+      isCalendarConnected.value = true;
+      alert("再接続しました！");
+      window.location.reload();
+    }
+  } catch (e: any) {
+    alert("再接続に失敗しました: " + e.message);
   }
 };
 
@@ -339,15 +369,12 @@ export function useMyBrain() {
     }
   };
 
-  // ★修正: Payment Linkへ直接リダイレクトする方式に変更
   const startSubscription = async () => {
     if (!currentUser.value) return;
     const confirmed = confirm(
       "PROプラン（月額980円）の決済画面へ移動しますか？",
     );
     if (!confirmed) return;
-
-    // Stripe Payment Linkへ直接移動
     window.location.href = STRIPE_PAYMENT_LINK;
   };
 
@@ -523,7 +550,6 @@ export function useMyBrain() {
     }
   };
 
-  // ★修正: 複数画像対応(File[]) & ローカル即時反映
   const addMemory = async (text: string, files?: File[] | null) => {
     if (!(await checkAndIncrementUsage())) return null;
     isSaving.value = true;
@@ -537,7 +563,7 @@ export function useMyBrain() {
         tags: [],
         aiSummary: "保存中...",
         hasImage: !!hasImages,
-        fileType: null, // ★修正: undefined ではなく null にする
+        fileType: null, // undefined非対応のためnull
       });
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) {
@@ -588,7 +614,7 @@ export function useMyBrain() {
         embedding: embedding,
       });
 
-      // ★修正: ローカル更新（unshiftで即時反映）
+      // ローカル更新
       memories.value.unshift({
         id: docRef.id,
         userId: currentUser.value.uid,
@@ -597,7 +623,7 @@ export function useMyBrain() {
         tags: aiData.tags,
         createdAt: new Date(),
         hasImage: !!hasImages,
-        fileType: null, // ★修正: undefined ではなく null にする
+        fileType: null,
         embedding: embedding,
       });
 
@@ -723,7 +749,6 @@ export function useMyBrain() {
     }
   };
 
-  // ★修正: メモ更新時にローカルのstateも即時反映
   const updateMemory = async (id: string, newText: string) => {
     await updateDoc(doc(db, "memories", id), { text: newText });
     const index = memories.value.findIndex((m) => m.id === id);
@@ -754,6 +779,31 @@ export function useMyBrain() {
     return Array.from(tags);
   });
 
+  // ★追加: LINE連携解除
+  const unlinkLine = async () => {
+    if (!currentUser.value) return;
+    if (
+      !confirm(
+        "LINE連携を解除しますか？\n\n解除すると、LINEからのメモ保存や通知機能が使えなくなります。",
+      )
+    )
+      return;
+
+    try {
+      const func = httpsCallable(getFunctions(), "unlinkLineAccount");
+      await func();
+
+      // ローカルの状態も即座に更新
+      if (currentUser.value) {
+        currentUser.value.isLineLinked = false;
+      }
+      alert("LINE連携を解除しました。");
+    } catch (e: any) {
+      console.error(e);
+      alert("解除に失敗しました: " + e.message);
+    }
+  };
+
   return {
     currentUser,
     memories,
@@ -767,6 +817,7 @@ export function useMyBrain() {
     isSpeaking,
     activeTag,
     allTags,
+    isCalendarConnected,
     initAuth,
     logout,
     addMemory,
@@ -783,5 +834,7 @@ export function useMyBrain() {
     speakText,
     addManualTodo,
     callGoogleApi,
+    reconnectCalendar,
+    unlinkLine, // ★追加
   };
 }

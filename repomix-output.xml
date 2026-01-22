@@ -133,79 +133,6 @@ vite.config.ts
 <files>
 This section contains the contents of the repository's files.
 
-<file path="src/views/PrivacyPolicy/PrivacyPolicy.vue">
-<template>
-  <div
-    class="min-h-screen bg-slate-950 text-slate-300 p-6 md:p-12 font-sans overflow-y-auto"
-  >
-    <div class="max-w-3xl mx-auto pb-20">
-      <h1 class="text-2xl font-bold text-white mb-8">プライバシーポリシー</h1>
-
-      <div class="space-y-6 text-sm leading-relaxed">
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">1. 収集する情報</h2>
-          <p>当アプリ「My Brain」は、以下の情報を収集します。</p>
-          <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
-            <li>
-              Googleアカウント情報（メールアドレス、氏名、プロフィール画像）
-            </li>
-            <li>ユーザーが入力したメモ、画像、チャット履歴</li>
-            <li>Googleカレンダーの予定情報（ユーザーが許可した場合のみ）</li>
-          </ul>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">2. 情報の利用目的</h2>
-          <p>収集した情報は、以下の目的で利用します。</p>
-          <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
-            <li>
-              アプリの機能提供（メモの保存、AIによる整理、カレンダー連携など）
-            </li>
-            <li>ユーザー認証およびアカウント管理</li>
-            <li>サービスの改善および不具合の修正</li>
-          </ul>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">3. 第三者への提供</h2>
-          <p>
-            当アプリは、法令に基づく場合を除き、ユーザーの同意なく個人情報を第三者に提供することはありません。
-          </p>
-          <p class="mt-2">
-            ただし、AI機能の提供にあたり、入力データはGoogle Gemini
-            API等のAIサービスプロバイダーに送信される場合があります。これらのデータはサービスの品質向上のために利用される可能性がありますが、個人を特定する形での外部公開は行われません。
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">
-            4. データの保存とセキュリティ
-          </h2>
-          <p>
-            ユーザーデータはFirebase（Google
-            Cloud）上に安全に保存されます。通信はすべてSSL/TLSにより暗号化されています。
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">5. お問い合わせ</h2>
-          <p>
-            本ポリシーに関するお問い合わせは、以下のメールアドレスまでお願いいたします。
-          </p>
-          <p class="mt-1">gongedonghuam@gmail.com</p>
-        </section>
-
-        <div class="mt-10 border-t border-slate-800 pt-6">
-          <router-link to="/" class="text-blue-400 hover:underline"
-            >トップページに戻る</router-link
-          >
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-</file>
-
 <file path="functions/.gitignore">
 node_modules/
 *.local
@@ -1350,63 +1277,6 @@ export function useMemoList(
 }
 </file>
 
-<file path="src/components/MemoryModal/MemoryModal.vue">
-<script setup lang="ts">
-import { useMemoryModal } from "./useMemoryModal";
-import type { Memory } from "@/types";
-
-const props = defineProps<{
-  memory: Memory | null;
-}>();
-
-const emit = defineEmits(["close"]);
-
-const { editContent, saveUpdate, remove } = useMemoryModal(props, emit);
-</script>
-
-<template>
-  <div
-    v-if="memory"
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-    @click.self="$emit('close')"
-  >
-    <div
-      class="bg-slate-900 w-full max-w-4xl h-[90vh] rounded-3xl p-6 shadow-2xl border border-slate-700 flex flex-col"
-    >
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="font-bold text-xl text-white">📝 詳細・編集</h3>
-        <button
-          @click="remove"
-          class="text-sm text-red-400 hover:text-red-300 font-bold px-3 py-1 rounded hover:bg-red-900/20"
-        >
-          削除
-        </button>
-      </div>
-
-      <textarea
-        v-model="editContent"
-        class="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-6 text-base text-slate-300 outline-none focus:border-blue-500 mb-4 resize-none leading-relaxed"
-      ></textarea>
-
-      <div class="flex gap-4">
-        <button
-          @click="$emit('close')"
-          class="flex-1 py-4 rounded-xl font-bold text-slate-400 hover:bg-slate-800 transition"
-        >
-          閉じる
-        </button>
-        <button
-          @click="saveUpdate"
-          class="flex-1 py-4 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-500 transition shadow-lg shadow-blue-900/20"
-        >
-          保存
-        </button>
-      </div>
-    </div>
-  </div>
-</template>
-</file>
-
 <file path="src/components/MemoryModal/useMemoryModal.ts">
 import { ref, watch } from "vue";
 import { useMyBrain, type Memory } from "@/composables/useMyBrain";
@@ -2021,33 +1891,76 @@ export default function useLoginView() {
 }
 </file>
 
-<file path="src/App.vue">
-<script setup lang="ts">
-import { onMounted, watch } from "vue";
-import { useRouter } from "vue-router";
-import { useMyBrain } from "@/composables/useMyBrain";
-
-const { initAuth, currentUser } = useMyBrain();
-const router = useRouter();
-
-onMounted(() => {
-  initAuth(); // 認証監視スタート
-});
-
-// ★追加: ユーザー状態を監視し、予期せずログアウト状態になったらログイン画面へ
-watch(currentUser, (newUser) => {
-  if (newUser === null) {
-    // 現在のページが公開ページ（ログイン不要ページ）でなければリダイレクト
-    const publicPages = ["/", "/login", "/legal", "/verify-email"];
-    if (!publicPages.includes(router.currentRoute.value.path)) {
-      router.push("/login");
-    }
-  }
-});
-</script>
-
+<file path="src/views/PrivacyPolicy/PrivacyPolicy.vue">
 <template>
-  <router-view />
+  <div
+    class="min-h-screen bg-slate-950 text-slate-300 p-6 md:p-12 font-sans overflow-y-auto"
+  >
+    <div class="max-w-3xl mx-auto pb-20">
+      <h1 class="text-2xl font-bold text-white mb-8">プライバシーポリシー</h1>
+
+      <div class="space-y-6 text-sm leading-relaxed">
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">1. 収集する情報</h2>
+          <p>当アプリ「My Brain」は、以下の情報を収集します。</p>
+          <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
+            <li>
+              Googleアカウント情報（メールアドレス、氏名、プロフィール画像）
+            </li>
+            <li>ユーザーが入力したメモ、画像、チャット履歴</li>
+            <li>Googleカレンダーの予定情報（ユーザーが許可した場合のみ）</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">2. 情報の利用目的</h2>
+          <p>収集した情報は、以下の目的で利用します。</p>
+          <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
+            <li>
+              アプリの機能提供（メモの保存、AIによる整理、カレンダー連携など）
+            </li>
+            <li>ユーザー認証およびアカウント管理</li>
+            <li>サービスの改善および不具合の修正</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">3. 第三者への提供</h2>
+          <p>
+            当アプリは、法令に基づく場合を除き、ユーザーの同意なく個人情報を第三者に提供することはありません。
+          </p>
+          <p class="mt-2">
+            ただし、AI機能の提供にあたり、入力データはGoogle Gemini
+            API等のAIサービスプロバイダーに送信される場合があります。これらのデータはサービスの品質向上のために利用される可能性がありますが、個人を特定する形での外部公開は行われません。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">
+            4. データの保存とセキュリティ
+          </h2>
+          <p>
+            ユーザーデータはFirebase（Google
+            Cloud）上に安全に保存されます。通信はすべてSSL/TLSにより暗号化されています。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">5. お問い合わせ</h2>
+          <p>
+            本ポリシーに関するお問い合わせは、以下のメールアドレスまでお願いいたします。
+          </p>
+          <p class="mt-1">gongedonghuam@gmail.com</p>
+        </section>
+
+        <div class="mt-10 border-t border-slate-800 pt-6">
+          <router-link to="/" class="text-blue-400 hover:underline"
+            >トップページに戻る</router-link
+          >
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 </file>
 
@@ -2402,398 +2315,61 @@ export function useChatList() {
 }
 </file>
 
-<file path="src/types/index.ts">
-// 脳みそに保存するデータの型
-export interface Memory {
-  id: string;
-  userId: string;
-  text: string;
-  aiSummary?: string;
-  tags?: string[];
-  createdAt: any;
-  hasImage?: boolean;
-  fileType?: string;
-  embedding?: number[];
-  sourceUrl?: string;
-  score?: number;
-}
+<file path="src/components/MemoryModal/MemoryModal.vue">
+<script setup lang="ts">
+import { useMemoryModal } from "./useMemoryModal";
+import type { Memory } from "@/types";
 
-export interface ChatLog {
-  id: string;
-  userId: string;
-  question: string;
-  answer: string;
-  createdAt: any;
-  mermaidCode?: string | null;
-  action?: {
-    title: string;
-    date?: string;
-    url: string;
-  };
-  // ★追加: アニメーション表示用
-  displayAnswer?: string;
-  isAnimating?: boolean;
-}
+const props = defineProps<{
+  memory: Memory | null;
+}>();
 
-export interface User {
-  uid: string;
-  email: string;
-  displayName?: string;
-  photoURL?: string | null;
-  isPro?: boolean;
-  dailyUsage?: number;
-  lastUsageDate?: string;
-  stripeId?: string;
-  role?: string;
-  isLineLinked?: boolean;
-}
+const emit = defineEmits(["close"]);
 
-export interface Todo {
-  id: string;
-  userId: string;
-  title: string;
-  isCompleted: boolean;
-  createdAt: any;
-  sourceMemoryId?: string;
-}
+const { editContent, saveUpdate, remove } = useMemoryModal(props, emit);
+</script>
 
-export interface DailyReport {
-  id: string;
-  userId: string;
-  date: string;
-  content: string;
-  highlights: string[];
-  createdAt: any;
-}
-</file>
+<template>
+  <div
+    v-if="memory"
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+    @click.self="$emit('close')"
+  >
+    <div
+      class="bg-slate-900 w-full max-w-4xl h-[90vh] rounded-3xl p-6 shadow-2xl border border-slate-700 flex flex-col"
+    >
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-bold text-xl text-white">📝 詳細・編集</h3>
+        <button
+          @click="remove"
+          class="text-sm text-red-400 hover:text-red-300 font-bold px-3 py-1 rounded hover:bg-red-900/20"
+        >
+          削除
+        </button>
+      </div>
 
-<file path="src/views/HomeView/useHomeView.ts">
-import { ref, onMounted, watch, nextTick, type Ref, computed } from "vue";
-import { useMyBrain } from "@/composables/useMyBrain";
-import type { Memory, Todo, DailyReport } from "@/types";
-import mermaid from "mermaid";
-import { httpsCallable, getFunctions } from "firebase/functions";
-import { getApp } from "firebase/app";
-import { useRouter, useRoute } from "vue-router";
-import axios from "axios";
+      <textarea
+        v-model="editContent"
+        class="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-6 text-base text-slate-300 outline-none focus:border-blue-500 mb-4 resize-none leading-relaxed"
+      ></textarea>
 
-import dayGridPlugin from "@fullcalendar/daygrid";
-import timeGridPlugin from "@fullcalendar/timegrid";
-import interactionPlugin from "@fullcalendar/interaction";
-import listPlugin from "@fullcalendar/list";
-import type { CalendarOptions } from "@fullcalendar/core";
-
-const GOOGLE_CALENDAR_COLORS: Record<string, string> = {
-  "1": "#7986cb",
-  "2": "#33b679",
-  "3": "#8e24aa",
-  "4": "#e67c73",
-  "5": "#f6c026",
-  "6": "#f4511e",
-  "7": "#039be5",
-  "8": "#616161",
-  "9": "#3f51b5",
-  "10": "#0b8043",
-  "11": "#d50000",
-};
-
-export function useHomeView() {
-  const {
-    initAuth,
-    chatLogs,
-    isAiThinking,
-    currentUser,
-    findRelatedMemories,
-    todos,
-    dailyReports,
-    toggleTodo,
-    deleteTodo,
-    callGoogleApi, // ★追加: API呼び出しヘルパーを使用
-  } = useMyBrain();
-  const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
-  const editingMemory = ref<Memory | null>(null);
-  const chatContainerRef = ref<HTMLElement | null>(null);
-  const showSuccessToast = ref(false);
-  const calendarLoading = ref(false);
-  const isReportModalOpen = ref(false);
-  const route = useRoute();
-  const router = useRouter();
-  const isBottomSheetOpen = ref(false);
-  const selectedDateStr = ref("");
-  const selectedDateEvents = ref<any[]>([]);
-  const relatedMemories = ref<Memory[]>([]);
-  const isSearchingMemories = ref(false);
-
-  const openBottomSheet = async (dateStr: string) => {
-    selectedDateStr.value = dateStr;
-    relatedMemories.value = [];
-    isSearchingMemories.value = false;
-    const events = (calendarOptions.value.events as any[]) || [];
-    selectedDateEvents.value = events
-      .filter((ev: any) => ev.start && ev.start.startsWith(dateStr))
-      .sort(
-        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
-      );
-    isBottomSheetOpen.value = true;
-    if (selectedDateEvents.value.length > 0) {
-      isSearchingMemories.value = true;
-      const queryText = selectedDateEvents.value.map((e) => e.title).join(" ");
-      try {
-        relatedMemories.value = await findRelatedMemories(queryText);
-      } catch (e) {
-        console.error("Related search failed", e);
-      } finally {
-        isSearchingMemories.value = false;
-      }
-    }
-  };
-
-  const closeBottomSheet = () => {
-    isBottomSheetOpen.value = false;
-  };
-
-  const deleteEvent = async (eventId: string) => {
-    if (!confirm("削除しますか？")) return;
-    try {
-      // callGoogleApiでラップしてトークン切れに対応
-      await callGoogleApi(async (token) => {
-        await axios.delete(
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-      });
-      selectedDateEvents.value = selectedDateEvents.value.filter(
-        (e) => e.id !== eventId,
-      );
-      const currentEvents = (calendarOptions.value.events as any[]) || [];
-      calendarOptions.value.events = currentEvents.filter(
-        (e: any) => e.id !== eventId,
-      );
-    } catch (e: any) {
-      alert("削除失敗: " + e.message);
-    }
-  };
-
-  const calendarOptions = ref<CalendarOptions>({
-    plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
-    initialView: "dayGridMonth",
-    headerToolbar: { left: "prev", center: "title", right: "next" },
-    events: [] as any[],
-    locale: "ja",
-    height: "100%",
-    expandRows: true,
-    dayMaxEvents: 2,
-    moreLinkClick: (arg) => {
-      openBottomSheet(arg.date.toISOString().split("T")[0]);
-      return "void";
-    },
-    dateClick: (info) => {
-      openBottomSheet(info.dateStr);
-    },
-    eventClick: (info) => {
-      info.jsEvent.preventDefault();
-      openBottomSheet(info.event.startStr.split("T")[0]);
-    },
-    eventTimeFormat: {
-      hour: "numeric",
-      minute: "2-digit",
-      meridiem: false,
-      hour12: false,
-    },
-    longPressDelay: 500,
-    handleWindowResize: true,
-    eventContent: function (arg: any) {
-      return {
-        html: `<div class="fc-content-custom"><div class="fc-marker" style="background-color: ${arg.event.backgroundColor}"></div><div class="fc-details"><span class="fc-time-custom">${arg.timeText}</span><span class="fc-title-custom">${arg.event.title}</span></div></div>`,
-      };
-    },
-  });
-
-  const fetchAllCalendars = async () => {
-    calendarLoading.value = true;
-    try {
-      // callGoogleApiを使ってカレンダーリストを取得
-      const calendars = await callGoogleApi(async (token) => {
-        let list = [{ id: "primary", backgroundColor: "#818cf8" }];
-        try {
-          const listRes = await axios.get(
-            "https://www.googleapis.com/calendar/v3/users/me/calendarList",
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
-          if (listRes.data.items) {
-            list = listRes.data.items.map((cal: any) => ({
-              id: cal.id,
-              backgroundColor: cal.backgroundColor || "#818cf8",
-            }));
-          }
-        } catch (e) {
-          console.warn("List fetch failed, using primary only");
-        }
-        return list;
-      });
-
-      if (!calendars) return; // トークンがない場合など
-
-      const now = new Date();
-      const timeMin = new Date(
-        now.getFullYear(),
-        now.getMonth() - 1,
-        1,
-      ).toISOString();
-      const timeMax = new Date(
-        now.getFullYear(),
-        now.getMonth() + 2,
-        0,
-      ).toISOString();
-
-      // 各カレンダーのイベントを取得（ここもcallGoogleApiでラップ）
-      const promises = calendars.map((cal: any) =>
-        callGoogleApi(async (token) => {
-          return axios
-            .get(
-              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`,
-              {
-                headers: { Authorization: `Bearer ${token}` },
-                params: {
-                  timeMin,
-                  timeMax,
-                  singleEvents: true,
-                  maxResults: 250,
-                },
-              },
-            )
-            .catch((e) => ({ data: { items: [] } })); // 個別のエラーは無視して空配列
-        }),
-      );
-
-      const results = await Promise.all(promises);
-      const allEvents = results.flatMap((res: any, index) => {
-        if (!res || !res.data) return [];
-        const defaultColor = calendars[index].backgroundColor;
-        return (res.data.items || []).map((ev: any) => {
-          let bgColor = defaultColor;
-          if (ev.colorId && GOOGLE_CALENDAR_COLORS[ev.colorId])
-            bgColor = GOOGLE_CALENDAR_COLORS[ev.colorId];
-          return {
-            id: ev.id,
-            title: ev.summary || "(なし)",
-            start: ev.start.dateTime || ev.start.date,
-            end: ev.end.dateTime || ev.end.date,
-            backgroundColor: bgColor,
-            allDay: !ev.start.dateTime,
-          };
-        });
-      });
-      calendarOptions.value.events = allEvents;
-    } catch (e: any) {
-      console.error("Calendar fetch global error:", e);
-    } finally {
-      calendarLoading.value = false;
-    }
-  };
-
-  const scrollToBottom = async () => {
-    if (inputMode.value !== "chat") return;
-    await nextTick();
-    setTimeout(() => {
-      if (chatContainerRef.value)
-        chatContainerRef.value.scrollTo({
-          top: chatContainerRef.value.scrollHeight,
-          behavior: "smooth",
-        });
-    }, 100);
-  };
-
-  onMounted(async () => {
-    initAuth();
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: "dark",
-      securityLevel: "loose",
-      suppressErrorRendering: true,
-    });
-    const code = route.query.code as string;
-    if (code) {
-      window.history.replaceState({}, document.title, "/app");
-      try {
-        const functions = getFunctions(getApp(), "asia-northeast1");
-        const linkFunc = httpsCallable(functions, "linkLineAccount");
-        await linkFunc({ code, redirectUri: window.location.origin + "/app" });
-        showSuccessToast.value = true;
-        setTimeout(() => (showSuccessToast.value = false), 5000);
-      } catch (e) {
-        alert("LINE連携失敗");
-      }
-    }
-    if (currentUser.value) fetchAllCalendars();
-  });
-
-  watch(inputMode, (newMode) => {
-    if (newMode === "chat") {
-      nextTick(() => {
-        if (chatContainerRef.value)
-          chatContainerRef.value.scrollTop =
-            chatContainerRef.value.scrollHeight;
-      });
-      scrollToBottom();
-    } else if (newMode === "calendar") {
-      setTimeout(() => {
-        window.dispatchEvent(new Event("resize"));
-        fetchAllCalendars();
-      }, 100);
-    }
-  });
-
-  watch(chatLogs, scrollToBottom, { deep: true });
-  watch(isAiThinking, scrollToBottom);
-
-  const onOpenDetail = (memo: Memory) => {
-    editingMemory.value = memo;
-  };
-  const onModeChange = (newMode: "memo" | "chat" | "url" | "calendar") => {
-    inputMode.value = newMode;
-  };
-  const formatDateHeader = (dateStr: string) => {
-    if (!dateStr) return "";
-    const d = new Date(dateStr);
-    const days = ["日", "月", "火", "水", "木", "金", "土"];
-    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${days[d.getDay()]})`;
-  };
-  const formatTimeRange = (ev: any) => {
-    if (ev.allDay) return "終日";
-    const start = new Date(ev.start);
-    return start.toLocaleTimeString("ja-JP", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  return {
-    inputMode,
-    editingMemory,
-    chatContainerRef,
-    showSuccessToast,
-    calendarLoading,
-    calendarOptions,
-    isBottomSheetOpen,
-    selectedDateStr,
-    selectedDateEvents,
-    openBottomSheet,
-    closeBottomSheet,
-    onOpenDetail,
-    onModeChange,
-    formatDateHeader,
-    formatTimeRange,
-    deleteEvent,
-    relatedMemories,
-    isSearchingMemories,
-    todos,
-    dailyReports,
-    toggleTodo,
-    deleteTodo,
-    isReportModalOpen,
-  };
-}
+      <div class="flex gap-4">
+        <button
+          @click="$emit('close')"
+          class="flex-1 py-4 rounded-xl font-bold text-slate-400 hover:bg-slate-800 transition"
+        >
+          閉じる
+        </button>
+        <button
+          @click="saveUpdate"
+          class="flex-1 py-4 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-500 transition shadow-lg shadow-blue-900/20"
+        >
+          保存
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
 </file>
 
 <file path="src/views/VerifyEmailView/VerifyEmailView.vue">
@@ -2916,6 +2492,36 @@ const handleLogout = async () => {
       </div>
     </div>
   </div>
+</template>
+</file>
+
+<file path="src/App.vue">
+<script setup lang="ts">
+import { onMounted, watch } from "vue";
+import { useRouter } from "vue-router";
+import { useMyBrain } from "@/composables/useMyBrain";
+
+const { initAuth, currentUser } = useMyBrain();
+const router = useRouter();
+
+onMounted(() => {
+  initAuth(); // 認証監視スタート
+});
+
+// ★追加: ユーザー状態を監視し、予期せずログアウト状態になったらログイン画面へ
+watch(currentUser, (newUser) => {
+  if (newUser === null) {
+    // 現在のページが公開ページ（ログイン不要ページ）でなければリダイレクト
+    const publicPages = ["/", "/login", "/legal", "/verify-email"];
+    if (!publicPages.includes(router.currentRoute.value.path)) {
+      router.push("/login");
+    }
+  }
+});
+</script>
+
+<template>
+  <router-view />
 </template>
 </file>
 
@@ -3237,142 +2843,397 @@ onMounted(() => {
 </template>
 </file>
 
-<file path="src/components/InputFooter/useInputFooter.ts">
-import { ref, onMounted, type Ref } from "vue";
+<file path="src/types/index.ts">
+// 脳みそに保存するデータの型
+export interface Memory {
+  id: string;
+  userId: string;
+  text: string;
+  aiSummary?: string;
+  tags?: string[];
+  createdAt: any;
+  hasImage?: boolean;
+  fileType?: string | null; // ★修正: null を許容するように変更
+  embedding?: number[];
+  sourceUrl?: string;
+  score?: number;
+}
+
+export interface ChatLog {
+  id: string;
+  userId: string;
+  question: string;
+  answer: string;
+  createdAt: any;
+  mermaidCode?: string | null;
+  action?: {
+    title: string;
+    date?: string;
+    url: string;
+  };
+  // ★追加: アニメーション表示用
+  displayAnswer?: string;
+  isAnimating?: boolean;
+}
+
+export interface User {
+  uid: string;
+  email: string;
+  displayName?: string;
+  photoURL?: string | null;
+  isPro?: boolean;
+  dailyUsage?: number;
+  lastUsageDate?: string;
+  stripeId?: string;
+  role?: string;
+  isLineLinked?: boolean;
+}
+
+export interface Todo {
+  id: string;
+  userId: string;
+  title: string;
+  isCompleted: boolean;
+  createdAt: any;
+  sourceMemoryId?: string;
+}
+
+export interface DailyReport {
+  id: string;
+  userId: string;
+  date: string;
+  content: string;
+  highlights: string[];
+  createdAt: any;
+}
+</file>
+
+<file path="src/views/HomeView/useHomeView.ts">
+import { ref, onMounted, watch, nextTick, computed } from "vue";
 import { useMyBrain } from "@/composables/useMyBrain";
+import type { Memory } from "@/types";
+import mermaid from "mermaid";
+import { httpsCallable, getFunctions } from "firebase/functions";
+import { getApp } from "firebase/app";
+import { useRouter, useRoute } from "vue-router";
+import axios from "axios";
 
-type InputMode = "memo" | "chat" | "url" | "calendar";
+import dayGridPlugin from "@fullcalendar/daygrid";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import listPlugin from "@fullcalendar/list";
+import type { CalendarOptions } from "@fullcalendar/core";
 
-export function useInputFooter(inputMode: Ref<InputMode>) {
-  const { addMemory, addUrlMemory, askBrain, isAiThinking, isSpeaking } =
-    useMyBrain();
+const GOOGLE_CALENDAR_COLORS: Record<string, string> = {
+  "1": "#7986cb",
+  "2": "#33b679",
+  "3": "#8e24aa",
+  "4": "#e67c73",
+  "5": "#f6c026",
+  "6": "#f4511e",
+  "7": "#039be5",
+  "8": "#616161",
+  "9": "#3f51b5",
+  "10": "#0b8043",
+  "11": "#d50000",
+};
 
-  const inputText = ref("");
-  // ★修正: 配列で管理
-  const selectedFiles = ref<File[]>([]);
-  const filePreviews = ref<string[]>([]);
-  const fileInputRef = ref<HTMLInputElement | null>(null);
-  const isListening = ref(false);
-  const isVoiceMode = ref(false);
+export function useHomeView() {
+  const {
+    initAuth,
+    chatLogs,
+    isAiThinking,
+    currentUser,
+    findRelatedMemories,
+    todos,
+    dailyReports,
+    toggleTodo,
+    deleteTodo,
+    callGoogleApi,
+    isCalendarConnected, // ★追加
+    reconnectCalendar, // ★追加
+  } = useMyBrain();
+  const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
+  const editingMemory = ref<Memory | null>(null);
+  const chatContainerRef = ref<HTMLElement | null>(null);
+  const showSuccessToast = ref(false);
+  const calendarLoading = ref(false);
+  const isReportModalOpen = ref(false);
+  const route = useRoute();
+  const router = useRouter();
+  const isBottomSheetOpen = ref(false);
+  const selectedDateStr = ref("");
+  const selectedDateEvents = ref<any[]>([]);
+  const relatedMemories = ref<Memory[]>([]);
+  const isSearchingMemories = ref(false);
 
-  let recognition: any = null;
+  const openBottomSheet = async (dateStr: string) => {
+    selectedDateStr.value = dateStr;
+    relatedMemories.value = [];
+    isSearchingMemories.value = false;
+    const events = (calendarOptions.value.events as any[]) || [];
+    selectedDateEvents.value = events
+      .filter((ev: any) => ev.start && ev.start.startsWith(dateStr))
+      .sort(
+        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+      );
+    isBottomSheetOpen.value = true;
+    if (selectedDateEvents.value.length > 0) {
+      isSearchingMemories.value = true;
+      const queryText = selectedDateEvents.value.map((e) => e.title).join(" ");
+      try {
+        relatedMemories.value = await findRelatedMemories(queryText);
+      } catch (e) {
+        console.error("Related search failed", e);
+      } finally {
+        isSearchingMemories.value = false;
+      }
+    }
+  };
 
-  onMounted(() => {
-    if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
-      const SpeechRecognition =
-        (window as any).webkitSpeechRecognition ||
-        (window as any).SpeechRecognition;
-      recognition = new SpeechRecognition();
-      recognition.lang = "ja-JP";
-      recognition.continuous = false;
-      recognition.interimResults = true;
+  const closeBottomSheet = () => {
+    isBottomSheetOpen.value = false;
+  };
 
-      recognition.onresult = (event: any) => {
-        const transcript = Array.from(event.results)
-          .map((r: any) => r[0].transcript)
-          .join("");
-        inputText.value = transcript;
+  const deleteEvent = async (eventId: string) => {
+    if (!confirm("削除しますか？")) return;
+    try {
+      await callGoogleApi(async (token) => {
+        await axios.delete(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      });
+      selectedDateEvents.value = selectedDateEvents.value.filter(
+        (e) => e.id !== eventId,
+      );
+      const currentEvents = (calendarOptions.value.events as any[]) || [];
+      calendarOptions.value.events = currentEvents.filter(
+        (e: any) => e.id !== eventId,
+      );
+    } catch (e: any) {
+      alert("削除失敗: " + e.message);
+    }
+  };
+
+  const calendarOptions = ref<CalendarOptions>({
+    plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
+    initialView: "dayGridMonth",
+    headerToolbar: { left: "prev", center: "title", right: "next" },
+    events: [] as any[],
+    locale: "ja",
+    height: "100%",
+    expandRows: true,
+    dayMaxEvents: 2,
+    moreLinkClick: (arg) => {
+      openBottomSheet(arg.date.toISOString().split("T")[0]);
+      return "void";
+    },
+    dateClick: (info) => {
+      openBottomSheet(info.dateStr);
+    },
+    eventClick: (info) => {
+      info.jsEvent.preventDefault();
+      openBottomSheet(info.event.startStr.split("T")[0]);
+    },
+    eventTimeFormat: {
+      hour: "numeric",
+      minute: "2-digit",
+      meridiem: false,
+      hour12: false,
+    },
+    longPressDelay: 500,
+    handleWindowResize: true,
+    eventContent: function (arg: any) {
+      return {
+        html: `<div class="fc-content-custom"><div class="fc-marker" style="background-color: ${arg.event.backgroundColor}"></div><div class="fc-details"><span class="fc-time-custom">${arg.timeText}</span><span class="fc-title-custom">${arg.event.title}</span></div></div>`,
       };
+    },
+  });
 
-      recognition.onend = () => {
-        isListening.value = false;
-        if (isVoiceMode.value && inputText.value.trim()) {
-          handleSend(inputMode.value);
+  const fetchAllCalendars = async () => {
+    calendarLoading.value = true;
+    try {
+      const calendars = await callGoogleApi(async (token) => {
+        let list = [{ id: "primary", backgroundColor: "#818cf8" }];
+        try {
+          const listRes = await axios.get(
+            "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (listRes.data.items) {
+            list = listRes.data.items.map((cal: any) => ({
+              id: cal.id,
+              backgroundColor: cal.backgroundColor || "#818cf8",
+            }));
+          }
+        } catch (e) {
+          console.warn("List fetch failed, using primary only");
         }
-      };
+        return list;
+      });
+
+      if (!calendars) return;
+
+      const now = new Date();
+      const timeMin = new Date(
+        now.getFullYear(),
+        now.getMonth() - 1,
+        1,
+      ).toISOString();
+      const timeMax = new Date(
+        now.getFullYear(),
+        now.getMonth() + 2,
+        0,
+      ).toISOString();
+
+      const promises = calendars.map((cal: any) =>
+        callGoogleApi(async (token) => {
+          return axios
+            .get(
+              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+                params: {
+                  timeMin,
+                  timeMax,
+                  singleEvents: true,
+                  maxResults: 250,
+                },
+              },
+            )
+            .catch((e) => ({ data: { items: [] } }));
+        }),
+      );
+
+      const results = await Promise.all(promises);
+      const allEvents = results.flatMap((res: any, index) => {
+        if (!res || !res.data) return [];
+        const defaultColor = calendars[index].backgroundColor;
+        return (res.data.items || []).map((ev: any) => {
+          let bgColor = defaultColor;
+          if (ev.colorId && GOOGLE_CALENDAR_COLORS[ev.colorId])
+            bgColor = GOOGLE_CALENDAR_COLORS[ev.colorId];
+          return {
+            id: ev.id,
+            title: ev.summary || "(なし)",
+            start: ev.start.dateTime || ev.start.date,
+            end: ev.end.dateTime || ev.end.date,
+            backgroundColor: bgColor,
+            allDay: !ev.start.dateTime,
+          };
+        });
+      });
+      calendarOptions.value.events = allEvents;
+    } catch (e: any) {
+      console.error("Calendar fetch global error:", e);
+    } finally {
+      calendarLoading.value = false;
+    }
+  };
+
+  const scrollToBottom = async () => {
+    if (inputMode.value !== "chat") return;
+    await nextTick();
+    setTimeout(() => {
+      if (chatContainerRef.value)
+        chatContainerRef.value.scrollTo({
+          top: chatContainerRef.value.scrollHeight,
+          behavior: "smooth",
+        });
+    }, 100);
+  };
+
+  onMounted(async () => {
+    initAuth();
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "dark",
+      securityLevel: "loose",
+      suppressErrorRendering: true,
+    });
+    const code = route.query.code as string;
+    if (code) {
+      window.history.replaceState({}, document.title, "/app");
+      try {
+        const functions = getFunctions(getApp(), "asia-northeast1");
+        const linkFunc = httpsCallable(functions, "linkLineAccount");
+        await linkFunc({ code, redirectUri: window.location.origin + "/app" });
+        showSuccessToast.value = true;
+        setTimeout(() => (showSuccessToast.value = false), 5000);
+      } catch (e) {
+        alert("LINE連携失敗");
+      }
+    }
+    if (currentUser.value) fetchAllCalendars();
+  });
+
+  watch(inputMode, (newMode) => {
+    if (newMode === "chat") {
+      nextTick(() => {
+        if (chatContainerRef.value)
+          chatContainerRef.value.scrollTop =
+            chatContainerRef.value.scrollHeight;
+      });
+      scrollToBottom();
+    } else if (newMode === "calendar") {
+      setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+        fetchAllCalendars();
+      }, 100);
     }
   });
 
-  const toggleListening = () => {
-    if (!recognition) return alert("音声入力未対応ブラウザです");
-    if (isListening.value) {
-      recognition.stop();
-      isVoiceMode.value = false;
-    } else {
-      isListening.value = true;
-      isVoiceMode.value = true;
-      recognition.start();
-    }
+  watch(chatLogs, scrollToBottom, { deep: true });
+  watch(isAiThinking, scrollToBottom);
+
+  const onOpenDetail = (memo: Memory) => {
+    editingMemory.value = memo;
   };
-
-  const handleFileSelect = (e: Event) => {
-    const target = e.target as HTMLInputElement;
-    if (target.files && target.files.length > 0) {
-      // 既存のリストに追加
-      const files = Array.from(target.files);
-      selectedFiles.value = [...selectedFiles.value, ...files];
-
-      // プレビュー生成
-      files.forEach((file) => {
-        if (file.type.startsWith("image/")) {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            if (e.target?.result) {
-              filePreviews.value.push(e.target.result as string);
-            }
-          };
-          reader.readAsDataURL(file);
-        }
-      });
-    }
+  const onModeChange = (newMode: "memo" | "chat" | "url" | "calendar") => {
+    inputMode.value = newMode;
   };
-
-  const clearFiles = () => {
-    selectedFiles.value = [];
-    filePreviews.value = [];
-    if (fileInputRef.value) fileInputRef.value.value = "";
+  const formatDateHeader = (dateStr: string) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    const days = ["日", "月", "火", "水", "木", "金", "土"];
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${days[d.getDay()]})`;
   };
-
-  const handleInput = () => {
-    if (!isListening.value) {
-      isVoiceMode.value = false;
-    }
-  };
-
-  const handleSend = async (mode: InputMode) => {
-    const text = inputText.value.trim();
-    if (!text && selectedFiles.value.length === 0) return;
-
-    if (!isListening.value && !isVoiceMode.value) {
-      isVoiceMode.value = false;
-    }
-
-    const currentText = text;
-    inputText.value = "";
-
-    if (mode === "memo") {
-      const files = [...selectedFiles.value];
-      clearFiles();
-      const related = await addMemory(currentText, files);
-      if (related && related.length > 0) {
-        const summaries = related.map((m) => `・${m.aiSummary}`).join("\n");
-        alert(`保存しました！\n\n💡 関連する過去の記憶:\n${summaries}`);
-      }
-    } else if (mode === "url") {
-      await addUrlMemory(currentText);
-    } else {
-      clearFiles();
-      await askBrain(currentText, isVoiceMode.value);
-    }
-
-    if (!isListening.value) {
-      isVoiceMode.value = false;
-    }
+  const formatTimeRange = (ev: any) => {
+    if (ev.allDay) return "終日";
+    const start = new Date(ev.start);
+    return start.toLocaleTimeString("ja-JP", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   return {
-    inputText,
-    selectedFiles,
-    filePreviews,
-    fileInputRef,
-    isListening,
-    isAiThinking,
-    isSpeaking,
-    toggleListening,
-    handleFileSelect,
-    clearFiles,
-    handleSend,
-    handleInput,
+    inputMode,
+    editingMemory,
+    chatContainerRef,
+    showSuccessToast,
+    calendarLoading,
+    calendarOptions,
+    isBottomSheetOpen,
+    selectedDateStr,
+    selectedDateEvents,
+    openBottomSheet,
+    closeBottomSheet,
+    onOpenDetail,
+    onModeChange,
+    formatDateHeader,
+    formatTimeRange,
+    deleteEvent,
+    relatedMemories,
+    isSearchingMemories,
+    todos,
+    dailyReports,
+    toggleTodo,
+    deleteTodo,
+    isReportModalOpen,
+    isCalendarConnected, // ★追加
+    reconnectCalendar, // ★追加
   };
 }
 </file>
@@ -4012,76 +3873,6 @@ service cloud.firestore {
 }
 </file>
 
-<file path="index.html">
-<!doctype html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="google-site-verification"
-      content="qpuJVeg2XkDd1ieycUl-LOQkD3MDEH7wVKmlPE3NdEI"
-    />
-    <link rel="icon" href="/logo.png?v=3" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
-    <title>My Brain</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        background-color: #0f172a;
-        height: 100vh;
-        width: 100vw;
-        overflow: hidden;
-      }
-      #loading-screen {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background-color: #0f172a;
-        color: white;
-        z-index: 9999;
-        transition: opacity 0.5s ease;
-      }
-      .loader {
-        margin-top: 32px;
-        width: 32px;
-        height: 32px;
-        border: 3px solid rgba(255, 255, 255, 0.1);
-        border-radius: 50%;
-        border-top-color: #3b82f6;
-        animation: spin 1s linear infinite;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app"></div>
-
-    <div id="loading-screen">
-      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
-      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
-      <div class="loader"></div>
-    </div>
-
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
-</file>
-
 <file path="package.json">
 {
   "name": "my-brain",
@@ -4168,7 +3959,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lineWebhook = exports.linkLineAccount = exports.scrapeUrl = void 0;
+exports.unlinkLineAccount = exports.lineWebhook = exports.linkLineAccount = exports.scrapeUrl = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const v2_1 = require("firebase-functions/v2");
 const params_1 = require("firebase-functions/params");
@@ -4181,13 +3972,16 @@ if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 const db = admin.firestore();
+// ★修正: ここから cors: true を削除（エラーの原因でした）
 (0, v2_1.setGlobalOptions)({ region: "asia-northeast1", memory: "1GiB" });
 const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN");
 const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET");
 const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID");
 const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET");
 const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
-// URLスクレイピング
+// --------------------
+// 1. URLスクレイピング
+// --------------------
 exports.scrapeUrl = (0, https_1.onCall)(async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError("unauthenticated", "Login required");
@@ -4213,7 +4007,9 @@ exports.scrapeUrl = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError("internal", error.message);
     }
 });
-// LINE連携
+// --------------------
+// 2. LINE連携 (ログイン用)
+// --------------------
 exports.linkLineAccount = (0, https_1.onCall)({ secrets: [lineLoginChannelId, lineLoginChannelSecret] }, async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError("unauthenticated", "Login required");
@@ -4241,9 +4037,19 @@ exports.linkLineAccount = (0, https_1.onCall)({ secrets: [lineLoginChannelId, li
         throw new https_1.HttpsError("internal", "LINE連携失敗");
     }
 });
-// LINE Webhook
-exports.lineWebhook = (0, https_1.onRequest)({ secrets: [lineBotToken, lineBotSecret, geminiApiKey] }, async (req, res) => {
+// --------------------
+// 3. LINE Webhook
+// --------------------
+exports.lineWebhook = (0, https_1.onRequest)(
+// ★ここに cors: true を設定
+{ secrets: [lineBotToken, lineBotSecret, geminiApiKey], cors: true }, async (req, res) => {
+    console.log("LINE Webhook Triggered:", JSON.stringify(req.body));
     const token = lineBotToken.value();
+    if (!token) {
+        console.error("LINE_BOT_TOKEN is not set.");
+        res.status(500).send("Config Error");
+        return;
+    }
     const client = new line.Client({ channelAccessToken: token });
     const events = req.body.events;
     for (const event of events) {
@@ -4258,10 +4064,16 @@ exports.lineWebhook = (0, https_1.onRequest)({ secrets: [lineBotToken, lineBotSe
             .limit(1)
             .get();
         if (usersSnap.empty) {
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: "アプリでLINE連携を行ってください🙇‍♂️",
-            });
+            console.log(`User not found for LINE ID: ${lineUserId}`);
+            try {
+                await client.replyMessage(event.replyToken, {
+                    type: "text",
+                    text: "⚠️ まだアプリと連携されていません。\n\nアプリの「設定」>「LINE連携」ボタンを押して連携してください！",
+                });
+            }
+            catch (err) {
+                console.error("Error sending reply (not linked):", err);
+            }
             continue;
         }
         const uid = usersSnap.docs[0].id;
@@ -4270,7 +4082,7 @@ exports.lineWebhook = (0, https_1.onRequest)({ secrets: [lineBotToken, lineBotSe
                 await saveMemoryFromLine(uid, event.message.text, null);
                 await client.replyMessage(event.replyToken, {
                     type: "text",
-                    text: "📝 メモしました！",
+                    text: "📝 メモしました！(AI処理完了)",
                 });
             }
             else if (event.message.type === "image") {
@@ -4290,12 +4102,45 @@ exports.lineWebhook = (0, https_1.onRequest)({ secrets: [lineBotToken, lineBotSe
             }
         }
         catch (e) {
-            console.error(e);
+            console.error("Error processing message:", e);
+            try {
+                await client.replyMessage(event.replyToken, {
+                    type: "text",
+                    text: "エラーが発生しました💦: " + e.message,
+                });
+            }
+            catch (replyErr) {
+                console.error("Failed to send error message:", replyErr);
+            }
         }
     }
     res.json({ success: true });
 });
-// ★追加: 利用可能なモデルを自動判定する関数
+// --------------------
+// 4. LINE連携解除
+// --------------------
+// ★ここに cors: true を設定することでブラウザからの呼び出しを許可
+exports.unlinkLineAccount = (0, https_1.onCall)({ cors: true }, async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    try {
+        console.log("Unlinking LINE for user:", request.auth.uid);
+        await db.collection("users").doc(request.auth.uid).update({
+            isLineLinked: false,
+            lineUserId: admin.firestore.FieldValue.delete(),
+            lineDisplayName: admin.firestore.FieldValue.delete(),
+        });
+        console.log("Unlink successful");
+        return { success: true };
+    }
+    catch (error) {
+        console.error("Unlink Error:", error);
+        throw new https_1.HttpsError("internal", "LINE解除失敗: " + error.message);
+    }
+});
+// --------------------
+// ヘルパー関数
+// --------------------
 async function getSmartModelName(apiKey) {
     try {
         const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
@@ -4325,7 +4170,6 @@ async function getSmartModelName(apiKey) {
 }
 async function saveMemoryFromLine(uid, text, image) {
     const apiKey = geminiApiKey.value();
-    // ★修正: モデル名を動的に取得
     const modelName = await getSmartModelName(apiKey);
     const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: modelName });
@@ -4351,7 +4195,11 @@ async function saveMemoryFromLine(uid, text, image) {
         aiData = JSON.parse(jsonStr);
     }
     catch (_a) {
-        aiData = { fullText: text, summary: text.substring(0, 20), tags: ["LINE"] };
+        aiData = {
+            fullText: text,
+            summary: text.substring(0, 20),
+            tags: ["LINE"],
+        };
     }
     const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
     const embedRes = await embedModel.embedContent(aiData.fullText || text);
@@ -4364,6 +4212,7 @@ async function saveMemoryFromLine(uid, text, image) {
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         hasImage: !!image,
         source: "LINE",
+        fileType: !!image ? "image/jpeg" : null,
     });
 }
 </file>
@@ -4383,6 +4232,8 @@ if (admin.apps.length === 0) {
 }
 
 const db = admin.firestore();
+
+// ★修正: ここから cors: true を削除（エラーの原因でした）
 setGlobalOptions({ region: "asia-northeast1", memory: "1GiB" });
 
 const lineBotToken = defineSecret("LINE_BOT_TOKEN");
@@ -4391,7 +4242,9 @@ const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
 const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
-// URLスクレイピング
+// --------------------
+// 1. URLスクレイピング
+// --------------------
 export const scrapeUrl = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
   const { url } = request.data;
@@ -4415,7 +4268,9 @@ export const scrapeUrl = onCall(async (request) => {
   }
 });
 
-// LINE連携
+// --------------------
+// 2. LINE連携 (ログイン用)
+// --------------------
 export const linkLineAccount = onCall(
   { secrets: [lineLoginChannelId, lineLoginChannelSecret] },
   async (request) => {
@@ -4453,16 +4308,28 @@ export const linkLineAccount = onCall(
   },
 );
 
-// LINE Webhook
+// --------------------
+// 3. LINE Webhook
+// --------------------
 export const lineWebhook = onRequest(
-  { secrets: [lineBotToken, lineBotSecret, geminiApiKey] },
+  // ★ここに cors: true を設定
+  { secrets: [lineBotToken, lineBotSecret, geminiApiKey], cors: true },
   async (req, res) => {
+    console.log("LINE Webhook Triggered:", JSON.stringify(req.body));
+
     const token = lineBotToken.value();
+    if (!token) {
+      console.error("LINE_BOT_TOKEN is not set.");
+      res.status(500).send("Config Error");
+      return;
+    }
+
     const client = new line.Client({ channelAccessToken: token });
     const events = req.body.events;
 
     for (const event of events) {
       if (event.type !== "message") continue;
+
       const lineUserId = event.source.userId;
       if (!lineUserId) continue;
 
@@ -4471,13 +4338,20 @@ export const lineWebhook = onRequest(
         .where("lineUserId", "==", lineUserId)
         .limit(1)
         .get();
+
       if (usersSnap.empty) {
-        await client.replyMessage(event.replyToken, {
-          type: "text",
-          text: "アプリでLINE連携を行ってください🙇‍♂️",
-        });
+        console.log(`User not found for LINE ID: ${lineUserId}`);
+        try {
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: "⚠️ まだアプリと連携されていません。\n\nアプリの「設定」>「LINE連携」ボタンを押して連携してください！",
+          });
+        } catch (err) {
+          console.error("Error sending reply (not linked):", err);
+        }
         continue;
       }
+
       const uid = usersSnap.docs[0].id;
 
       try {
@@ -4485,7 +4359,7 @@ export const lineWebhook = onRequest(
           await saveMemoryFromLine(uid, event.message.text, null);
           await client.replyMessage(event.replyToken, {
             type: "text",
-            text: "📝 メモしました！",
+            text: "📝 メモしました！(AI処理完了)",
           });
         } else if (event.message.type === "image") {
           const stream = await client.getMessageContent(event.message.id);
@@ -4501,37 +4375,67 @@ export const lineWebhook = onRequest(
             text: "📷 画像を保存しました！",
           });
         }
-      } catch (e) {
-        console.error(e);
+      } catch (e: any) {
+        console.error("Error processing message:", e);
+        try {
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: "エラーが発生しました💦: " + e.message,
+          });
+        } catch (replyErr) {
+          console.error("Failed to send error message:", replyErr);
+        }
       }
     }
     res.json({ success: true });
   },
 );
 
-// ★追加: 利用可能なモデルを自動判定する関数
+// --------------------
+// 4. LINE連携解除
+// --------------------
+// ★ここに cors: true を設定することでブラウザからの呼び出しを許可
+export const unlinkLineAccount = onCall({ cors: true }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+  try {
+    console.log("Unlinking LINE for user:", request.auth.uid);
+
+    await db.collection("users").doc(request.auth.uid).update({
+      isLineLinked: false,
+      lineUserId: admin.firestore.FieldValue.delete(),
+      lineDisplayName: admin.firestore.FieldValue.delete(),
+    });
+
+    console.log("Unlink successful");
+    return { success: true };
+  } catch (error: any) {
+    console.error("Unlink Error:", error);
+    throw new HttpsError("internal", "LINE解除失敗: " + error.message);
+  }
+});
+
+// --------------------
+// ヘルパー関数
+// --------------------
 async function getSmartModelName(apiKey: string): Promise<string> {
   try {
     const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
     const listResponse = await axios.get(listUrl);
     const models = listResponse.data.models || [];
-
     const viableModels = models.filter((m: any) =>
       m.supportedGenerationMethods?.includes("generateContent"),
     );
-
     const preferredOrder = [
       "gemini-1.5-flash",
       "gemini-1.5-flash-latest",
       "gemini-1.5-pro",
       "gemini-pro",
     ];
-
     for (const pref of preferredOrder) {
       const found = viableModels.find((m: any) => m.name.includes(pref));
       if (found) return found.name.replace("models/", "");
     }
-
     if (viableModels.length > 0) {
       return viableModels[0].name.replace("models/", "");
     }
@@ -4548,9 +4452,7 @@ async function saveMemoryFromLine(
   image: { data: string; mimeType: string } | null,
 ) {
   const apiKey = geminiApiKey.value();
-  // ★修正: モデル名を動的に取得
   const modelName = await getSmartModelName(apiKey);
-
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: modelName });
 
@@ -4575,7 +4477,11 @@ async function saveMemoryFromLine(
   try {
     aiData = JSON.parse(jsonStr);
   } catch {
-    aiData = { fullText: text, summary: text.substring(0, 20), tags: ["LINE"] };
+    aiData = {
+      fullText: text,
+      summary: text.substring(0, 20),
+      tags: ["LINE"],
+    };
   }
 
   const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
@@ -4590,6 +4496,7 @@ async function saveMemoryFromLine(
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     hasImage: !!image,
     source: "LINE",
+    fileType: !!image ? "image/jpeg" : null,
   });
 }
 </file>
@@ -4597,9 +4504,9 @@ async function saveMemoryFromLine(
 <file path="src/components/AppHeader/AppHeader.vue">
 <script setup lang="ts">
 import { useAppHeader } from "./useAppHeader";
-import { useMyBrain } from "@/composables/useMyBrain"; // 追加
+import { useMyBrain } from "@/composables/useMyBrain";
 
-const { currentUser } = useMyBrain(); // ユーザー情報取得
+const { currentUser, unlinkLine } = useMyBrain(); // unlinkLine を取り出す
 
 // ★設定項目
 const LINE_LOGIN_CHANNEL_ID = "2008915242";
@@ -4620,12 +4527,14 @@ const { logout } = useAppHeader();
     <div class="font-black text-lg tracking-tight text-white">🧠 My Brain</div>
 
     <div class="flex items-center gap-3">
-      <!-- <div
+      <button
         v-if="currentUser?.isLineLinked"
-        class="text-[10px] bg-slate-700 text-slate-300 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 cursor-default border border-slate-600"
+        @click="unlinkLine"
+        class="text-[10px] bg-slate-800 text-slate-300 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 border border-slate-600 hover:bg-red-900/80 hover:text-white hover:border-red-500 transition group"
       >
-        <span>✅</span> LINE連携済
-      </div>
+        <span class="group-hover:hidden">✅ 連携済</span>
+        <span class="hidden group-hover:inline">🗑️ 解除する</span>
+      </button>
 
       <button
         v-else
@@ -4633,7 +4542,7 @@ const { logout } = useAppHeader();
         class="text-[10px] bg-[#06C755] text-white px-3 py-1.5 rounded-full font-bold hover:opacity-90 transition flex items-center gap-1"
       >
         <span>💬</span> LINE連携
-      </button> -->
+      </button>
 
       <button
         @click="logout"
@@ -4646,89 +4555,144 @@ const { logout } = useAppHeader();
 </template>
 </file>
 
-<file path="src/router/index.ts">
-import { createRouter, createWebHistory } from "vue-router";
-import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
-import HomeView from "../views/HomeView/HomeView.vue";
-import LoginView from "../views/LoginView/LoginView.vue";
-import VerifyEmailView from "../views/VerifyEmailView/VerifyEmailView.vue";
-import LandingView from "../views/LandingView/LandingView.vue";
-import LegalView from "../views/LegalView/LegalView.vue"; // 追加
-import PrivacyPolicy from "../views/PrivacyPolicy/PrivacyPolicy.vue";
+<file path="src/components/InputFooter/useInputFooter.ts">
+import { ref, onMounted, type Ref } from "vue";
+import { useMyBrain } from "@/composables/useMyBrain";
 
-const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [
-    {
-      path: "/",
-      name: "landing",
-      component: LandingView,
-      meta: { public: true },
-    },
-    {
-      path: "/app",
-      name: "home",
-      component: HomeView,
-      meta: { requiresAuth: true },
-    },
-    {
-      path: "/login",
-      name: "login",
-      component: LoginView,
-      meta: { public: true },
-    },
-    {
-      path: "/verify-email",
-      name: "verify-email",
-      component: VerifyEmailView,
-      meta: { requiresAuth: true },
-    },
-    {
-      path: "/legal",
-      name: "legal",
-      component: LegalView,
-      meta: { public: true },
-    },
-    {
-      path: "/privacy", // ★このパスを追加
-      name: "privacy",
-      component: PrivacyPolicy,
-      meta: { public: true }, // ログインしていなくても見れるようにする
-    },
-  ],
-});
+type InputMode = "memo" | "chat" | "url" | "calendar";
 
-router.beforeEach(async (to, from, next) => {
-  const auth = getAuth();
-  const currentUser = await new Promise<User | null>((resolve) => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      unsubscribe();
-      resolve(user);
-    });
+export function useInputFooter(inputMode: Ref<InputMode>) {
+  const { addMemory, addUrlMemory, askBrain, isAiThinking, isSpeaking } =
+    useMyBrain();
+
+  const inputText = ref("");
+  // ★修正: 配列で管理
+  const selectedFiles = ref<File[]>([]);
+  const filePreviews = ref<string[]>([]);
+  const fileInputRef = ref<HTMLInputElement | null>(null);
+  const isListening = ref(false);
+  const isVoiceMode = ref(false);
+
+  let recognition: any = null;
+
+  onMounted(() => {
+    if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+      const SpeechRecognition =
+        (window as any).webkitSpeechRecognition ||
+        (window as any).SpeechRecognition;
+      recognition = new SpeechRecognition();
+      recognition.lang = "ja-JP";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onresult = (event: any) => {
+        const transcript = Array.from(event.results)
+          .map((r: any) => r[0].transcript)
+          .join("");
+        inputText.value = transcript;
+      };
+
+      recognition.onend = () => {
+        isListening.value = false;
+        if (isVoiceMode.value && inputText.value.trim()) {
+          handleSend(inputMode.value);
+        }
+      };
+    }
   });
 
-  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
-
-  if (to.path === "/") {
-    if (currentUser) {
-      next("/app");
-      return;
+  const toggleListening = () => {
+    if (!recognition) return alert("音声入力未対応ブラウザです");
+    if (isListening.value) {
+      recognition.stop();
+      isVoiceMode.value = false;
     } else {
-      next();
-      return;
+      isListening.value = true;
+      isVoiceMode.value = true;
+      recognition.start();
     }
-  }
+  };
 
-  if (requiresAuth && !currentUser) {
-    next("/login");
-  } else if (to.path === "/login" && currentUser) {
-    next("/app");
-  } else {
-    next();
-  }
-});
+  const handleFileSelect = (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    if (target.files && target.files.length > 0) {
+      // 既存のリストに追加
+      const files = Array.from(target.files);
+      selectedFiles.value = [...selectedFiles.value, ...files];
 
-export default router;
+      // プレビュー生成
+      files.forEach((file) => {
+        if (file.type.startsWith("image/")) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            if (e.target?.result) {
+              filePreviews.value.push(e.target.result as string);
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+    }
+  };
+
+  const clearFiles = () => {
+    selectedFiles.value = [];
+    filePreviews.value = [];
+    if (fileInputRef.value) fileInputRef.value.value = "";
+  };
+
+  const handleInput = () => {
+    if (!isListening.value) {
+      isVoiceMode.value = false;
+    }
+  };
+
+  const handleSend = async (mode: InputMode) => {
+    const text = inputText.value.trim();
+    if (!text && selectedFiles.value.length === 0) return;
+
+    if (!isListening.value && !isVoiceMode.value) {
+      isVoiceMode.value = false;
+    }
+
+    const currentText = text;
+    inputText.value = "";
+
+    if (mode === "memo") {
+      const files = [...selectedFiles.value];
+      clearFiles();
+      const related = await addMemory(currentText, files);
+      if (related && related.length > 0) {
+        const summaries = related.map((m) => `・${m.aiSummary}`).join("\n");
+        alert(`保存しました！\n\n💡 関連する過去の記憶:\n${summaries}`);
+      }
+    } else if (mode === "url") {
+      await addUrlMemory(currentText);
+    } else {
+      clearFiles();
+      await askBrain(currentText, isVoiceMode.value);
+    }
+
+    if (!isListening.value) {
+      isVoiceMode.value = false;
+    }
+  };
+
+  return {
+    inputText,
+    selectedFiles,
+    filePreviews,
+    fileInputRef,
+    isListening,
+    isAiThinking,
+    isSpeaking,
+    toggleListening,
+    handleFileSelect,
+    clearFiles,
+    handleSend,
+    handleInput,
+  };
+}
 </file>
 
 <file path="src/views/LegalView/LegalView.vue">
@@ -4834,6 +4798,161 @@ const router = useRouter();
     </div>
   </div>
 </template>
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="google-site-verification"
+      content="qpuJVeg2XkDd1ieycUl-LOQkD3MDEH7wVKmlPE3NdEI"
+    />
+    <link rel="icon" href="/logo.png?v=3" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>My Brain</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0f172a;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+      }
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #0f172a;
+        color: white;
+        z-index: 9999;
+        transition: opacity 0.5s ease;
+      }
+      .loader {
+        margin-top: 32px;
+        width: 32px;
+        height: 32px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        border-top-color: #3b82f6;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="loading-screen">
+      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
+      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
+      <div class="loader"></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+</file>
+
+<file path="src/router/index.ts">
+import { createRouter, createWebHistory } from "vue-router";
+import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
+import HomeView from "../views/HomeView/HomeView.vue";
+import LoginView from "../views/LoginView/LoginView.vue";
+import VerifyEmailView from "../views/VerifyEmailView/VerifyEmailView.vue";
+import LandingView from "../views/LandingView/LandingView.vue";
+import LegalView from "../views/LegalView/LegalView.vue"; // 追加
+import PrivacyPolicy from "../views/PrivacyPolicy/PrivacyPolicy.vue";
+
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    {
+      path: "/",
+      name: "landing",
+      component: LandingView,
+      meta: { public: true },
+    },
+    {
+      path: "/app",
+      name: "home",
+      component: HomeView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/login",
+      name: "login",
+      component: LoginView,
+      meta: { public: true },
+    },
+    {
+      path: "/verify-email",
+      name: "verify-email",
+      component: VerifyEmailView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/legal",
+      name: "legal",
+      component: LegalView,
+      meta: { public: true },
+    },
+    {
+      path: "/privacy", // ★このパスを追加
+      name: "privacy",
+      component: PrivacyPolicy,
+      meta: { public: true }, // ログインしていなくても見れるようにする
+    },
+  ],
+});
+
+router.beforeEach(async (to, from, next) => {
+  const auth = getAuth();
+  const currentUser = await new Promise<User | null>((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
+
+  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
+
+  if (to.path === "/") {
+    if (currentUser) {
+      next("/app");
+      return;
+    } else {
+      next();
+      return;
+    }
+  }
+
+  if (requiresAuth && !currentUser) {
+    next("/login");
+  } else if (to.path === "/login" && currentUser) {
+    next("/app");
+  } else {
+    next();
+  }
+});
+
+export default router;
 </file>
 
 <file path="src/views/LoginView/LoginView.vue">
@@ -5258,7 +5377,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from "axios";
 import type { Memory, ChatLog, User, Todo, DailyReport } from "@/types";
 
-// ★修正: Payment Linkを直接指定（画像にあったURL）
+// Payment Linkを直接指定
 const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/6oU28r4Hi71dglzd1z6AM00";
 const ADMIN_EMAILS = ["gongedonghuam@gmail.com"];
 
@@ -5273,16 +5392,24 @@ const isSaving = ref(false);
 const isSpeaking = ref(false);
 const activeTag = ref<string | null>(null);
 
+// カレンダー接続状態管理
+const isCalendarConnected = ref(true);
+
 // --- ヘルパー: Google API トークンリフレッシュ ---
 const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
   let token = localStorage.getItem("google_calendar_token");
-  if (!token) return null;
+  if (!token) {
+    isCalendarConnected.value = false;
+    return null;
+  }
 
   try {
-    return await callback(token);
+    const res = await callback(token);
+    isCalendarConnected.value = true;
+    return res;
   } catch (e: any) {
     if (e.response && e.response.status === 401) {
-      console.log("Token expired, refreshing...");
+      console.log("Token expired, trying silent refresh...");
       try {
         const provider = new GoogleAuthProvider();
         provider.addScope("https://www.googleapis.com/auth/calendar");
@@ -5292,14 +5419,36 @@ const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
 
         if (newToken) {
           localStorage.setItem("google_calendar_token", newToken);
+          isCalendarConnected.value = true;
           return await callback(newToken);
         }
       } catch (refreshError) {
-        console.error("Token refresh failed:", refreshError);
-        throw refreshError;
+        console.warn("Token refresh blocked or failed:", refreshError);
+        isCalendarConnected.value = false;
+        return null;
       }
     }
+    console.error("API Call Error:", e);
     throw e;
+  }
+};
+
+// 手動再接続用
+const reconnectCalendar = async () => {
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.addScope("https://www.googleapis.com/auth/calendar");
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const token = credential?.accessToken;
+    if (token) {
+      localStorage.setItem("google_calendar_token", token);
+      isCalendarConnected.value = true;
+      alert("再接続しました！");
+      window.location.reload();
+    }
+  } catch (e: any) {
+    alert("再接続に失敗しました: " + e.message);
   }
 };
 
@@ -5568,15 +5717,12 @@ export function useMyBrain() {
     }
   };
 
-  // ★修正: Payment Linkへ直接リダイレクトする方式に変更
   const startSubscription = async () => {
     if (!currentUser.value) return;
     const confirmed = confirm(
       "PROプラン（月額980円）の決済画面へ移動しますか？",
     );
     if (!confirmed) return;
-
-    // Stripe Payment Linkへ直接移動
     window.location.href = STRIPE_PAYMENT_LINK;
   };
 
@@ -5765,7 +5911,7 @@ export function useMyBrain() {
         tags: [],
         aiSummary: "保存中...",
         hasImage: !!hasImages,
-        fileType: undefined,
+        fileType: null, // undefined非対応のためnull
       });
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) {
@@ -5816,7 +5962,7 @@ export function useMyBrain() {
         embedding: embedding,
       });
 
-      // ★修正: ローカル更新（unshiftで即時反映）
+      // ローカル更新
       memories.value.unshift({
         id: docRef.id,
         userId: currentUser.value.uid,
@@ -5825,7 +5971,7 @@ export function useMyBrain() {
         tags: aiData.tags,
         createdAt: new Date(),
         hasImage: !!hasImages,
-        fileType: undefined,
+        fileType: null,
         embedding: embedding,
       });
 
@@ -5951,7 +6097,6 @@ export function useMyBrain() {
     }
   };
 
-  // ★修正: メモ更新時にローカルのstateも即時反映
   const updateMemory = async (id: string, newText: string) => {
     await updateDoc(doc(db, "memories", id), { text: newText });
     const index = memories.value.findIndex((m) => m.id === id);
@@ -5982,6 +6127,31 @@ export function useMyBrain() {
     return Array.from(tags);
   });
 
+  // ★追加: LINE連携解除
+  const unlinkLine = async () => {
+    if (!currentUser.value) return;
+    if (
+      !confirm(
+        "LINE連携を解除しますか？\n\n解除すると、LINEからのメモ保存や通知機能が使えなくなります。",
+      )
+    )
+      return;
+
+    try {
+      const func = httpsCallable(getFunctions(), "unlinkLineAccount");
+      await func();
+
+      // ローカルの状態も即座に更新
+      if (currentUser.value) {
+        currentUser.value.isLineLinked = false;
+      }
+      alert("LINE連携を解除しました。");
+    } catch (e: any) {
+      console.error(e);
+      alert("解除に失敗しました: " + e.message);
+    }
+  };
+
   return {
     currentUser,
     memories,
@@ -5995,6 +6165,7 @@ export function useMyBrain() {
     isSpeaking,
     activeTag,
     allTags,
+    isCalendarConnected,
     initAuth,
     logout,
     addMemory,
@@ -6011,6 +6182,8 @@ export function useMyBrain() {
     speakText,
     addManualTodo,
     callGoogleApi,
+    reconnectCalendar,
+    unlinkLine, // ★追加
   };
 }
 </file>
@@ -6029,7 +6202,7 @@ import ChatList from "@/components/ChatList/ChatList.vue";
 import InputFooter from "@/components/InputFooter/InputFooter.vue";
 import MemoryModal from "@/components/MemoryModal/MemoryModal.vue";
 import FullCalendar from "@fullcalendar/vue3";
-import BaseModal from "@/components/BaseModal/BaseModal.vue"; // 既存コンポーネント確認要だが、簡易モーダルを自作
+import BaseModal from "@/components/BaseModal/BaseModal.vue";
 
 const {
   inputMode,
@@ -6048,14 +6221,15 @@ const {
   deleteEvent,
   relatedMemories,
   isSearchingMemories,
-  todos, // ★追加
-  toggleTodo, // ★追加
-  deleteTodo, // ★追加
-  dailyReports, // ★追加
-  isReportModalOpen, // ★追加
+  todos,
+  toggleTodo,
+  deleteTodo,
+  dailyReports,
+  isReportModalOpen,
+  isCalendarConnected, // ★追加
+  reconnectCalendar, // ★追加
 } = useHomeView();
 
-// ★追加: 手動タスク追加用
 const { addManualTodo } = useMyBrain();
 const newTaskTitle = ref("");
 
@@ -6065,7 +6239,6 @@ const submitTask = async () => {
   newTaskTitle.value = "";
 };
 
-// 最新のレポート
 const latestReport =
   dailyReports.value.length > 0 ? dailyReports.value[0] : null;
 </script>
@@ -6197,6 +6370,21 @@ const latestReport =
         <div
           class="calendar-wrapper backdrop-blur-xl bg-slate-900/60 md:bg-slate-800/40 relative flex flex-col border-b md:border border-slate-700/30 md:rounded-3xl shadow-2xl overflow-hidden"
         >
+          <div
+            v-if="!isCalendarConnected"
+            class="absolute inset-0 bg-slate-950/80 z-30 flex flex-col items-center justify-center backdrop-blur-sm p-6 text-center"
+          >
+            <p class="text-slate-300 font-bold mb-4">
+              Googleカレンダーとの接続が切れました
+            </p>
+            <button
+              @click="reconnectCalendar"
+              class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2"
+            >
+              <span class="text-xl">🔄</span> 再接続する
+            </button>
+          </div>
+
           <div
             v-if="calendarLoading"
             class="absolute inset-0 bg-slate-950/60 z-20 flex items-center justify-center backdrop-blur-sm"
@@ -6655,68 +6843,68 @@ const latestReport =
 </file>
 
 <file path=".firebase/hosting.ZGlzdA.cache">
-sw.js,1769001023809,62ed80b05591400da4896264ba5692ae97c41f81873327a3d3680f54cae9cb55
-manifest.webmanifest,1769001022996,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-index.html,1769001022996,f829505a0c8ec7b0433a78561377e55c7b19084938719dee3c65eb2941b973f0
-registerSW.js,1769001022996,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-workbox-8c29f6e4.js,1769001023810,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-firebase-messaging-sw.js,1769001022363,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-lp.html,1769001022373,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/stateDiagram-FKZM4ZOC-BCYsZBx8.js,1769001022994,ce1d1a7d7a69e25641985be7918fac448bc26f78bb64e0c3b360b7213d964419
-assets/stateDiagram-v2-4FDKWEC3-_WPKq2g9.js,1769001022994,aa95de3f1b060ca9b4e2a9fed6735c1475020067047efad07f1f0ab27729e3c1
-assets/timeline-definition-IT6M3QCI-C9DEqA0B.js,1769001022995,16c390224b6aac15012808aeccc5dfd0819369bd5e850366b63cd09d04f77982
-assets/xychartDiagram-PRI3JC2R-D5CCLXbN.js,1769001022995,a753acc07336235585ce556639009980e54c21547ebff6f161b3295a88e4da36
-assets/ordinal-Cboi1Yqb.js,1769001022995,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/min-BM_ZiEa7.js,1769001022995,6c0af698b8bfb584ca035a62706235b7c93ead93070034cb258e24e1865a234f
-assets/requirementDiagram-UZGBJVZJ-BVRS11fC.js,1769001022994,bab45cf857c2c289ed4a84b35968f916178b469f9dccad86897c016c8a89cdac
-assets/sankeyDiagram-TZEHDZUN-CFDhAFGz.js,1769001022996,c5a446a24ece7b2124cd474a053aa409948849a83602c85535930af37b73f992
-assets/mindmap-definition-VGOIOE7T-BmHc6CO3.js,1769001022995,c07ce154241ab4a15b309f23c39ae506fc8ecda651edb1f2f1999750be4ad014
-assets/init-Gi6I4Gst.js,1769001022995,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/pieDiagram-ADFJNKIX-RGDAioqM.js,1769001022995,082809f0e3b4ee3e949ee9163d7a85e6c4efed267e5f7705f3695ea74e450b4e
-assets/quadrantDiagram-AYHSOK5B-CmOXZZ7K.js,1769001022994,fe58b946d9494cb2df0a4156bb199390e91342530d4de163fb060d2ebea92286
-assets/infoDiagram-WHAUD3N6-6j-HM_PN.js,1769001022994,6cbefe16509ca560ffc88a956e3da834841d53b2a0532de706c0d063894ebe27
-assets/linear-X-BrZrAo.js,1769001022996,b07b265e8268f84655f191322588e47c93dccbe4d39194572bd9999bbbfba3bf
-assets/kanban-definition-3W4ZIXB7-CqVIwMnY.js,1769001022995,bd8618d108cf109122079fd34fc16566702410c995184eaf96cc9a6a9764ebb8
-assets/journeyDiagram-XKPGCS4Q-CbWxkWrE.js,1769001022995,0070c40094f8dcbb3db1fc6f41ef29bbe766bd6f5d6b6cc5943ffc729099cf36
-assets/index-BhqtjMuD.css,1769001022994,f85b102c6f0970bab64fbe34daaaac7526aae11d2a1f2935ee3a02fd660d4d48
-assets/graph-Crrvp2uZ.js,1769001022996,f5877963d7018dcca4df6c2febb92bb8e1c4d341a740f39cd425cfb96fc844d3
-assets/layout-CdjbPLA1.js,1769001022996,0754e16e2f027e4a7b58ba7323bb2af02eb4181121da06dbe45eeebf0e039ae2
-assets/diagram-S2PKOQOG-DAJDvPmm.js,1769001022995,5dc53cca1623a72fa5c305b4607621b743047de9e7ca2ffffe5d1ed74647d850
-assets/diagram-PSM6KHXK-6Ik2O3ir.js,1769001022996,a3b682d626a2bdaa7f619124364978fca8e7a9092b3fc724b0e1dc59365dd271
-assets/erDiagram-Q2GNP2WA-BB_zT42l.js,1769001022996,0f4a2bc28892765fdc1f30df4f50907ee49ca570a38824586c63e69cfd942e95
-assets/defaultLocale-DX6XiGOO.js,1769001022995,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/clone-BM0NrIEe.js,1769001022995,f0af292d5b7c0e93df1ffd3dda9890b0d1a1bb0bdf96af1794a88b4fe9a22fbc
-assets/classDiagram-2ON5EDUG-Cx9VpXN4.js,1769001022994,5f1be93bf45f32d759006c3c399d97082fdff50e6c760d056e22306de3a933d8
-assets/diagram-QEK2KX5R-6V9Wnes6.js,1769001022995,71f3ce27f475ff0838fe9d24f432be0e96ff598d8adea4a18430f5daafd97724
-assets/dagre-6UL2VRFP-CBL3vuCf.js,1769001022995,59fbf9b802a042174879cf33b330626e431c808a5a5df20c7d7dd4c9829899ba
-assets/gitGraphDiagram-NY62KEGX-BPf5j0hw.js,1769001022994,d79ce81c972cf5aeca4c822e61a72e490252485b299a5d6052446a64d29b176d
-assets/chunk-QZHKN3VN-B0nZy0Xk.js,1769001022994,4170d9510e3ccf4ed9a68337ca326b9af44c97629256a563892938146d047894
-assets/classDiagram-v2-WZHVMYZB-Cx9VpXN4.js,1769001022994,5f1be93bf45f32d759006c3c399d97082fdff50e6c760d056e22306de3a933d8
-assets/chunk-TZMSLE5B-D0CjnZwM.js,1769001022995,acd9923779329a6451607ac7ce192639f95149db7f366a1456dd7f524ed3d338
-assets/flowDiagram-NV44I4VS-4nj3HQYN.js,1769001022994,83300bc52ac28ac8d1f56fa69457f7f4ce8e86053c7e2f09ed4c524d2833badb
-assets/sequenceDiagram-WL72ISMW-tdj0FaRZ.js,1769001022994,9013edc8bd89f48fa7d86cb0bbf3fa9707e5c2abd2dae06839479a38203cad19
-assets/ganttDiagram-JELNMOA3-C9e6Qg80.js,1769001022996,b7486df9025a939590865a19290124220006a1a8a49fadc7d0d8b26b8423f311
-assets/chunk-QN33PNHL-BBX8LN5C.js,1769001022995,95f28db75c3ca48275a3c14754ed4e73e48f4d2264c6e775e1d95420d3481569
-assets/cose-bilkent-S5V4N54A-n_RB9o60.js,1769001022995,f768133161b50c916b0b95c2748b604db5389519b255daf4638a894cd5eeaafa
-assets/chunk-FMBD7UC4-Dijr9aTq.js,1769001022995,37dffb42f4226cd48e2195cb86250dc7c831b6a85bff9e9d60666aca47e867b6
-assets/chunk-55IACEB6-Q0hA1J06.js,1769001022995,f305d3c28d8b269508c95d7e4bbfd4b91538847affe8448e9a6cfbd6a28af171
-assets/chunk-4BX2VUAB-DCHqe8Pi.js,1769001022995,194bebcd8b338e26bb34527becda24b7b932690d20a3349ff36d1cc23ab54d3d
-assets/chunk-DI55MBZ5-BvUx-ADb.js,1769001022995,a7dd411735ba469b92282a0042ae39632f923207cee7f27ee0657d1dd29f5568
-assets/channel-CslFYiLZ.js,1769001022995,f5c12d131217901eeb91fd33e70e148b15dae4831cbc402bb05bf0108e0f9b96
-assets/chunk-B4BG7PRW-C7KjG8ko.js,1769001022994,55effe5c3a6db19f5637ddc0f4f225397afdec4ee55d69855f6077d54a5a16db
-assets/arc-4NaOc8xW.js,1769001022995,7bd11d6f430ae1ff15f157cf2cbad9fc247aaaf69ff2f690cf91804de48fa890
-assets/_baseUniq-BLCUMiYX.js,1769001022996,6cd45bcda09cb4dd8c0ead1eb34859bb2be8bcf0856025534e4d34e91d0c4815
-assets/c4Diagram-YG6GDRKO-B4GulO52.js,1769001022994,ad8a42f40cc26a878b6f09a78e4a3da72dfd423da6b29e3cfe7ba9c7ad819d5f
-assets/blockDiagram-VD42YOAC-CfLiXj0e.js,1769001022995,ad6fd35eee09656cdea41f4a9970d16f0c6e516ae2e72a20f4e6cddde10613e3
-assets/architectureDiagram-VXUJARFQ-CmdSp6Wi.js,1769001022996,ae8cf5d92618e8ce1ad1f8fad0aa34d4a0c07ecc8824705af64772d8e73e5410
-assets/katex-Cu_Erd72.js,1769001022995,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-LB6ouWM1.js,1769001022996,98548b5ecff72351ff25a4c8761e0fecc12f653f4541747cdf4fb21d5d49f8cf
-assets/cytoscape.esm-CyJtwmzi.js,1769001022995,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-8yX0gVtC.js,1769001022996,be3292fa4ab98bbb263aa0d1c2a31f6b6373215f6d076cf5746151cebb4080bb
-pwa-192x192.png,1769001022389,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-logo.png,1769001022372,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1769001022395,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-apple-touch-icon.png,1769001022363,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+registerSW.js,1769087388512,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+sw.js,1769087389275,66120d76c4eaaebacc40612da57144ce83ddc5a2561f82dc4f5012cbdaa78689
+workbox-8c29f6e4.js,1769087389275,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+manifest.webmanifest,1769087388512,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+index.html,1769087388512,2a182a30409f1b267d1dd8d59512d4a66039293489019466a8486673483c25c0
+firebase-messaging-sw.js,1769087388053,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+lp.html,1769087388059,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/stateDiagram-FKZM4ZOC-D3WOgbcY.js,1769087388512,fc603767cb57a9ad7eec44dbb40a1fe7aa5e3d4385ef981cf692f249a446a85c
+assets/xychartDiagram-PRI3JC2R-CnoGYOss.js,1769087388512,e123a45c835286fba652cbe5741ca4c57ac9d19099db8288f6a73f882cf924a1
+assets/stateDiagram-v2-4FDKWEC3-CMJ4D7to.js,1769087388512,2093b9762a18d6ebbeeaae98227e9ee92d19bf2a9c05c8da6845a447b8bc834c
+assets/timeline-definition-IT6M3QCI-CQ3rIX09.js,1769087388512,c4ad3fdf6f49abf7bc53dd23813fdb6b4045f5995cc89db025d5e0e59d820376
+assets/requirementDiagram-UZGBJVZJ-Dwlx6VuZ.js,1769087388512,3164428af9ac93271c6fbda3940c8949526cec25038c30bb650e5ee7d8a6002e
+assets/pieDiagram-ADFJNKIX-BxdXQe7t.js,1769087388512,794114d5c7dd7d3218f31c12b3d17435f33544d55bac8a9d4eb28f583cd26f31
+assets/ordinal-Cboi1Yqb.js,1769087388512,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/min-BNgV5drd.js,1769087388512,0c5186fb1bd098643a789e94255b089ca7b1ca29cb4c17382dd280c6ee354150
+assets/quadrantDiagram-AYHSOK5B-C4Vl7Mvx.js,1769087388512,c62a67fd9f2a5c51805c8556ce700143e04090810b3bc969d664affab7bd2d19
+assets/sankeyDiagram-TZEHDZUN-D9ILwLJ4.js,1769087388512,ad681d7310b2c73d31c725940c7b02d001e1730f33766091802deb16c0fedbff
+assets/mindmap-definition-VGOIOE7T-BcRvjwPV.js,1769087388512,763128d74a5fbf50fd4156807fb30bf4c20e16ec5c0eb1bf9555875dc070c86e
+assets/linear-CeM6IO9l.js,1769087388512,b636151a7abcb72911f40db5d8084689bf242b409c93cb5a40081ccb58d0e452
+assets/init-Gi6I4Gst.js,1769087388512,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/infoDiagram-WHAUD3N6-haG9Rr2X.js,1769087388512,a7df6b4665b2e01ae64e432a79ccd7274b8403bb11bcb12e5229139adabd7922
+assets/journeyDiagram-XKPGCS4Q-Dnz3Xq7t.js,1769087388512,eca9bbbc6a7654aaeb75bd47a62fd3496b0e323463fcedd7b7942834b05da92a
+assets/kanban-definition-3W4ZIXB7-Dp-NIJgy.js,1769087388512,e19d1325988ce4951f33905dc9daa9fa70bb9d08753388f3e9a7866ad7f139f2
+assets/layout-Bw9Qb1z-.js,1769087388512,f6a7c6843421c61f4ee01a95467112932dc88074732de54b008adc07383e7300
+assets/index-C0ds9tTC.css,1769087388512,94b06599cca036e2587b30d02708f49f534ad6268945343943a03951dc9af986
+assets/gitGraphDiagram-NY62KEGX-Dofw9PHt.js,1769087388512,4a687e3eb6863edf2b4d0be59bec3ddd21c89b3eec1036a23d91ba59fb2f6219
+assets/diagram-S2PKOQOG-DIrR8-DX.js,1769087388512,a9d444c6524ffe353f83b2a8453352f673d4bd275e5fbb387736488b0eebc3e9
+assets/erDiagram-Q2GNP2WA-CFRGzJVI.js,1769087388512,87481c95482eb7d5007ffcd5ead3de20e61c762971c5c68d8bcafe3f8fe254b3
+assets/graph-D82VRSvT.js,1769087388512,f8a50e854f91899efcab90fe1c285aa2c1cbdff8eeb33c23c6a0f904a3a8d509
+assets/defaultLocale-DX6XiGOO.js,1769087388512,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/diagram-PSM6KHXK-BUYiQWq2.js,1769087388512,0517f0296ce346eb3fe8bc6809031e66b7fedf32cc3e2c8131d31f77cee7c5e1
+assets/dagre-6UL2VRFP-BP7oN89H.js,1769087388512,27635d7badf90d0a6e61508f912f794310136cd475661022cd39ac6b04f9987a
+assets/diagram-QEK2KX5R-CI5NIi0G.js,1769087388512,158f46b6bc18188501ac6adeca148e8b0f473b7d9ec56240e458ea5a76ad6b6e
+assets/classDiagram-v2-WZHVMYZB-D0EcyOQ0.js,1769087388512,4cfd01e80773c0922f92be321411a8522e48c75c980d85dbbfa6d4046df56e98
+assets/clone-CQCkPK6c.js,1769087388512,cabc6162c3a8ab7c81e7376022d270fcf302250b49c227aa1cc1e7096118a130
+assets/classDiagram-2ON5EDUG-D0EcyOQ0.js,1769087388512,4cfd01e80773c0922f92be321411a8522e48c75c980d85dbbfa6d4046df56e98
+assets/chunk-QZHKN3VN-BMbD7r-V.js,1769087388512,a8b1f9880caa457689f851261597975c0cc97c4a01ea2661375df43f0c509757
+assets/chunk-TZMSLE5B-DJVbbbhu.js,1769087388512,c69d9aedacf6a2a1756960ed33e785e8f1d7e9caabffa528e7bd55435ad72340
+assets/flowDiagram-NV44I4VS-BeuI4WxL.js,1769087388512,1f94ee7857db0d4129388da32e35f20f4c5cfd28e6a7426d022a03c52f70010d
+assets/ganttDiagram-JELNMOA3-CLANzD1p.js,1769087388512,0b60e62dc7dc47f731af52cfa8251f058848c453be2a9663084b3c70728c678f
+assets/sequenceDiagram-WL72ISMW-Cvzpixux.js,1769087388512,3933c79269e0d575654c7dc942d60ea3b47409b20af2cc184cdeb93ede363c09
+assets/cose-bilkent-S5V4N54A-BUK0pjar.js,1769087388512,3a52d6f15782a658c6735fec5ff6455c01a5cae0650bb8055f81950b31d6c8b7
+assets/chunk-QN33PNHL-CRHEMEXn.js,1769087388512,c3c5a418430e0276d5ca9c7ed30c3dea585c0476cfef41bdcbc59dad0d35b5e1
+assets/chunk-FMBD7UC4-B9VZFPWC.js,1769087388512,0da30d682e9e62555d7911408a3064ba95ee86d238f1eba71f13b46614fff1bc
+assets/chunk-55IACEB6-UcC1MNhz.js,1769087388512,112ea55f0b44e1f49ce8753edc252ae85f5dabbd66b210faf37362474e63465b
+assets/chunk-4BX2VUAB-BxfN5FJW.js,1769087388512,3f339f1ecccd7168717f3f52fe5e746ebdba9ed5ea0dffd40dc0e70cb0e0a4eb
+assets/channel-DlCjFQDd.js,1769087388512,99f2d051e482303878fd166c402e2b6095ca153dc80ed5a2c10129a738f8c671
+assets/chunk-DI55MBZ5-cG4F_00v.js,1769087388512,e76f99e7bea4427c375c68c1bb97c94e000d8a56cf21a4cd94dbb5540e0e3f0c
+assets/chunk-B4BG7PRW-CV6n-bg2.js,1769087388512,2f3b421981a0ee63063a89040d985f7d53a8ff80fef7c4b5ebf19bc43486f083
+assets/arc-CeRXhSvN.js,1769087388512,4d1bdf25ab1f6a3553a9887ffa59d70dd0505273dcbe2ac45d6d5b1e598b8cf5
+assets/_baseUniq-BS-Pok4s.js,1769087388512,6007ef9307160e3f00f773f73436c08b85e7d3c1630f1139b0f2531672f14ed7
+assets/c4Diagram-YG6GDRKO-BkOWbGDF.js,1769087388512,915bd05880ea3513deaa06ca4574834cabf4658210677317995ed7e87598ff03
+assets/blockDiagram-VD42YOAC-DtNf_ICo.js,1769087388512,704ce0a995df773f996a9d7e4533f1510c54a6104eb326546bf121d75865c67c
+assets/architectureDiagram-VXUJARFQ-BXRCC3au.js,1769087388512,85042ea42df1dfbdba8deacbeb385880961e47b3bf04b1a0a49188ca7ad9d596
+assets/katex-Cu_Erd72.js,1769087388512,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-BIYqxnSR.js,1769087388512,ebf0dd2c5f77cd8dd0904e5e19777e3deff0d9d19fde7b8f3a2c761c478682f1
+assets/cytoscape.esm-CyJtwmzi.js,1769087388512,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-BHbZsuNe.js,1769087388513,d077d9e5c08859219fab6b58c043b2d92e40048d51a926f91e46c7b26ece37d8
+logo.png,1769087388058,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-192x192.png,1769087388068,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1769087388077,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1769087388053,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>

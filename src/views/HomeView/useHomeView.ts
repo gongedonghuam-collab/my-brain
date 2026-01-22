@@ -1,6 +1,6 @@
-import { ref, onMounted, watch, nextTick, type Ref, computed } from "vue";
+import { ref, onMounted, watch, nextTick, computed } from "vue";
 import { useMyBrain } from "@/composables/useMyBrain";
-import type { Memory, Todo, DailyReport } from "@/types";
+import type { Memory } from "@/types";
 import mermaid from "mermaid";
 import { httpsCallable, getFunctions } from "firebase/functions";
 import { getApp } from "firebase/app";
@@ -38,7 +38,9 @@ export function useHomeView() {
     dailyReports,
     toggleTodo,
     deleteTodo,
-    callGoogleApi, // ★追加: API呼び出しヘルパーを使用
+    callGoogleApi,
+    isCalendarConnected, // ★追加
+    reconnectCalendar, // ★追加
   } = useMyBrain();
   const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
   const editingMemory = ref<Memory | null>(null);
@@ -85,7 +87,6 @@ export function useHomeView() {
   const deleteEvent = async (eventId: string) => {
     if (!confirm("削除しますか？")) return;
     try {
-      // callGoogleApiでラップしてトークン切れに対応
       await callGoogleApi(async (token) => {
         await axios.delete(
           `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
@@ -142,7 +143,6 @@ export function useHomeView() {
   const fetchAllCalendars = async () => {
     calendarLoading.value = true;
     try {
-      // callGoogleApiを使ってカレンダーリストを取得
       const calendars = await callGoogleApi(async (token) => {
         let list = [{ id: "primary", backgroundColor: "#818cf8" }];
         try {
@@ -162,7 +162,7 @@ export function useHomeView() {
         return list;
       });
 
-      if (!calendars) return; // トークンがない場合など
+      if (!calendars) return;
 
       const now = new Date();
       const timeMin = new Date(
@@ -176,7 +176,6 @@ export function useHomeView() {
         0,
       ).toISOString();
 
-      // 各カレンダーのイベントを取得（ここもcallGoogleApiでラップ）
       const promises = calendars.map((cal: any) =>
         callGoogleApi(async (token) => {
           return axios
@@ -192,7 +191,7 @@ export function useHomeView() {
                 },
               },
             )
-            .catch((e) => ({ data: { items: [] } })); // 個別のエラーは無視して空配列
+            .catch((e) => ({ data: { items: [] } }));
         }),
       );
 
@@ -322,5 +321,7 @@ export function useHomeView() {
     toggleTodo,
     deleteTodo,
     isReportModalOpen,
+    isCalendarConnected, // ★追加
+    reconnectCalendar, // ★追加
   };
 }

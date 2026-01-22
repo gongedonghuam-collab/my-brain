@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useAppHeader } from "./useAppHeader";
-import { useMyBrain } from "@/composables/useMyBrain"; // 追加
+import { useMyBrain } from "@/composables/useMyBrain";
 
-const { currentUser } = useMyBrain(); // ユーザー情報取得
+const { currentUser, unlinkLine } = useMyBrain(); // unlinkLine を取り出す
 
 // ★設定項目
 const LINE_LOGIN_CHANNEL_ID = "2008915242";
@@ -23,12 +23,14 @@ const { logout } = useAppHeader();
     <div class="font-black text-lg tracking-tight text-white">🧠 My Brain</div>
 
     <div class="flex items-center gap-3">
-      <!-- <div
+      <button
         v-if="currentUser?.isLineLinked"
-        class="text-[10px] bg-slate-700 text-slate-300 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 cursor-default border border-slate-600"
+        @click="unlinkLine"
+        class="text-[10px] bg-slate-800 text-slate-300 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 border border-slate-600 hover:bg-red-900/80 hover:text-white hover:border-red-500 transition group"
       >
-        <span>✅</span> LINE連携済
-      </div>
+        <span class="group-hover:hidden">✅ 連携済</span>
+        <span class="hidden group-hover:inline">🗑️ 解除する</span>
+      </button>
 
       <button
         v-else
@@ -36,7 +38,7 @@ const { logout } = useAppHeader();
         class="text-[10px] bg-[#06C755] text-white px-3 py-1.5 rounded-full font-bold hover:opacity-90 transition flex items-center gap-1"
       >
         <span>💬</span> LINE連携
-      </button> -->
+      </button>
 
       <button
         @click="logout"
