@@ -39,8 +39,8 @@ export function useHomeView() {
     toggleTodo,
     deleteTodo,
     callGoogleApi,
-    isCalendarConnected, // ★追加
-    reconnectCalendar, // ★追加
+    isCalendarConnected,
+    reconnectCalendar,
   } = useMyBrain();
   const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
   const editingMemory = ref<Memory | null>(null);
@@ -114,6 +114,22 @@ export function useHomeView() {
     height: "100%",
     expandRows: true,
     dayMaxEvents: 2,
+
+    // ★モダン化設定
+    displayEventTime: false,
+
+    eventContent: function (arg: any) {
+      const timeText = arg.event.allDay ? "" : arg.timeText;
+      return {
+        html: `
+          <div class="fc-content-custom">
+            ${timeText ? `<span class="fc-time-custom">${timeText}</span>` : ""}
+            <span class="fc-title-custom">${arg.event.title}</span>
+          </div>
+        `,
+      };
+    },
+
     moreLinkClick: (arg) => {
       openBottomSheet(arg.date.toISOString().split("T")[0]);
       return "void";
@@ -133,11 +149,6 @@ export function useHomeView() {
     },
     longPressDelay: 500,
     handleWindowResize: true,
-    eventContent: function (arg: any) {
-      return {
-        html: `<div class="fc-content-custom"><div class="fc-marker" style="background-color: ${arg.event.backgroundColor}"></div><div class="fc-details"><span class="fc-time-custom">${arg.timeText}</span><span class="fc-title-custom">${arg.event.title}</span></div></div>`,
-      };
-    },
   });
 
   const fetchAllCalendars = async () => {
@@ -156,7 +167,10 @@ export function useHomeView() {
               backgroundColor: cal.backgroundColor || "#818cf8",
             }));
           }
-        } catch (e) {
+        } catch (e: any) {
+          if (e.response && e.response.status === 401) {
+            throw e;
+          }
           console.warn("List fetch failed, using primary only");
         }
         return list;
@@ -216,6 +230,10 @@ export function useHomeView() {
       calendarOptions.value.events = allEvents;
     } catch (e: any) {
       console.error("Calendar fetch global error:", e);
+      if (e.response && e.response.status === 401) {
+        localStorage.removeItem("google_calendar_token");
+        isCalendarConnected.value = false;
+      }
     } finally {
       calendarLoading.value = false;
     }
@@ -321,7 +339,7 @@ export function useHomeView() {
     toggleTodo,
     deleteTodo,
     isReportModalOpen,
-    isCalendarConnected, // ★追加
-    reconnectCalendar, // ★追加
+    isCalendarConnected,
+    reconnectCalendar,
   };
 }

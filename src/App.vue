@@ -1,20 +1,25 @@
 <script setup lang="ts">
-import { onMounted, watch } from "vue";
+import { onMounted, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useMyBrain } from "@/composables/useMyBrain";
+import { useTheme } from "@/composables/useTheme"; // 追加
 
 const { initAuth, currentUser } = useMyBrain();
+const { initTheme, cleanupTheme } = useTheme(); // 追加
 const router = useRouter();
 
 onMounted(() => {
-  initAuth(); // 認証監視スタート
+  initAuth();
+  initTheme(); // テーマ監視開始
 });
 
-// ★追加: ユーザー状態を監視し、予期せずログアウト状態になったらログイン画面へ
+onUnmounted(() => {
+  cleanupTheme();
+});
+
 watch(currentUser, (newUser) => {
   if (newUser === null) {
-    // 現在のページが公開ページ（ログイン不要ページ）でなければリダイレクト
-    const publicPages = ["/", "/login", "/legal", "/verify-email"];
+    const publicPages = ["/", "/login", "/legal", "/verify-email", "/privacy"];
     if (!publicPages.includes(router.currentRoute.value.path)) {
       router.push("/login");
     }

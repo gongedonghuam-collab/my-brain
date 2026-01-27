@@ -82,6 +82,7 @@ src/
   composables/
     useMyBrain.ts
     useNotifications.ts
+    useTheme.ts
   router/
     index.ts
   types/
@@ -132,6 +133,54 @@ vite.config.ts
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="src/composables/useTheme.ts">
+import { ref, onMounted, onUnmounted, watch } from "vue";
+
+// グローバルステート
+const isDark = ref(true);
+
+export function useTheme() {
+  const updateTheme = () => {
+    const hour = new Date().getHours();
+    // 6時から18時はライトモード(false)、それ以外はダークモード(true)
+    // ※本来はユーザー設定やOS設定を優先すべきですが、要望通り時間で切り替えます
+    const isNight = hour < 6 || hour >= 18;
+    isDark.value = isNight;
+
+    applyTheme();
+  };
+
+  const applyTheme = () => {
+    const html = document.documentElement;
+    if (isDark.value) {
+      html.classList.add("dark");
+      html.classList.remove("light");
+    } else {
+      html.classList.remove("dark");
+      html.classList.add("light");
+    }
+  };
+
+  let timer: any;
+
+  const initTheme = () => {
+    updateTheme();
+    // 1分ごとにチェック
+    timer = setInterval(updateTheme, 60000);
+  };
+
+  const cleanupTheme = () => {
+    if (timer) clearInterval(timer);
+  };
+
+  return {
+    isDark,
+    initTheme,
+    cleanupTheme,
+  };
+}
+</file>
 
 <file path="functions/.gitignore">
 node_modules/
@@ -523,8 +572,8 @@ exports.sendDailyReminders = (0, scheduler_1.onSchedule)("every day 09:00", asyn
     "@google/generative-ai": "^0.24.1",
     "@line/bot-sdk": "^10.5.0",
     "axios": "^1.13.2",
-    "cheerio": "^1.1.2",
-    "cors": "^2.8.5",
+    "date-fns": "^4.1.0",
+    "date-fns-tz": "^3.2.0",
     "firebase-admin": "^12.1.0",
     "firebase-functions": "^5.0.1"
   },
@@ -1970,66 +2019,235 @@ export default function useLoginView() {
 @tailwind utilities;
 
 :root {
-  /* 影の質感をApple風に調整 */
-  --shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
-  --shadow-card: 0 10px 40px -10px rgba(0, 0, 0, 0.08);
+  /* モダンSaaS ダークテーマ (Notion/Cron風) */
+  --bg-main: #09090b; /* 漆黒の背景 */
+  --bg-sub: #18181b; /* カード背景 */
+  --bg-hover: #27272a; /* ホバー時 */
+  --border: #27272a; /* 境界線 */
+  --primary: #6366f1; /* Indigo 500 (知的で落ち着いた青紫) */
+  --text-main: #f8fafc; /* ほぼ白 */
+  --text-muted: #94a3b8; /* グレー */
+
+  /* FullCalendar カスタマイズ変数 */
+  --fc-border-color: #27272a;
+  --fc-today-bg-color: rgba(99, 102, 241, 0.08); /* 今日の背景 */
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: transparent;
+  --fc-list-event-hover-bg-color: #27272a;
 }
 
 body {
-  /* 真っ白(#ffffff)ではなく、目に優しいごく薄いグレー */
-  background-color: #f8fafc;
-  color: #1e293b;
-  /* iOSのような滑らかな文字レンダリング */
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  /* 日本語フォントの最適化 */
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans",
-    Meiryo, sans-serif;
+  overflow: hidden; /* アプリライクな挙動 */
 }
 
-/* スクロールバーを隠してスタイリッシュに */
-.no-scrollbar::-webkit-scrollbar {
+/* スクロールバー隠し */
+.scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
-.no-scrollbar {
+.scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
 
-/* グラスモーフィズム（すりガラス）効果 */
-.glass {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+/* --- FullCalendar 大改造 --- */
+
+.fc {
+  font-family: inherit;
 }
 
-/* 高級感のあるカード */
-.modern-card {
-  background: white;
-  border-radius: 24px;
-  box-shadow: var(--shadow-soft);
-  border: 1px solid rgba(241, 245, 249, 1);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+/* ツールバー (年月表示など) */
+.fc .fc-toolbar {
+  margin-bottom: 1.5rem !important;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
-.modern-card:active {
-  transform: scale(0.99);
+.fc .fc-toolbar-title {
+  font-size: 1.25rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+}
+
+/* ボタン (今日、< >) */
+.fc .fc-button {
+  background-color: transparent !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  padding: 0.4rem 0.8rem !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease;
+}
+.fc .fc-button:hover {
+  background-color: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+}
+.fc .fc-button:active {
+  transform: scale(0.95);
+}
+
+/* カレンダーグリッド */
+.fc-theme-standard td,
+.fc-theme-standard th {
+  border-color: var(--border) !important;
+}
+.fc .fc-col-header-cell-cushion {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 0 !important;
+}
+
+/* 日付 */
+.fc-daygrid-day-top {
+  justify-content: center;
+  padding-top: 6px;
+}
+.fc-daygrid-day-number {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-main);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+/* 今日 */
+.fc-day-today .fc-daygrid-day-number {
+  background-color: var(--primary);
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+}
+
+/* イベント (予定) */
+.fc-event {
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 2px 4px !important;
+  margin: 1px 2px !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    filter 0.1s ease;
+}
+.fc-event:active {
+  transform: scale(0.95);
+}
+/* 終日イベント */
+.fc-h-event {
+  background-color: rgba(99, 102, 241, 0.2); /* 薄い紫 */
+  border-left: 3px solid var(--primary) !important;
+  color: #e0e7ff !important;
+}
+/* 時間付きイベントのドット */
+.fc-daygrid-event-dot {
+  border-color: var(--primary) !important;
+}
+
+/* リスト表示 */
+.fc-list {
+  border-color: var(--border) !important;
+}
+.fc-list-event:hover td {
+  background-color: var(--bg-hover) !important;
 }
 
 /* アニメーション */
-@keyframes fadeInScale {
+@keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: scale(0.98) translateY(10px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: translateY(0);
   }
 }
-.animate-enter {
-  animation: fadeInScale 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.animate-fade-in {
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* --- ★以下、カレンダーのモダン化CSS --- */
+
+/* イベントのデザインを「ベタ塗り」から「左線＋半透明」に変える */
+.fc-daygrid-event {
+  background-color: transparent !important; /* 背景を透明に */
+  border: none !important;
+  margin-bottom: 2px !important;
+  border-radius: 4px !important;
+  position: relative;
+  padding-left: 8px !important; /* 左に色線のスペース */
+  overflow: hidden;
+}
+
+/* イベントの背景（うっすら色をつける） */
+.fc-daygrid-event::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(
+    --fc-event-border-color,
+    #6366f1
+  ); /* イベントの色を使う */
+  opacity: 0.15; /* 透明度15% */
+  z-index: -1;
+}
+
+/* 左側のアクセントライン */
+.fc-daygrid-event::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px; /* 左線の太さ */
+  height: 100%;
+  background-color: var(--fc-event-border-color, #6366f1);
+  border-radius: 2px 0 0 2px;
+}
+
+/* テキストの色 */
+.fc-event-title,
+.fc-time-custom,
+.fc-title-custom {
+  color: #e2e8f0 !important; /* 文字は白系 */
+  font-weight: 500;
+  font-size: 0.75rem;
+}
+
+/* 時間表示のスタイル */
+.fc-time-custom {
+  opacity: 0.7;
+  margin-right: 4px;
+  font-size: 0.7rem;
+}
+
+/* 今日の日付の丸の色（紫に統一） */
+.fc-day-today .fc-daygrid-day-number {
+  background-color: #6366f1 !important;
+  color: white !important;
 }
 </file>
 
@@ -2497,22 +2715,27 @@ const handleLogout = async () => {
 
 <file path="src/App.vue">
 <script setup lang="ts">
-import { onMounted, watch } from "vue";
+import { onMounted, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useMyBrain } from "@/composables/useMyBrain";
+import { useTheme } from "@/composables/useTheme"; // 追加
 
 const { initAuth, currentUser } = useMyBrain();
+const { initTheme, cleanupTheme } = useTheme(); // 追加
 const router = useRouter();
 
 onMounted(() => {
-  initAuth(); // 認証監視スタート
+  initAuth();
+  initTheme(); // テーマ監視開始
 });
 
-// ★追加: ユーザー状態を監視し、予期せずログアウト状態になったらログイン画面へ
+onUnmounted(() => {
+  cleanupTheme();
+});
+
 watch(currentUser, (newUser) => {
   if (newUser === null) {
-    // 現在のページが公開ページ（ログイン不要ページ）でなければリダイレクト
-    const publicPages = ["/", "/login", "/legal", "/verify-email"];
+    const publicPages = ["/", "/login", "/legal", "/verify-email", "/privacy"];
     if (!publicPages.includes(router.currentRoute.value.path)) {
       router.push("/login");
     }
@@ -2905,336 +3128,6 @@ export interface DailyReport {
   content: string;
   highlights: string[];
   createdAt: any;
-}
-</file>
-
-<file path="src/views/HomeView/useHomeView.ts">
-import { ref, onMounted, watch, nextTick, computed } from "vue";
-import { useMyBrain } from "@/composables/useMyBrain";
-import type { Memory } from "@/types";
-import mermaid from "mermaid";
-import { httpsCallable, getFunctions } from "firebase/functions";
-import { getApp } from "firebase/app";
-import { useRouter, useRoute } from "vue-router";
-import axios from "axios";
-
-import dayGridPlugin from "@fullcalendar/daygrid";
-import timeGridPlugin from "@fullcalendar/timegrid";
-import interactionPlugin from "@fullcalendar/interaction";
-import listPlugin from "@fullcalendar/list";
-import type { CalendarOptions } from "@fullcalendar/core";
-
-const GOOGLE_CALENDAR_COLORS: Record<string, string> = {
-  "1": "#7986cb",
-  "2": "#33b679",
-  "3": "#8e24aa",
-  "4": "#e67c73",
-  "5": "#f6c026",
-  "6": "#f4511e",
-  "7": "#039be5",
-  "8": "#616161",
-  "9": "#3f51b5",
-  "10": "#0b8043",
-  "11": "#d50000",
-};
-
-export function useHomeView() {
-  const {
-    initAuth,
-    chatLogs,
-    isAiThinking,
-    currentUser,
-    findRelatedMemories,
-    todos,
-    dailyReports,
-    toggleTodo,
-    deleteTodo,
-    callGoogleApi,
-    isCalendarConnected, // ★追加
-    reconnectCalendar, // ★追加
-  } = useMyBrain();
-  const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
-  const editingMemory = ref<Memory | null>(null);
-  const chatContainerRef = ref<HTMLElement | null>(null);
-  const showSuccessToast = ref(false);
-  const calendarLoading = ref(false);
-  const isReportModalOpen = ref(false);
-  const route = useRoute();
-  const router = useRouter();
-  const isBottomSheetOpen = ref(false);
-  const selectedDateStr = ref("");
-  const selectedDateEvents = ref<any[]>([]);
-  const relatedMemories = ref<Memory[]>([]);
-  const isSearchingMemories = ref(false);
-
-  const openBottomSheet = async (dateStr: string) => {
-    selectedDateStr.value = dateStr;
-    relatedMemories.value = [];
-    isSearchingMemories.value = false;
-    const events = (calendarOptions.value.events as any[]) || [];
-    selectedDateEvents.value = events
-      .filter((ev: any) => ev.start && ev.start.startsWith(dateStr))
-      .sort(
-        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
-      );
-    isBottomSheetOpen.value = true;
-    if (selectedDateEvents.value.length > 0) {
-      isSearchingMemories.value = true;
-      const queryText = selectedDateEvents.value.map((e) => e.title).join(" ");
-      try {
-        relatedMemories.value = await findRelatedMemories(queryText);
-      } catch (e) {
-        console.error("Related search failed", e);
-      } finally {
-        isSearchingMemories.value = false;
-      }
-    }
-  };
-
-  const closeBottomSheet = () => {
-    isBottomSheetOpen.value = false;
-  };
-
-  const deleteEvent = async (eventId: string) => {
-    if (!confirm("削除しますか？")) return;
-    try {
-      await callGoogleApi(async (token) => {
-        await axios.delete(
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-      });
-      selectedDateEvents.value = selectedDateEvents.value.filter(
-        (e) => e.id !== eventId,
-      );
-      const currentEvents = (calendarOptions.value.events as any[]) || [];
-      calendarOptions.value.events = currentEvents.filter(
-        (e: any) => e.id !== eventId,
-      );
-    } catch (e: any) {
-      alert("削除失敗: " + e.message);
-    }
-  };
-
-  const calendarOptions = ref<CalendarOptions>({
-    plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
-    initialView: "dayGridMonth",
-    headerToolbar: { left: "prev", center: "title", right: "next" },
-    events: [] as any[],
-    locale: "ja",
-    height: "100%",
-    expandRows: true,
-    dayMaxEvents: 2,
-    moreLinkClick: (arg) => {
-      openBottomSheet(arg.date.toISOString().split("T")[0]);
-      return "void";
-    },
-    dateClick: (info) => {
-      openBottomSheet(info.dateStr);
-    },
-    eventClick: (info) => {
-      info.jsEvent.preventDefault();
-      openBottomSheet(info.event.startStr.split("T")[0]);
-    },
-    eventTimeFormat: {
-      hour: "numeric",
-      minute: "2-digit",
-      meridiem: false,
-      hour12: false,
-    },
-    longPressDelay: 500,
-    handleWindowResize: true,
-    eventContent: function (arg: any) {
-      return {
-        html: `<div class="fc-content-custom"><div class="fc-marker" style="background-color: ${arg.event.backgroundColor}"></div><div class="fc-details"><span class="fc-time-custom">${arg.timeText}</span><span class="fc-title-custom">${arg.event.title}</span></div></div>`,
-      };
-    },
-  });
-
-  const fetchAllCalendars = async () => {
-    calendarLoading.value = true;
-    try {
-      const calendars = await callGoogleApi(async (token) => {
-        let list = [{ id: "primary", backgroundColor: "#818cf8" }];
-        try {
-          const listRes = await axios.get(
-            "https://www.googleapis.com/calendar/v3/users/me/calendarList",
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
-          if (listRes.data.items) {
-            list = listRes.data.items.map((cal: any) => ({
-              id: cal.id,
-              backgroundColor: cal.backgroundColor || "#818cf8",
-            }));
-          }
-        } catch (e) {
-          console.warn("List fetch failed, using primary only");
-        }
-        return list;
-      });
-
-      if (!calendars) return;
-
-      const now = new Date();
-      const timeMin = new Date(
-        now.getFullYear(),
-        now.getMonth() - 1,
-        1,
-      ).toISOString();
-      const timeMax = new Date(
-        now.getFullYear(),
-        now.getMonth() + 2,
-        0,
-      ).toISOString();
-
-      const promises = calendars.map((cal: any) =>
-        callGoogleApi(async (token) => {
-          return axios
-            .get(
-              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`,
-              {
-                headers: { Authorization: `Bearer ${token}` },
-                params: {
-                  timeMin,
-                  timeMax,
-                  singleEvents: true,
-                  maxResults: 250,
-                },
-              },
-            )
-            .catch((e) => ({ data: { items: [] } }));
-        }),
-      );
-
-      const results = await Promise.all(promises);
-      const allEvents = results.flatMap((res: any, index) => {
-        if (!res || !res.data) return [];
-        const defaultColor = calendars[index].backgroundColor;
-        return (res.data.items || []).map((ev: any) => {
-          let bgColor = defaultColor;
-          if (ev.colorId && GOOGLE_CALENDAR_COLORS[ev.colorId])
-            bgColor = GOOGLE_CALENDAR_COLORS[ev.colorId];
-          return {
-            id: ev.id,
-            title: ev.summary || "(なし)",
-            start: ev.start.dateTime || ev.start.date,
-            end: ev.end.dateTime || ev.end.date,
-            backgroundColor: bgColor,
-            allDay: !ev.start.dateTime,
-          };
-        });
-      });
-      calendarOptions.value.events = allEvents;
-    } catch (e: any) {
-      console.error("Calendar fetch global error:", e);
-    } finally {
-      calendarLoading.value = false;
-    }
-  };
-
-  const scrollToBottom = async () => {
-    if (inputMode.value !== "chat") return;
-    await nextTick();
-    setTimeout(() => {
-      if (chatContainerRef.value)
-        chatContainerRef.value.scrollTo({
-          top: chatContainerRef.value.scrollHeight,
-          behavior: "smooth",
-        });
-    }, 100);
-  };
-
-  onMounted(async () => {
-    initAuth();
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: "dark",
-      securityLevel: "loose",
-      suppressErrorRendering: true,
-    });
-    const code = route.query.code as string;
-    if (code) {
-      window.history.replaceState({}, document.title, "/app");
-      try {
-        const functions = getFunctions(getApp(), "asia-northeast1");
-        const linkFunc = httpsCallable(functions, "linkLineAccount");
-        await linkFunc({ code, redirectUri: window.location.origin + "/app" });
-        showSuccessToast.value = true;
-        setTimeout(() => (showSuccessToast.value = false), 5000);
-      } catch (e) {
-        alert("LINE連携失敗");
-      }
-    }
-    if (currentUser.value) fetchAllCalendars();
-  });
-
-  watch(inputMode, (newMode) => {
-    if (newMode === "chat") {
-      nextTick(() => {
-        if (chatContainerRef.value)
-          chatContainerRef.value.scrollTop =
-            chatContainerRef.value.scrollHeight;
-      });
-      scrollToBottom();
-    } else if (newMode === "calendar") {
-      setTimeout(() => {
-        window.dispatchEvent(new Event("resize"));
-        fetchAllCalendars();
-      }, 100);
-    }
-  });
-
-  watch(chatLogs, scrollToBottom, { deep: true });
-  watch(isAiThinking, scrollToBottom);
-
-  const onOpenDetail = (memo: Memory) => {
-    editingMemory.value = memo;
-  };
-  const onModeChange = (newMode: "memo" | "chat" | "url" | "calendar") => {
-    inputMode.value = newMode;
-  };
-  const formatDateHeader = (dateStr: string) => {
-    if (!dateStr) return "";
-    const d = new Date(dateStr);
-    const days = ["日", "月", "火", "水", "木", "金", "土"];
-    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${days[d.getDay()]})`;
-  };
-  const formatTimeRange = (ev: any) => {
-    if (ev.allDay) return "終日";
-    const start = new Date(ev.start);
-    return start.toLocaleTimeString("ja-JP", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  return {
-    inputMode,
-    editingMemory,
-    chatContainerRef,
-    showSuccessToast,
-    calendarLoading,
-    calendarOptions,
-    isBottomSheetOpen,
-    selectedDateStr,
-    selectedDateEvents,
-    openBottomSheet,
-    closeBottomSheet,
-    onOpenDetail,
-    onModeChange,
-    formatDateHeader,
-    formatTimeRange,
-    deleteEvent,
-    relatedMemories,
-    isSearchingMemories,
-    todos,
-    dailyReports,
-    toggleTodo,
-    deleteTodo,
-    isReportModalOpen,
-    isCalendarConnected, // ★追加
-    reconnectCalendar, // ★追加
-  };
 }
 </file>
 
@@ -3920,641 +3813,6 @@ service cloud.firestore {
 }
 </file>
 
-<file path="functions/lib/index.js">
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.unlinkLineAccount = exports.lineWebhook = exports.linkLineAccount = exports.scrapeUrl = void 0;
-const https_1 = require("firebase-functions/v2/https");
-const v2_1 = require("firebase-functions/v2");
-const params_1 = require("firebase-functions/params");
-const admin = __importStar(require("firebase-admin"));
-const axios_1 = __importDefault(require("axios"));
-const cheerio = __importStar(require("cheerio"));
-const line = __importStar(require("@line/bot-sdk"));
-const generative_ai_1 = require("@google/generative-ai");
-if (admin.apps.length === 0) {
-    admin.initializeApp();
-}
-const db = admin.firestore();
-// ★修正: ここから cors: true を削除（エラーの原因でした）
-(0, v2_1.setGlobalOptions)({ region: "asia-northeast1", memory: "1GiB" });
-const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN");
-const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET");
-const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID");
-const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET");
-const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
-// --------------------
-// 1. URLスクレイピング
-// --------------------
-exports.scrapeUrl = (0, https_1.onCall)(async (request) => {
-    if (!request.auth)
-        throw new https_1.HttpsError("unauthenticated", "Login required");
-    const { url } = request.data;
-    try {
-        const response = await axios_1.default.get(url, {
-            headers: { "User-Agent": "Mozilla/5.0..." },
-            timeout: 10000,
-        });
-        const $ = cheerio.load(response.data);
-        $("script").remove();
-        $("style").remove();
-        const title = $("title").text().trim() || "No Title";
-        let content = "";
-        $("p, h1, h2, article").each((_, el) => {
-            const text = $(el).text().trim();
-            if (text.length > 20)
-                content += text + "\n";
-        });
-        return { success: true, title, content: content.slice(0, 50000) };
-    }
-    catch (error) {
-        throw new https_1.HttpsError("internal", error.message);
-    }
-});
-// --------------------
-// 2. LINE連携 (ログイン用)
-// --------------------
-exports.linkLineAccount = (0, https_1.onCall)({ secrets: [lineLoginChannelId, lineLoginChannelSecret] }, async (request) => {
-    if (!request.auth)
-        throw new https_1.HttpsError("unauthenticated", "Login required");
-    const { code, redirectUri } = request.data;
-    try {
-        const params = new URLSearchParams();
-        params.append("grant_type", "authorization_code");
-        params.append("code", code);
-        params.append("redirect_uri", redirectUri);
-        params.append("client_id", lineLoginChannelId.value());
-        params.append("client_secret", lineLoginChannelSecret.value());
-        const tokenRes = await axios_1.default.post("https://api.line.me/oauth2/v2.1/token", params);
-        const { access_token } = tokenRes.data;
-        const profileRes = await axios_1.default.get("https://api.line.me/v2/profile", {
-            headers: { Authorization: `Bearer ${access_token}` },
-        });
-        await db.collection("users").doc(request.auth.uid).set({
-            isLineLinked: true,
-            lineUserId: profileRes.data.userId,
-            lineDisplayName: profileRes.data.displayName,
-        }, { merge: true });
-        return { success: true };
-    }
-    catch (error) {
-        throw new https_1.HttpsError("internal", "LINE連携失敗");
-    }
-});
-// --------------------
-// 3. LINE Webhook
-// --------------------
-exports.lineWebhook = (0, https_1.onRequest)(
-// ★ここに cors: true を設定
-{ secrets: [lineBotToken, lineBotSecret, geminiApiKey], cors: true }, async (req, res) => {
-    console.log("LINE Webhook Triggered:", JSON.stringify(req.body));
-    const token = lineBotToken.value();
-    if (!token) {
-        console.error("LINE_BOT_TOKEN is not set.");
-        res.status(500).send("Config Error");
-        return;
-    }
-    const client = new line.Client({ channelAccessToken: token });
-    const events = req.body.events;
-    for (const event of events) {
-        if (event.type !== "message")
-            continue;
-        const lineUserId = event.source.userId;
-        if (!lineUserId)
-            continue;
-        const usersSnap = await db
-            .collection("users")
-            .where("lineUserId", "==", lineUserId)
-            .limit(1)
-            .get();
-        if (usersSnap.empty) {
-            console.log(`User not found for LINE ID: ${lineUserId}`);
-            try {
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "⚠️ まだアプリと連携されていません。\n\nアプリの「設定」>「LINE連携」ボタンを押して連携してください！",
-                });
-            }
-            catch (err) {
-                console.error("Error sending reply (not linked):", err);
-            }
-            continue;
-        }
-        const uid = usersSnap.docs[0].id;
-        try {
-            if (event.message.type === "text") {
-                await saveMemoryFromLine(uid, event.message.text, null);
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "📝 メモしました！(AI処理完了)",
-                });
-            }
-            else if (event.message.type === "image") {
-                const stream = await client.getMessageContent(event.message.id);
-                const chunks = [];
-                for await (const chunk of stream)
-                    chunks.push(chunk);
-                const buffer = Buffer.concat(chunks);
-                await saveMemoryFromLine(uid, "LINE画像", {
-                    data: buffer.toString("base64"),
-                    mimeType: "image/jpeg",
-                });
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "📷 画像を保存しました！",
-                });
-            }
-        }
-        catch (e) {
-            console.error("Error processing message:", e);
-            try {
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "エラーが発生しました💦: " + e.message,
-                });
-            }
-            catch (replyErr) {
-                console.error("Failed to send error message:", replyErr);
-            }
-        }
-    }
-    res.json({ success: true });
-});
-// --------------------
-// 4. LINE連携解除
-// --------------------
-// ★ここに cors: true を設定することでブラウザからの呼び出しを許可
-exports.unlinkLineAccount = (0, https_1.onCall)({ cors: true }, async (request) => {
-    if (!request.auth)
-        throw new https_1.HttpsError("unauthenticated", "Login required");
-    try {
-        console.log("Unlinking LINE for user:", request.auth.uid);
-        await db.collection("users").doc(request.auth.uid).update({
-            isLineLinked: false,
-            lineUserId: admin.firestore.FieldValue.delete(),
-            lineDisplayName: admin.firestore.FieldValue.delete(),
-        });
-        console.log("Unlink successful");
-        return { success: true };
-    }
-    catch (error) {
-        console.error("Unlink Error:", error);
-        throw new https_1.HttpsError("internal", "LINE解除失敗: " + error.message);
-    }
-});
-// --------------------
-// ヘルパー関数
-// --------------------
-async function getSmartModelName(apiKey) {
-    try {
-        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-        const listResponse = await axios_1.default.get(listUrl);
-        const models = listResponse.data.models || [];
-        const viableModels = models.filter((m) => { var _a; return (_a = m.supportedGenerationMethods) === null || _a === void 0 ? void 0 : _a.includes("generateContent"); });
-        const preferredOrder = [
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-pro",
-            "gemini-pro",
-        ];
-        for (const pref of preferredOrder) {
-            const found = viableModels.find((m) => m.name.includes(pref));
-            if (found)
-                return found.name.replace("models/", "");
-        }
-        if (viableModels.length > 0) {
-            return viableModels[0].name.replace("models/", "");
-        }
-        return "gemini-1.5-flash";
-    }
-    catch (e) {
-        console.warn("Model fetch failed in Functions:", e);
-        return "gemini-1.5-flash";
-    }
-}
-async function saveMemoryFromLine(uid, text, image) {
-    const apiKey = geminiApiKey.value();
-    const modelName = await getSmartModelName(apiKey);
-    const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
-    let promptParts = [];
-    if (image) {
-        promptParts.push({ inlineData: image });
-        promptParts.push({
-            text: "画像を分析して記憶データを作成。出力JSON: {summary, tags, fullText}",
-        });
-    }
-    else {
-        promptParts.push({
-            text: `テキストを整理。内容: ${text} 出力JSON: {summary, tags, fullText}`,
-        });
-    }
-    const result = await model.generateContent(promptParts);
-    const jsonStr = result.response
-        .text()
-        .replace(/```json|```/g, "")
-        .trim();
-    let aiData;
-    try {
-        aiData = JSON.parse(jsonStr);
-    }
-    catch (_a) {
-        aiData = {
-            fullText: text,
-            summary: text.substring(0, 20),
-            tags: ["LINE"],
-        };
-    }
-    const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
-    const embedRes = await embedModel.embedContent(aiData.fullText || text);
-    await db.collection("memories").add({
-        userId: uid,
-        text: aiData.fullText || text,
-        aiSummary: aiData.summary,
-        tags: [...(aiData.tags || []), "LINE"],
-        embedding: embedRes.embedding.values,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        hasImage: !!image,
-        source: "LINE",
-        fileType: !!image ? "image/jpeg" : null,
-    });
-}
-</file>
-
-<file path="functions/index.ts">
-import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
-import { setGlobalOptions } from "firebase-functions/v2";
-import { defineSecret } from "firebase-functions/params";
-import * as admin from "firebase-admin";
-import axios from "axios";
-import * as cheerio from "cheerio";
-import * as line from "@line/bot-sdk";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-}
-
-const db = admin.firestore();
-
-// ★修正: ここから cors: true を削除（エラーの原因でした）
-setGlobalOptions({ region: "asia-northeast1", memory: "1GiB" });
-
-const lineBotToken = defineSecret("LINE_BOT_TOKEN");
-const lineBotSecret = defineSecret("LINE_BOT_SECRET");
-const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
-const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
-const geminiApiKey = defineSecret("GEMINI_API_KEY");
-
-// --------------------
-// 1. URLスクレイピング
-// --------------------
-export const scrapeUrl = onCall(async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
-  const { url } = request.data;
-  try {
-    const response = await axios.get(url, {
-      headers: { "User-Agent": "Mozilla/5.0..." },
-      timeout: 10000,
-    });
-    const $ = cheerio.load(response.data);
-    $("script").remove();
-    $("style").remove();
-    const title = $("title").text().trim() || "No Title";
-    let content = "";
-    $("p, h1, h2, article").each((_, el) => {
-      const text = $(el).text().trim();
-      if (text.length > 20) content += text + "\n";
-    });
-    return { success: true, title, content: content.slice(0, 50000) };
-  } catch (error: any) {
-    throw new HttpsError("internal", error.message);
-  }
-});
-
-// --------------------
-// 2. LINE連携 (ログイン用)
-// --------------------
-export const linkLineAccount = onCall(
-  { secrets: [lineLoginChannelId, lineLoginChannelSecret] },
-  async (request) => {
-    if (!request.auth)
-      throw new HttpsError("unauthenticated", "Login required");
-    const { code, redirectUri } = request.data;
-    try {
-      const params = new URLSearchParams();
-      params.append("grant_type", "authorization_code");
-      params.append("code", code);
-      params.append("redirect_uri", redirectUri);
-      params.append("client_id", lineLoginChannelId.value());
-      params.append("client_secret", lineLoginChannelSecret.value());
-
-      const tokenRes = await axios.post(
-        "https://api.line.me/oauth2/v2.1/token",
-        params,
-      );
-      const { access_token } = tokenRes.data;
-      const profileRes = await axios.get("https://api.line.me/v2/profile", {
-        headers: { Authorization: `Bearer ${access_token}` },
-      });
-      await db.collection("users").doc(request.auth.uid).set(
-        {
-          isLineLinked: true,
-          lineUserId: profileRes.data.userId,
-          lineDisplayName: profileRes.data.displayName,
-        },
-        { merge: true },
-      );
-      return { success: true };
-    } catch (error: any) {
-      throw new HttpsError("internal", "LINE連携失敗");
-    }
-  },
-);
-
-// --------------------
-// 3. LINE Webhook
-// --------------------
-export const lineWebhook = onRequest(
-  // ★ここに cors: true を設定
-  { secrets: [lineBotToken, lineBotSecret, geminiApiKey], cors: true },
-  async (req, res) => {
-    console.log("LINE Webhook Triggered:", JSON.stringify(req.body));
-
-    const token = lineBotToken.value();
-    if (!token) {
-      console.error("LINE_BOT_TOKEN is not set.");
-      res.status(500).send("Config Error");
-      return;
-    }
-
-    const client = new line.Client({ channelAccessToken: token });
-    const events = req.body.events;
-
-    for (const event of events) {
-      if (event.type !== "message") continue;
-
-      const lineUserId = event.source.userId;
-      if (!lineUserId) continue;
-
-      const usersSnap = await db
-        .collection("users")
-        .where("lineUserId", "==", lineUserId)
-        .limit(1)
-        .get();
-
-      if (usersSnap.empty) {
-        console.log(`User not found for LINE ID: ${lineUserId}`);
-        try {
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: "⚠️ まだアプリと連携されていません。\n\nアプリの「設定」>「LINE連携」ボタンを押して連携してください！",
-          });
-        } catch (err) {
-          console.error("Error sending reply (not linked):", err);
-        }
-        continue;
-      }
-
-      const uid = usersSnap.docs[0].id;
-
-      try {
-        if (event.message.type === "text") {
-          await saveMemoryFromLine(uid, event.message.text, null);
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: "📝 メモしました！(AI処理完了)",
-          });
-        } else if (event.message.type === "image") {
-          const stream = await client.getMessageContent(event.message.id);
-          const chunks: any[] = [];
-          for await (const chunk of stream) chunks.push(chunk);
-          const buffer = Buffer.concat(chunks);
-          await saveMemoryFromLine(uid, "LINE画像", {
-            data: buffer.toString("base64"),
-            mimeType: "image/jpeg",
-          });
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: "📷 画像を保存しました！",
-          });
-        }
-      } catch (e: any) {
-        console.error("Error processing message:", e);
-        try {
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: "エラーが発生しました💦: " + e.message,
-          });
-        } catch (replyErr) {
-          console.error("Failed to send error message:", replyErr);
-        }
-      }
-    }
-    res.json({ success: true });
-  },
-);
-
-// --------------------
-// 4. LINE連携解除
-// --------------------
-// ★ここに cors: true を設定することでブラウザからの呼び出しを許可
-export const unlinkLineAccount = onCall({ cors: true }, async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
-
-  try {
-    console.log("Unlinking LINE for user:", request.auth.uid);
-
-    await db.collection("users").doc(request.auth.uid).update({
-      isLineLinked: false,
-      lineUserId: admin.firestore.FieldValue.delete(),
-      lineDisplayName: admin.firestore.FieldValue.delete(),
-    });
-
-    console.log("Unlink successful");
-    return { success: true };
-  } catch (error: any) {
-    console.error("Unlink Error:", error);
-    throw new HttpsError("internal", "LINE解除失敗: " + error.message);
-  }
-});
-
-// --------------------
-// ヘルパー関数
-// --------------------
-async function getSmartModelName(apiKey: string): Promise<string> {
-  try {
-    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-    const listResponse = await axios.get(listUrl);
-    const models = listResponse.data.models || [];
-    const viableModels = models.filter((m: any) =>
-      m.supportedGenerationMethods?.includes("generateContent"),
-    );
-    const preferredOrder = [
-      "gemini-1.5-flash",
-      "gemini-1.5-flash-latest",
-      "gemini-1.5-pro",
-      "gemini-pro",
-    ];
-    for (const pref of preferredOrder) {
-      const found = viableModels.find((m: any) => m.name.includes(pref));
-      if (found) return found.name.replace("models/", "");
-    }
-    if (viableModels.length > 0) {
-      return viableModels[0].name.replace("models/", "");
-    }
-    return "gemini-1.5-flash";
-  } catch (e) {
-    console.warn("Model fetch failed in Functions:", e);
-    return "gemini-1.5-flash";
-  }
-}
-
-async function saveMemoryFromLine(
-  uid: string,
-  text: string,
-  image: { data: string; mimeType: string } | null,
-) {
-  const apiKey = geminiApiKey.value();
-  const modelName = await getSmartModelName(apiKey);
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: modelName });
-
-  let promptParts: any[] = [];
-  if (image) {
-    promptParts.push({ inlineData: image });
-    promptParts.push({
-      text: "画像を分析して記憶データを作成。出力JSON: {summary, tags, fullText}",
-    });
-  } else {
-    promptParts.push({
-      text: `テキストを整理。内容: ${text} 出力JSON: {summary, tags, fullText}`,
-    });
-  }
-
-  const result = await model.generateContent(promptParts);
-  const jsonStr = result.response
-    .text()
-    .replace(/```json|```/g, "")
-    .trim();
-  let aiData;
-  try {
-    aiData = JSON.parse(jsonStr);
-  } catch {
-    aiData = {
-      fullText: text,
-      summary: text.substring(0, 20),
-      tags: ["LINE"],
-    };
-  }
-
-  const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
-  const embedRes = await embedModel.embedContent(aiData.fullText || text);
-
-  await db.collection("memories").add({
-    userId: uid,
-    text: aiData.fullText || text,
-    aiSummary: aiData.summary,
-    tags: [...(aiData.tags || []), "LINE"],
-    embedding: embedRes.embedding.values,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    hasImage: !!image,
-    source: "LINE",
-    fileType: !!image ? "image/jpeg" : null,
-  });
-}
-</file>
-
-<file path="src/components/AppHeader/AppHeader.vue">
-<script setup lang="ts">
-import { useAppHeader } from "./useAppHeader";
-import { useMyBrain } from "@/composables/useMyBrain";
-
-const { currentUser, unlinkLine } = useMyBrain(); // unlinkLine を取り出す
-
-// ★設定項目
-const LINE_LOGIN_CHANNEL_ID = "2008915242";
-const REDIRECT_URI = window.location.origin + "/app";
-
-const startLineLogin = () => {
-  const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${LINE_LOGIN_CHANNEL_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=random123&scope=profile%20openid`;
-  window.location.href = url;
-};
-
-const { logout } = useAppHeader();
-</script>
-
-<template>
-  <header
-    class="h-14 px-4 flex items-center justify-between border-b border-slate-800 bg-slate-900/50 backdrop-blur z-20"
-  >
-    <div class="font-black text-lg tracking-tight text-white">🧠 My Brain</div>
-
-    <div class="flex items-center gap-3">
-      <button
-        v-if="currentUser?.isLineLinked"
-        @click="unlinkLine"
-        class="text-[10px] bg-slate-800 text-slate-300 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 border border-slate-600 hover:bg-red-900/80 hover:text-white hover:border-red-500 transition group"
-      >
-        <span class="group-hover:hidden">✅ 連携済</span>
-        <span class="hidden group-hover:inline">🗑️ 解除する</span>
-      </button>
-
-      <button
-        v-else
-        @click="startLineLogin"
-        class="text-[10px] bg-[#06C755] text-white px-3 py-1.5 rounded-full font-bold hover:opacity-90 transition flex items-center gap-1"
-      >
-        <span>💬</span> LINE連携
-      </button>
-
-      <button
-        @click="logout"
-        class="text-xs font-bold text-slate-500 hover:text-white transition"
-      >
-        ログアウト
-      </button>
-    </div>
-  </header>
-</template>
-</file>
-
 <file path="src/components/InputFooter/useInputFooter.ts">
 import { ref, onMounted, type Ref } from "vue";
 import { useMyBrain } from "@/composables/useMyBrain";
@@ -4691,6 +3949,354 @@ export function useInputFooter(inputMode: Ref<InputMode>) {
     clearFiles,
     handleSend,
     handleInput,
+  };
+}
+</file>
+
+<file path="src/views/HomeView/useHomeView.ts">
+import { ref, onMounted, watch, nextTick, computed } from "vue";
+import { useMyBrain } from "@/composables/useMyBrain";
+import type { Memory } from "@/types";
+import mermaid from "mermaid";
+import { httpsCallable, getFunctions } from "firebase/functions";
+import { getApp } from "firebase/app";
+import { useRouter, useRoute } from "vue-router";
+import axios from "axios";
+
+import dayGridPlugin from "@fullcalendar/daygrid";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import listPlugin from "@fullcalendar/list";
+import type { CalendarOptions } from "@fullcalendar/core";
+
+const GOOGLE_CALENDAR_COLORS: Record<string, string> = {
+  "1": "#7986cb",
+  "2": "#33b679",
+  "3": "#8e24aa",
+  "4": "#e67c73",
+  "5": "#f6c026",
+  "6": "#f4511e",
+  "7": "#039be5",
+  "8": "#616161",
+  "9": "#3f51b5",
+  "10": "#0b8043",
+  "11": "#d50000",
+};
+
+export function useHomeView() {
+  const {
+    initAuth,
+    chatLogs,
+    isAiThinking,
+    currentUser,
+    findRelatedMemories,
+    todos,
+    dailyReports,
+    toggleTodo,
+    deleteTodo,
+    callGoogleApi,
+    isCalendarConnected,
+    reconnectCalendar,
+  } = useMyBrain();
+  const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
+  const editingMemory = ref<Memory | null>(null);
+  const chatContainerRef = ref<HTMLElement | null>(null);
+  const showSuccessToast = ref(false);
+  const calendarLoading = ref(false);
+  const isReportModalOpen = ref(false);
+  const route = useRoute();
+  const router = useRouter();
+  const isBottomSheetOpen = ref(false);
+  const selectedDateStr = ref("");
+  const selectedDateEvents = ref<any[]>([]);
+  const relatedMemories = ref<Memory[]>([]);
+  const isSearchingMemories = ref(false);
+
+  const openBottomSheet = async (dateStr: string) => {
+    selectedDateStr.value = dateStr;
+    relatedMemories.value = [];
+    isSearchingMemories.value = false;
+    const events = (calendarOptions.value.events as any[]) || [];
+    selectedDateEvents.value = events
+      .filter((ev: any) => ev.start && ev.start.startsWith(dateStr))
+      .sort(
+        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+      );
+    isBottomSheetOpen.value = true;
+    if (selectedDateEvents.value.length > 0) {
+      isSearchingMemories.value = true;
+      const queryText = selectedDateEvents.value.map((e) => e.title).join(" ");
+      try {
+        relatedMemories.value = await findRelatedMemories(queryText);
+      } catch (e) {
+        console.error("Related search failed", e);
+      } finally {
+        isSearchingMemories.value = false;
+      }
+    }
+  };
+
+  const closeBottomSheet = () => {
+    isBottomSheetOpen.value = false;
+  };
+
+  const deleteEvent = async (eventId: string) => {
+    if (!confirm("削除しますか？")) return;
+    try {
+      await callGoogleApi(async (token) => {
+        await axios.delete(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      });
+      selectedDateEvents.value = selectedDateEvents.value.filter(
+        (e) => e.id !== eventId,
+      );
+      const currentEvents = (calendarOptions.value.events as any[]) || [];
+      calendarOptions.value.events = currentEvents.filter(
+        (e: any) => e.id !== eventId,
+      );
+    } catch (e: any) {
+      alert("削除失敗: " + e.message);
+    }
+  };
+
+  const calendarOptions = ref<CalendarOptions>({
+    plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
+    initialView: "dayGridMonth",
+    headerToolbar: { left: "prev", center: "title", right: "next" },
+    events: [] as any[],
+    locale: "ja",
+    height: "100%",
+    expandRows: true,
+    dayMaxEvents: 2,
+
+    // ★モダン化設定
+    displayEventTime: false,
+
+    eventContent: function (arg: any) {
+      const timeText = arg.event.allDay ? "" : arg.timeText;
+      return {
+        html: `
+          <div class="fc-content-custom">
+            ${timeText ? `<span class="fc-time-custom">${timeText}</span>` : ""}
+            <span class="fc-title-custom">${arg.event.title}</span>
+          </div>
+        `,
+      };
+    },
+
+    moreLinkClick: (arg) => {
+      openBottomSheet(arg.date.toISOString().split("T")[0]);
+      return "void";
+    },
+    dateClick: (info) => {
+      openBottomSheet(info.dateStr);
+    },
+    eventClick: (info) => {
+      info.jsEvent.preventDefault();
+      openBottomSheet(info.event.startStr.split("T")[0]);
+    },
+    eventTimeFormat: {
+      hour: "numeric",
+      minute: "2-digit",
+      meridiem: false,
+      hour12: false,
+    },
+    longPressDelay: 500,
+    handleWindowResize: true,
+  });
+
+  const fetchAllCalendars = async () => {
+    calendarLoading.value = true;
+    try {
+      const calendars = await callGoogleApi(async (token) => {
+        let list = [{ id: "primary", backgroundColor: "#818cf8" }];
+        try {
+          const listRes = await axios.get(
+            "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (listRes.data.items) {
+            list = listRes.data.items.map((cal: any) => ({
+              id: cal.id,
+              backgroundColor: cal.backgroundColor || "#818cf8",
+            }));
+          }
+        } catch (e: any) {
+          if (e.response && e.response.status === 401) {
+            throw e;
+          }
+          console.warn("List fetch failed, using primary only");
+        }
+        return list;
+      });
+
+      if (!calendars) return;
+
+      const now = new Date();
+      const timeMin = new Date(
+        now.getFullYear(),
+        now.getMonth() - 1,
+        1,
+      ).toISOString();
+      const timeMax = new Date(
+        now.getFullYear(),
+        now.getMonth() + 2,
+        0,
+      ).toISOString();
+
+      const promises = calendars.map((cal: any) =>
+        callGoogleApi(async (token) => {
+          return axios
+            .get(
+              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+                params: {
+                  timeMin,
+                  timeMax,
+                  singleEvents: true,
+                  maxResults: 250,
+                },
+              },
+            )
+            .catch((e) => ({ data: { items: [] } }));
+        }),
+      );
+
+      const results = await Promise.all(promises);
+      const allEvents = results.flatMap((res: any, index) => {
+        if (!res || !res.data) return [];
+        const defaultColor = calendars[index].backgroundColor;
+        return (res.data.items || []).map((ev: any) => {
+          let bgColor = defaultColor;
+          if (ev.colorId && GOOGLE_CALENDAR_COLORS[ev.colorId])
+            bgColor = GOOGLE_CALENDAR_COLORS[ev.colorId];
+          return {
+            id: ev.id,
+            title: ev.summary || "(なし)",
+            start: ev.start.dateTime || ev.start.date,
+            end: ev.end.dateTime || ev.end.date,
+            backgroundColor: bgColor,
+            allDay: !ev.start.dateTime,
+          };
+        });
+      });
+      calendarOptions.value.events = allEvents;
+    } catch (e: any) {
+      console.error("Calendar fetch global error:", e);
+      if (e.response && e.response.status === 401) {
+        localStorage.removeItem("google_calendar_token");
+        isCalendarConnected.value = false;
+      }
+    } finally {
+      calendarLoading.value = false;
+    }
+  };
+
+  const scrollToBottom = async () => {
+    if (inputMode.value !== "chat") return;
+    await nextTick();
+    setTimeout(() => {
+      if (chatContainerRef.value)
+        chatContainerRef.value.scrollTo({
+          top: chatContainerRef.value.scrollHeight,
+          behavior: "smooth",
+        });
+    }, 100);
+  };
+
+  onMounted(async () => {
+    initAuth();
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "dark",
+      securityLevel: "loose",
+      suppressErrorRendering: true,
+    });
+    const code = route.query.code as string;
+    if (code) {
+      window.history.replaceState({}, document.title, "/app");
+      try {
+        const functions = getFunctions(getApp(), "asia-northeast1");
+        const linkFunc = httpsCallable(functions, "linkLineAccount");
+        await linkFunc({ code, redirectUri: window.location.origin + "/app" });
+        showSuccessToast.value = true;
+        setTimeout(() => (showSuccessToast.value = false), 5000);
+      } catch (e) {
+        alert("LINE連携失敗");
+      }
+    }
+    if (currentUser.value) fetchAllCalendars();
+  });
+
+  watch(inputMode, (newMode) => {
+    if (newMode === "chat") {
+      nextTick(() => {
+        if (chatContainerRef.value)
+          chatContainerRef.value.scrollTop =
+            chatContainerRef.value.scrollHeight;
+      });
+      scrollToBottom();
+    } else if (newMode === "calendar") {
+      setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+        fetchAllCalendars();
+      }, 100);
+    }
+  });
+
+  watch(chatLogs, scrollToBottom, { deep: true });
+  watch(isAiThinking, scrollToBottom);
+
+  const onOpenDetail = (memo: Memory) => {
+    editingMemory.value = memo;
+  };
+  const onModeChange = (newMode: "memo" | "chat" | "url" | "calendar") => {
+    inputMode.value = newMode;
+  };
+  const formatDateHeader = (dateStr: string) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    const days = ["日", "月", "火", "水", "木", "金", "土"];
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${days[d.getDay()]})`;
+  };
+  const formatTimeRange = (ev: any) => {
+    if (ev.allDay) return "終日";
+    const start = new Date(ev.start);
+    return start.toLocaleTimeString("ja-JP", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  return {
+    inputMode,
+    editingMemory,
+    chatContainerRef,
+    showSuccessToast,
+    calendarLoading,
+    calendarOptions,
+    isBottomSheetOpen,
+    selectedDateStr,
+    selectedDateEvents,
+    openBottomSheet,
+    closeBottomSheet,
+    onOpenDetail,
+    onModeChange,
+    formatDateHeader,
+    formatTimeRange,
+    deleteEvent,
+    relatedMemories,
+    isSearchingMemories,
+    todos,
+    dailyReports,
+    toggleTodo,
+    deleteTodo,
+    isReportModalOpen,
+    isCalendarConnected,
+    reconnectCalendar,
   };
 }
 </file>
@@ -4870,6 +4476,1180 @@ const router = useRouter();
 </html>
 </file>
 
+<file path="functions/lib/index.js">
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.scrapeUrl = exports.checkUpcomingMeetings = exports.sendMorningBriefing = exports.unlinkLineAccount = exports.linkLineAccount = exports.lineWebhook = void 0;
+const https_1 = require("firebase-functions/v2/https");
+const scheduler_1 = require("firebase-functions/v2/scheduler");
+const v2_1 = require("firebase-functions/v2");
+const params_1 = require("firebase-functions/params");
+const admin = __importStar(require("firebase-admin"));
+const axios_1 = __importDefault(require("axios"));
+const line = __importStar(require("@line/bot-sdk"));
+if (admin.apps.length === 0) {
+    admin.initializeApp();
+}
+const db = admin.firestore();
+// メモリ設定
+(0, v2_1.setGlobalOptions)({
+    region: "asia-northeast1",
+    memory: "1GiB",
+    timeoutSeconds: 60,
+});
+// Secrets
+const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN");
+const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET");
+const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
+const googleClientId = (0, params_1.defineSecret)("GOOGLE_CLIENT_ID");
+const googleClientSecret = (0, params_1.defineSecret)("GOOGLE_CLIENT_SECRET");
+const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID");
+const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET");
+// モデルリスト
+const CANDIDATE_MODELS = [
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-001",
+    "gemini-1.5-flash-002",
+    "gemini-1.5-pro",
+    "gemini-1.5-pro-001",
+    "gemini-pro",
+];
+// Helper: 動的モデル解決
+async function resolveGeminiModel(apiKey) {
+    var _a;
+    try {
+        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+        const listResponse = await axios_1.default.get(listUrl);
+        if (listResponse.status !== 200)
+            throw new Error("Model fetch failed");
+        const listData = listResponse.data;
+        const generationModels = (listData.models || []).filter((m) => { var _a; return (_a = m.supportedGenerationMethods) === null || _a === void 0 ? void 0 : _a.includes("generateContent"); });
+        const flash = generationModels.find((m) => m.name.includes("gemini-1.5-flash"));
+        const targetModel = (_a = (flash || generationModels[0])) === null || _a === void 0 ? void 0 : _a.name.replace("models/", "");
+        if (!targetModel)
+            throw new Error("No models found");
+        return targetModel;
+    }
+    catch (e) {
+        console.warn("Dynamic model resolution failed, falling back.", e);
+        return "";
+    }
+}
+// Helper: Gemini API (JSON)
+async function callGeminiJson(apiKey, prompt) {
+    var _a, _b, _c, _d, _e, _f;
+    const dynamicModel = await resolveGeminiModel(apiKey);
+    let modelsToTry = dynamicModel
+        ? [dynamicModel, ...CANDIDATE_MODELS]
+        : CANDIDATE_MODELS;
+    modelsToTry = [...new Set(modelsToTry)];
+    for (const modelName of modelsToTry) {
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+            const response = await axios_1.default.post(url, {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { responseMimeType: "application/json" },
+            }, { headers: { "Content-Type": "application/json" } });
+            const text = (_f = (_e = (_d = (_c = (_b = (_a = response.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text;
+            if (text) {
+                try {
+                    return JSON.parse(text);
+                }
+                catch (e) {
+                    try {
+                        return JSON.parse(text.replace(/```json|```/g, "").trim());
+                    }
+                    catch (e2) {
+                        return { type: "CHAT", reply: text.substring(0, 100) };
+                    }
+                }
+            }
+        }
+        catch (e) {
+            console.warn(`Model ${modelName} failed, retrying...`);
+        }
+    }
+    throw new Error("All AI models failed");
+}
+// Helper: Gemini API (Text)
+async function callGeminiText(apiKey, prompt) {
+    var _a, _b, _c, _d, _e, _f;
+    const dynamicModel = await resolveGeminiModel(apiKey);
+    let modelsToTry = dynamicModel
+        ? [dynamicModel, ...CANDIDATE_MODELS]
+        : CANDIDATE_MODELS;
+    modelsToTry = [...new Set(modelsToTry)];
+    for (const modelName of modelsToTry) {
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+            const response = await axios_1.default.post(url, { contents: [{ parts: [{ text: prompt }] }] }, { headers: { "Content-Type": "application/json" } });
+            return ((_f = (_e = (_d = (_c = (_b = (_a = response.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text) || "";
+        }
+        catch (e) { }
+    }
+    return "すみません、調子が悪いです。";
+}
+// Helper: Token Refresh
+async function refreshAccessToken(refreshToken) {
+    try {
+        const response = await axios_1.default.post("https://oauth2.googleapis.com/token", {
+            client_id: googleClientId.value(),
+            client_secret: googleClientSecret.value(),
+            refresh_token: refreshToken,
+            grant_type: "refresh_token",
+        });
+        return response.data.access_token;
+    }
+    catch (e) {
+        return null;
+    }
+}
+// Helper: カレンダー取得
+async function getCalendarEvents(uid) {
+    var _a;
+    try {
+        const tokenDoc = await db
+            .collection("users")
+            .doc(uid)
+            .collection("system")
+            .doc("tokens")
+            .get();
+        if (!tokenDoc.exists)
+            return "（カレンダー未連携）";
+        const refreshToken = (_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken;
+        if (!refreshToken)
+            return "（権限なし）";
+        const accessToken = await refreshAccessToken(refreshToken);
+        if (!accessToken)
+            return "（トークン期限切れ）";
+        const now = new Date();
+        const timeMin = now.toISOString();
+        const timeMax = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        const res = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            params: {
+                timeMin,
+                timeMax,
+                singleEvents: true,
+                orderBy: "startTime",
+                maxResults: 15,
+            },
+        });
+        const events = res.data.items || [];
+        if (events.length === 0)
+            return "直近の予定なし";
+        return events
+            .map((ev) => {
+            const start = ev.start.dateTime
+                ? new Date(ev.start.dateTime).toLocaleString("ja-JP", {
+                    timeZone: "Asia/Tokyo",
+                    month: "numeric",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                })
+                : `[終日] ${ev.start.date}`;
+            return `・${start}: ${ev.summary}`;
+        })
+            .join("\n");
+    }
+    catch (e) {
+        return "（取得エラー）";
+    }
+}
+// Helper: 過去のメモ取得
+async function getRecentMemories(uid) {
+    try {
+        const snapshot = await db
+            .collection("memories")
+            .where("userId", "==", uid)
+            .orderBy("createdAt", "desc")
+            .limit(10)
+            .get();
+        if (snapshot.empty)
+            return "（過去のメモなし）";
+        return snapshot.docs
+            .map((doc) => {
+            var _a;
+            const data = doc.data();
+            const date = ((_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate)
+                ? `[${data.createdAt.toDate().toLocaleDateString()}]`
+                : "";
+            return `${date} ${data.text}`;
+        })
+            .join("\n");
+    }
+    catch (e) {
+        return "（メモ取得エラー）";
+    }
+}
+// =========================================================
+// 機能 1: LINE Webhook
+// =========================================================
+exports.lineWebhook = (0, https_1.onRequest)({
+    secrets: [
+        lineBotToken,
+        lineBotSecret,
+        geminiApiKey,
+        googleClientId,
+        googleClientSecret,
+    ],
+    cors: true,
+}, async (req, res) => {
+    const token = lineBotToken.value();
+    const apiKey = geminiApiKey.value();
+    if (!token || !apiKey) {
+        res.status(500).send("Config Error");
+        return;
+    }
+    const client = new line.Client({ channelAccessToken: token });
+    const events = req.body.events;
+    await Promise.all(events.map(async (event) => {
+        if (event.type !== "message" || event.message.type !== "text")
+            return;
+        const eventId = event.webhookEventId;
+        const lineUserId = event.source.userId;
+        const message = event.message.text;
+        try {
+            await db.collection("processed_events").doc(eventId).create({
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                userId: lineUserId,
+            });
+        }
+        catch (e) {
+            return;
+        }
+        const usersSnap = await db
+            .collection("users")
+            .where("lineUserId", "==", lineUserId)
+            .limit(1)
+            .get();
+        if (usersSnap.empty) {
+            await client.replyMessage(event.replyToken, {
+                type: "text",
+                text: "アプリで連携してね🙇‍♂️",
+            });
+            return;
+        }
+        const uid = usersSnap.docs[0].id;
+        // ★分類プロンプト（汎用化）
+        const classifyPrompt = `
+        ユーザーの入力: "${message}"
+        
+        以下の3つに分類しJSONで出力せよ:
+        1. CALENDAR: 未来の予定を「聞いている」場合（例:「明日の予定は？」）。
+        2. MEMORY: 情報を「保存・記録したい」場合。
+        3. CHAT: 
+           - 過去の情報を「聞いている」場合（例:「買い物リストは何？」「～って言ったっけ？」）。
+           - 単なる雑談、挨拶。
+           - 意図が不明確な場合。
+
+        出力JSON: { "type": "CALENDAR" | "MEMORY" | "CHAT" }
+      `;
+        let msgType = "CHAT";
+        try {
+            const result = await callGeminiJson(apiKey, classifyPrompt);
+            if (result === null || result === void 0 ? void 0 : result.type)
+                msgType = result.type;
+        }
+        catch (e) { }
+        if (msgType === "CALENDAR") {
+            const eventsText = await getCalendarEvents(uid);
+            const reply = await callGeminiText(apiKey, `質問: "${message}"\n予定:\n${eventsText}\nこれを見て答えて。`);
+            await client.replyMessage(event.replyToken, {
+                type: "text",
+                text: reply,
+            });
+        }
+        else if (msgType === "MEMORY") {
+            // ★保存モード：タスク判定の汎用化・高度化
+            const memoryPrompt = `
+          入力: "${message}"
+          
+          これをメモとして保存します。以下の基準でJSONを出力してください:
+          { "summary": "20文字以内の要約", "tags": ["タグ1"], "isTask": boolean }
+
+          【isTask の判定基準（汎用ルール）】
+          - true (タスク):
+            - 「完了」の概念があるもの。
+            - ユーザーが「ToDoリスト」として管理したい意図が見えるもの。
+            - 命令形（～して）、義務（～しなきゃ）、依頼（～とリマインドして）。
+            - 単語の羅列（買い物リストなど）。
+          
+          - false (メモ):
+            - 単なる「情報」や「事実」の記録。
+            - 未来の「意思表示」や「予定の宣言」（例：「明日～する」「来週～へ行く」）。
+              ※これらはカレンダー的な予定であって、ToDoチェックリストではないため。
+            - 日記、感想、思考の記録。
+
+          例:
+          - "牛乳を買う" -> true (行動が必要)
+          - "明日ジムに行く" -> false (予定・宣言 = メモ)
+          - "ジムに行くこと" -> true (タスク)
+          - "パスワードは1234" -> false (記録)
+        `;
+            const memResult = await callGeminiJson(apiKey, memoryPrompt);
+            await db.collection("memories").add({
+                userId: uid,
+                text: message,
+                aiSummary: memResult.summary,
+                tags: [...(memResult.tags || []), "LINE"],
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                source: "LINE",
+            });
+            if (memResult.isTask) {
+                await db.collection("todos").add({
+                    userId: uid,
+                    title: message,
+                    isCompleted: false,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    source: "LINE",
+                });
+                await client.replyMessage(event.replyToken, {
+                    type: "text",
+                    text: "📝 タスクに追加しました",
+                });
+            }
+            else {
+                await client.replyMessage(event.replyToken, {
+                    type: "text",
+                    text: "📓 メモしました",
+                });
+            }
+        }
+        else {
+            const memoryContext = await getRecentMemories(uid);
+            const chatPrompt = `
+          ユーザー: ${message}
+          【直近の記憶】${memoryContext}
+          指示: 記憶に答えがあればそれを使って親切に返信して。なければ「記録にありません」と答えて。捏造禁止。
+        `;
+            const reply = await callGeminiText(apiKey, chatPrompt);
+            await client.replyMessage(event.replyToken, {
+                type: "text",
+                text: reply,
+            });
+        }
+    }));
+    res.json({ success: true });
+});
+// 機能 2: LINE連携設定
+exports.linkLineAccount = (0, https_1.onCall)({
+    secrets: [
+        lineLoginChannelId,
+        lineLoginChannelSecret,
+        lineBotToken,
+        lineBotSecret,
+    ],
+}, async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    const { code, redirectUri } = request.data;
+    const clientId = lineLoginChannelId.value();
+    const clientSecret = lineLoginChannelSecret.value();
+    const params = new URLSearchParams();
+    params.append("grant_type", "authorization_code");
+    params.append("code", code);
+    params.append("redirect_uri", redirectUri);
+    params.append("client_id", clientId);
+    params.append("client_secret", clientSecret);
+    const tokenRes = await axios_1.default.post("https://api.line.me/oauth2/v2.1/token", params);
+    const profileRes = await axios_1.default.get("https://api.line.me/v2/profile", {
+        headers: { Authorization: `Bearer ${tokenRes.data.access_token}` },
+    });
+    await db.collection("users").doc(request.auth.uid).set({
+        isLineLinked: true,
+        lineUserId: profileRes.data.userId,
+        lineDisplayName: profileRes.data.displayName,
+    }, { merge: true });
+    return { success: true };
+});
+exports.unlinkLineAccount = (0, https_1.onCall)({ cors: true }, async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    await db.collection("users").doc(request.auth.uid).set({
+        isLineLinked: false,
+        lineUserId: admin.firestore.FieldValue.delete(),
+        lineDisplayName: admin.firestore.FieldValue.delete(),
+    }, { merge: true });
+    return { success: true };
+});
+exports.sendMorningBriefing = (0, scheduler_1.onSchedule)({
+    schedule: "0 7 * * *",
+    timeZone: "Asia/Tokyo",
+    secrets: [lineBotToken, geminiApiKey],
+}, async (event) => {
+    /* (変更なし) */
+});
+exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
+    schedule: "every 15 minutes",
+    timeZone: "Asia/Tokyo",
+    secrets: [lineBotToken, geminiApiKey, googleClientId, googleClientSecret],
+}, async (event) => {
+    /* (変更なし) */
+});
+exports.scrapeUrl = (0, https_1.onCall)(async () => {
+    return { success: true };
+});
+</file>
+
+<file path="functions/index.ts">
+import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import { setGlobalOptions } from "firebase-functions/v2";
+import { defineSecret } from "firebase-functions/params";
+import * as admin from "firebase-admin";
+import axios from "axios";
+import * as line from "@line/bot-sdk";
+
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
+
+const db = admin.firestore();
+
+// メモリ設定
+setGlobalOptions({
+  region: "asia-northeast1",
+  memory: "1GiB",
+  timeoutSeconds: 60,
+});
+
+// Secrets
+const lineBotToken = defineSecret("LINE_BOT_TOKEN");
+const lineBotSecret = defineSecret("LINE_BOT_SECRET");
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const googleClientId = defineSecret("GOOGLE_CLIENT_ID");
+const googleClientSecret = defineSecret("GOOGLE_CLIENT_SECRET");
+const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
+const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
+
+// モデルリスト
+const CANDIDATE_MODELS = [
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-001",
+  "gemini-1.5-flash-002",
+  "gemini-1.5-pro",
+  "gemini-1.5-pro-001",
+  "gemini-pro",
+];
+
+// ---------------------------------------------------------
+// Helper: 動的にGeminiモデルを解決
+// ---------------------------------------------------------
+async function resolveGeminiModel(apiKey: string): Promise<string> {
+  try {
+    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const listResponse = await axios.get(listUrl);
+
+    if (listResponse.status !== 200) {
+      throw new Error(`Model list fetch failed: ${listResponse.statusText}`);
+    }
+
+    const listData = listResponse.data;
+    const generationModels = (listData.models || []).filter((m: any) =>
+      m.supportedGenerationMethods?.includes("generateContent"),
+    );
+    const flash = generationModels.find((m: any) =>
+      m.name.includes("gemini-1.5-flash"),
+    );
+    const targetModel = (flash || generationModels[0])?.name.replace(
+      "models/",
+      "",
+    );
+
+    if (!targetModel) throw new Error("No available generation models found.");
+    return targetModel;
+  } catch (e) {
+    console.warn(
+      "Dynamic model resolution failed, falling back to candidate list logic",
+      e,
+    );
+    return "";
+  }
+}
+
+// ---------------------------------------------------------
+// Helper: Gemini API (JSONモード & リトライ)
+// ---------------------------------------------------------
+async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
+  const dynamicModel = await resolveGeminiModel(apiKey);
+  let modelsToTry = dynamicModel
+    ? [dynamicModel, ...CANDIDATE_MODELS]
+    : CANDIDATE_MODELS;
+  modelsToTry = [...new Set(modelsToTry)];
+
+  for (const modelName of modelsToTry) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      const response = await axios.post(
+        url,
+        {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" },
+        },
+        { headers: { "Content-Type": "application/json" } },
+      );
+
+      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) {
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          try {
+            const cleaned = text.replace(/```json|```/g, "").trim();
+            return JSON.parse(cleaned);
+          } catch (e2) {
+            return { type: "CHAT", reply: text.substring(0, 100) };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`Model ${modelName} failed, retrying...`);
+    }
+  }
+  throw new Error("All AI models failed");
+}
+
+// ---------------------------------------------------------
+// Helper: Gemini API (Textモード)
+// ---------------------------------------------------------
+async function callGeminiText(apiKey: string, prompt: string): Promise<string> {
+  const dynamicModel = await resolveGeminiModel(apiKey);
+  let modelsToTry = dynamicModel
+    ? [dynamicModel, ...CANDIDATE_MODELS]
+    : CANDIDATE_MODELS;
+  modelsToTry = [...new Set(modelsToTry)];
+
+  for (const modelName of modelsToTry) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      const response = await axios.post(
+        url,
+        { contents: [{ parts: [{ text: prompt }] }] },
+        { headers: { "Content-Type": "application/json" } },
+      );
+      return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    } catch (e) {}
+  }
+  return "すみません、今ちょっとAIの調子が悪いです。";
+}
+
+// ---------------------------------------------------------
+// Helper: Google Token Refresh
+// ---------------------------------------------------------
+async function refreshAccessToken(refreshToken: string) {
+  try {
+    const response = await axios.post("https://oauth2.googleapis.com/token", {
+      client_id: googleClientId.value(),
+      client_secret: googleClientSecret.value(),
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    });
+    return response.data.access_token;
+  } catch (e: any) {
+    console.error("Token Refresh Error:", e.message);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------
+// Helper: カレンダー取得
+// ---------------------------------------------------------
+async function getCalendarEvents(uid: string): Promise<string> {
+  try {
+    const tokenDoc = await db
+      .collection("users")
+      .doc(uid)
+      .collection("system")
+      .doc("tokens")
+      .get();
+
+    if (!tokenDoc.exists) return "（カレンダー未連携）";
+
+    const refreshToken = tokenDoc.data()?.refreshToken;
+    if (!refreshToken) return "（カレンダー権限なし）";
+
+    const accessToken = await refreshAccessToken(refreshToken);
+    if (!accessToken) return "（トークン期限切れ）";
+
+    const now = new Date();
+    const timeMin = now.toISOString();
+    const timeMax = new Date(
+      now.getTime() + 7 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    const calendarRes = await axios.get(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        params: {
+          timeMin,
+          timeMax,
+          singleEvents: true,
+          orderBy: "startTime",
+          maxResults: 15,
+        },
+      },
+    );
+
+    const events = calendarRes.data.items || [];
+    if (events.length === 0) return "直近1週間の予定はありません。";
+
+    return events
+      .map((ev: any) => {
+        const start = ev.start.dateTime
+          ? new Date(ev.start.dateTime).toLocaleString("ja-JP", {
+              timeZone: "Asia/Tokyo",
+              month: "numeric",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : `[終日] ${ev.start.date}`;
+        return `・${start}: ${ev.summary}`;
+      })
+      .join("\n");
+  } catch (e) {
+    console.error("Calendar Fetch Error:", e);
+    return "（カレンダー取得エラー）";
+  }
+}
+
+// ---------------------------------------------------------
+// Helper: 過去のメモ取得
+// ---------------------------------------------------------
+async function getRecentMemories(uid: string): Promise<string> {
+  try {
+    const snapshot = await db
+      .collection("memories")
+      .where("userId", "==", uid)
+      .orderBy("createdAt", "desc")
+      .limit(10)
+      .get();
+
+    if (snapshot.empty) return "（過去のメモなし）";
+
+    return snapshot.docs
+      .map((doc) => {
+        const data = doc.data();
+        const date = data.createdAt?.toDate
+          ? `[${data.createdAt.toDate().toLocaleDateString()}]`
+          : "";
+        return `${date} ${data.text}`;
+      })
+      .join("\n");
+  } catch (e) {
+    console.error("Memory Fetch Error", e);
+    return "（メモ取得エラー）";
+  }
+}
+
+// =========================================================
+// 機能 1: LINE Webhook
+// =========================================================
+export const lineWebhook = onRequest(
+  {
+    secrets: [
+      lineBotToken,
+      lineBotSecret,
+      geminiApiKey,
+      googleClientId,
+      googleClientSecret,
+    ],
+    cors: true,
+  },
+  async (req, res) => {
+    const token = lineBotToken.value();
+    const apiKey = geminiApiKey.value();
+
+    if (!token || !apiKey) {
+      res.status(500).send("Config Error");
+      return;
+    }
+
+    const client = new line.Client({ channelAccessToken: token });
+    const events = req.body.events;
+
+    await Promise.all(
+      events.map(async (event: any) => {
+        if (event.type !== "message" || event.message.type !== "text") return;
+
+        const eventId = event.webhookEventId;
+        const lineUserId = event.source.userId;
+        const message = event.message.text;
+
+        // 重複排除
+        const eventRef = db.collection("processed_events").doc(eventId);
+        try {
+          await eventRef.create({
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            userId: lineUserId,
+          });
+        } catch (e) {
+          return; // 重複につき終了
+        }
+
+        // ユーザー特定
+        const usersSnap = await db
+          .collection("users")
+          .where("lineUserId", "==", lineUserId)
+          .limit(1)
+          .get();
+        if (usersSnap.empty) {
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: "アプリで「LINE連携」ボタンを押してね🙇‍♂️",
+          });
+          return;
+        }
+        const uid = usersSnap.docs[0].id;
+
+        // ★AI仕分け
+        const classifyPrompt = `
+        ユーザーの入力を分析し、以下の3つのどれかに分類してJSONで出力してください。
+
+        【分類基準】
+        1. CALENDAR:
+           - 「明日の予定は？」「スケジュール教えて」など、未来の予定を聞く質問。
+        
+        2. MEMORY:
+           - 「～と覚えて」「買い物リスト追加:〇〇」など、明示的な記録指示。
+           - 「明日洗濯する」「来週行く」などの未来の行動宣言（日記的記述）。
+           - ※注意: 「買い物リストは？」のような質問は MEMORY ではなく CHAT。
+        
+        3. CHAT:
+           - 「買い物リストは？」「～って何だっけ？」などの過去の情報の質問。
+           - 挨拶、雑談、それ以外すべて。
+
+        入力: "${message}"
+        出力JSON: { "type": "CALENDAR" | "MEMORY" | "CHAT" }
+      `;
+
+        let msgType = "CHAT";
+        try {
+          const result = await callGeminiJson(apiKey, classifyPrompt);
+          if (result && result.type) msgType = result.type;
+        } catch (e) {
+          console.log("Classification failed, defaulting to CHAT");
+        }
+
+        // --- 分岐処理 ---
+        if (msgType === "CALENDAR") {
+          // カレンダーモード
+          const eventsText = await getCalendarEvents(uid);
+          const reply = await callGeminiText(
+            apiKey,
+            `質問: "${message}"\n予定:\n${eventsText}\nこれを見て答えて。`,
+          );
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: reply,
+          });
+        } else if (msgType === "MEMORY") {
+          // ★メモ保存モード（タスク判定を厳格化）
+          const memoryPrompt = `
+          入力: "${message}"
+          
+          これをメモとして保存します。以下の基準でJSONを出力してください:
+          { "summary": "20文字以内の要約", "tags": ["タグ1", "タグ2"], "isTask": true/false }
+
+          【isTask の判定基準】
+          - true (タスク): 「～しなきゃ」「～する予定（ToDoリストに入れたい場合）」「タスク追加」「買い物リスト追加」など、管理すべき明確なアクション。
+          - false (メモ): 「～した」「～するつもり（ただの日記・予定）」「～だと思った」など。
+          
+          ※重要: 「明日洗濯する」のような単なる行動宣言は、ユーザーがToDo管理を意図していない限り false にしてください。
+        `;
+
+          const aiResult = await callGeminiJson(apiKey, memoryPrompt);
+
+          await db.collection("memories").add({
+            userId: uid,
+            text: message,
+            aiSummary: aiResult.summary || message.slice(0, 20),
+            tags: [...(aiResult.tags || []), "LINE"],
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            source: "LINE",
+          });
+
+          // isTaskがtrueの時だけTodosに追加
+          if (aiResult.isTask) {
+            await db.collection("todos").add({
+              userId: uid,
+              title: message,
+              isCompleted: false,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              source: "LINE",
+            });
+            await client.replyMessage(event.replyToken, {
+              type: "text",
+              text: "📝 タスクに追加しました",
+            });
+          } else {
+            await client.replyMessage(event.replyToken, {
+              type: "text",
+              text: "📓 メモしました",
+            });
+          }
+        } else {
+          // CHATモード（記憶参照）
+          const memoryContext = await getRecentMemories(uid);
+          const chatPrompt = `
+            ユーザー: ${message}
+            
+            【過去の記憶（参考情報）】
+            ${memoryContext}
+            
+            指示:
+            - ユーザーの質問の答えが「過去の記憶」にあれば、それを使って答えてください。
+            - もし記憶の中に答えが見つからない場合は、正直に「記録にありませんでした」と答えてください。
+            - 勝手に情報を捏造しないでください。
+          `;
+          const reply = await callGeminiText(apiKey, chatPrompt);
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: reply,
+          });
+        }
+      }),
+    );
+
+    res.json({ success: true });
+  },
+);
+
+// =========================================================
+// 機能 2: LINE連携設定
+// =========================================================
+export const linkLineAccount = onCall(
+  {
+    secrets: [
+      lineLoginChannelId,
+      lineLoginChannelSecret,
+      lineBotToken,
+      lineBotSecret,
+    ],
+  },
+  async (request) => {
+    if (!request.auth)
+      throw new HttpsError("unauthenticated", "Login required");
+
+    const { code, redirectUri } = request.data;
+    const clientId = lineLoginChannelId.value();
+    const clientSecret = lineLoginChannelSecret.value();
+
+    if (!clientId || !clientSecret) {
+      throw new HttpsError("failed-precondition", "LINE secrets not set");
+    }
+
+    try {
+      const params = new URLSearchParams();
+      params.append("grant_type", "authorization_code");
+      params.append("code", code);
+      params.append("redirect_uri", redirectUri);
+      params.append("client_id", clientId);
+      params.append("client_secret", clientSecret);
+
+      const tokenResponse = await axios.post(
+        "https://api.line.me/oauth2/v2.1/token",
+        params,
+      );
+      const { access_token } = tokenResponse.data;
+
+      const profileResponse = await axios.get(
+        "https://api.line.me/v2/profile",
+        { headers: { Authorization: `Bearer ${access_token}` } },
+      );
+
+      const lineUserId = profileResponse.data.userId;
+      const lineDisplayName = profileResponse.data.displayName;
+
+      await db.collection("users").doc(request.auth.uid).set(
+        {
+          isLineLinked: true,
+          lineUserId: lineUserId,
+          lineDisplayName: lineDisplayName,
+        },
+        { merge: true },
+      );
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("LINE Link Error:", error.response?.data || error.message);
+      throw new HttpsError("internal", "LINE linkage failed");
+    }
+  },
+);
+
+export const unlinkLineAccount = onCall({ cors: true }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  await db.collection("users").doc(request.auth.uid).set(
+    {
+      isLineLinked: false,
+      lineUserId: admin.firestore.FieldValue.delete(),
+      lineDisplayName: admin.firestore.FieldValue.delete(),
+    },
+    { merge: true },
+  );
+  return { success: true };
+});
+
+// =========================================================
+// 機能 3 & 4: 朝の挨拶とカンペ
+// =========================================================
+export const sendMorningBriefing = onSchedule(
+  {
+    schedule: "0 7 * * *",
+    timeZone: "Asia/Tokyo",
+    secrets: [lineBotToken, geminiApiKey],
+  },
+  async (event) => {
+    const usersSnap = await db.collection("users").get();
+    const apiKey = geminiApiKey.value();
+    const client = new line.Client({
+      channelAccessToken: lineBotToken.value(),
+    });
+
+    for (const userDoc of usersSnap.docs) {
+      const uid = userDoc.id;
+      const userData = userDoc.data();
+      if (!userData.lineUserId) continue;
+
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      const [memoriesSnap, todosSnap] = await Promise.all([
+        db
+          .collection("memories")
+          .where("userId", "==", uid)
+          .where("createdAt", ">=", yesterday)
+          .orderBy("createdAt", "desc")
+          .get(),
+        db
+          .collection("todos")
+          .where("userId", "==", uid)
+          .where("isCompleted", "==", false)
+          .get(),
+      ]);
+
+      if (memoriesSnap.empty && todosSnap.empty) continue;
+
+      const memoryText = memoriesSnap.docs
+        .map((d) => `- ${d.data().text}`)
+        .join("\n");
+      const todoText = todosSnap.docs
+        .map((d) => `- [未完了] ${d.data().title}`)
+        .join("\n");
+
+      const prompt = `
+        おはようございます。秘書AIです。
+        昨日のメモと残っているタスクから、今日のブリーフィングを作成してください。
+        【昨日のメモ】${memoryText}
+        【未完了タスク】${todoText}
+        指示: 挨拶は元気に。「今日やるべきこと」を明確に。300文字以内。
+      `;
+
+      const briefing = await callGeminiText(apiKey, prompt);
+      await client.pushMessage(userData.lineUserId, {
+        type: "text",
+        text: briefing,
+      });
+    }
+  },
+);
+
+export const checkUpcomingMeetings = onSchedule(
+  {
+    schedule: "every 15 minutes",
+    timeZone: "Asia/Tokyo",
+    secrets: [lineBotToken, geminiApiKey, googleClientId, googleClientSecret],
+  },
+  async (event) => {
+    const apiKey = geminiApiKey.value();
+    const client = new line.Client({
+      channelAccessToken: lineBotToken.value(),
+    });
+
+    const usersSnap = await db.collection("users").get();
+
+    for (const userDoc of usersSnap.docs) {
+      const uid = userDoc.id;
+      const userData = userDoc.data();
+      if (!userData.lineUserId) continue;
+
+      const tokenDoc = await db
+        .collection("users")
+        .doc(uid)
+        .collection("system")
+        .doc("tokens")
+        .get();
+      if (!tokenDoc.exists) continue;
+
+      const refreshToken = tokenDoc.data()?.refreshToken;
+      if (!refreshToken) continue;
+
+      const accessToken = await refreshAccessToken(refreshToken);
+      if (!accessToken) continue;
+
+      const now = new Date();
+      const timeMin = now.toISOString();
+      const timeMax = new Date(now.getTime() + 20 * 60 * 1000).toISOString();
+
+      try {
+        const calendarRes = await axios.get(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            params: {
+              timeMin,
+              timeMax,
+              singleEvents: true,
+              orderBy: "startTime",
+            },
+          },
+        );
+
+        const events = calendarRes.data.items || [];
+
+        for (const ev of events) {
+          const title = ev.summary;
+          if (!title) continue;
+
+          const recentMemoriesSnap = await db
+            .collection("memories")
+            .where("userId", "==", uid)
+            .orderBy("createdAt", "desc")
+            .limit(30)
+            .get();
+
+          const memoryDump = recentMemoriesSnap.docs
+            .map(
+              (d) =>
+                `[${d.data().createdAt.toDate().toLocaleDateString()}] ${d.data().text}`,
+            )
+            .join("\n");
+
+          const cheatSheetPrompt = `
+            これから「${title}」という予定があります。
+            以下の過去のメモから、関連情報（名前、前回の話題、懸案事項など）を探し出し「直前カンニングペーパー」を作成して。
+            【過去のメモ】${memoryDump}
+            指示: 関連情報がない場合は「関連情報なし」と出力。ある場合は箇条書きで。
+          `;
+
+          const cheatSheet = await callGeminiText(apiKey, cheatSheetPrompt);
+
+          if (
+            !cheatSheet.includes("関連情報なし") &&
+            !cheatSheet.includes("エラー")
+          ) {
+            await client.pushMessage(userData.lineUserId, {
+              type: "text",
+              text: `📅 まもなく開始: ${title}\n\n🧠 AIカンペ:\n${cheatSheet}`,
+            });
+          }
+        }
+      } catch (e) {
+        console.error(`Calendar Error for user ${uid}:`, e);
+      }
+    }
+  },
+);
+
+export const scrapeUrl = onCall(async () => {
+  return { success: true };
+});
+</file>
+
+<file path="src/components/AppHeader/AppHeader.vue">
+<script setup lang="ts">
+import { useAppHeader } from "./useAppHeader";
+import { useMyBrain } from "@/composables/useMyBrain";
+
+const { logout } = useAppHeader();
+const { currentUser, startLineAuth, unlinkLine } = useMyBrain(); // ★unlinkLineを追加
+</script>
+
+<template>
+  <header
+    class="h-16 px-6 flex items-center justify-between border-b border-[#27272a] bg-[#09090b]/80 backdrop-blur-md sticky top-0 z-50"
+  >
+    <div class="flex items-center gap-3">
+      <div
+        class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20"
+      >
+        <span class="text-lg">🧠</span>
+      </div>
+      <h1 class="font-bold text-lg tracking-tight text-white">My Brain</h1>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button
+        v-if="currentUser && !currentUser.isLineLinked"
+        @click="startLineAuth"
+        class="text-xs font-bold bg-[#06c755]/10 text-[#06c755] border border-[#06c755]/20 hover:bg-[#06c755] hover:text-white transition px-3 py-2 rounded-lg flex items-center gap-1.5"
+      >
+        <span>💬</span>
+        <span class="hidden sm:inline">LINE連携</span>
+      </button>
+
+      <button
+        v-else-if="currentUser && currentUser.isLineLinked"
+        @click="unlinkLine"
+        class="text-xs font-bold text-[#06c755] bg-[#06c755]/10 px-3 py-2 rounded-lg border border-[#06c755]/20 flex items-center gap-1 hover:bg-[#06c755]/20 transition"
+        title="クリックして連携解除"
+      >
+        <span>💬</span>
+        <span class="hidden sm:inline">連携中</span>
+        <span class="text-[10px] opacity-50 ml-1">×</span>
+      </button>
+
+      <button
+        @click="logout"
+        class="text-xs font-bold text-slate-400 hover:text-white transition px-3 py-2 hover:bg-[#18181b] rounded-lg"
+      >
+        ログアウト
+      </button>
+    </div>
+  </header>
+</template>
+</file>
+
 <file path="src/router/index.ts">
 import { createRouter, createWebHistory } from "vue-router";
 import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
@@ -4961,7 +5741,6 @@ import { ref } from "vue";
 import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 import { useRouter } from "vue-router";
-import { googleProvider } from "@/firebase";
 
 const router = useRouter();
 const loading = ref(false);
@@ -4972,30 +5751,47 @@ const db = getFirestore();
 const handleGoogleLogin = async () => {
   loading.value = true;
   try {
-    // 権限を '.events' からカレンダー全体へのアクセスに変更
-    googleProvider.addScope("https://www.googleapis.com/auth/calendar");
+    const provider = new GoogleAuthProvider();
 
-    const result = await signInWithPopup(auth, googleProvider);
+    // ★重要: カレンダーへの読み書き権限
+    provider.addScope("https://www.googleapis.com/auth/calendar.events");
+    provider.addScope("https://www.googleapis.com/auth/calendar.readonly"); // 読み取り用
+
+    // ★重要: リフレッシュトークンを取得するための設定
+    provider.setCustomParameters({
+      prompt: "consent", // 毎回承認画面を出す（これがないとリフレッシュトークンが来ない場合がある）
+      access_type: "offline", // バックエンドアクセスのために必須
+    });
+
+    const result = await signInWithPopup(auth, provider);
     const user = result.user;
 
-    // カレンダー操作に必要なトークンを取り出して保存
+    // ★ここがハック: Firebase SDKの隠しプロパティからOAuthのリフレッシュトークンを取得
+    // ※通常の credential.accessToken は1時間で切れるため、バックグラウンド処理には使えない
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    const token = credential?.accessToken;
-    if (token) {
-      localStorage.setItem("google_calendar_token", token);
-    }
+    const tokenResponse = (result as any)._tokenResponse; // 型定義にはないが実在する
+    const refreshToken = tokenResponse?.oauthRefreshToken;
 
+    // ユーザー基本情報保存
     const userRef = doc(db, "users", user.uid);
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists()) {
-      await setDoc(userRef, {
+    await setDoc(
+      userRef,
+      {
         email: user.email,
         displayName: user.displayName,
         photoURL: user.photoURL,
-        role: "student",
-        createdAt: new Date(),
+        lastLogin: new Date(),
+      },
+      { merge: true },
+    );
+
+    // ★重要: リフレッシュトークンを保存 (バックエンドがカレンダーを見るため)
+    if (refreshToken) {
+      await setDoc(doc(db, "users", user.uid, "system", "tokens"), {
+        refreshToken: refreshToken,
+        updatedAt: new Date(),
       });
+      console.log("Offline token saved.");
     }
 
     router.push("/app");
@@ -5028,14 +5824,17 @@ const handleGoogleLogin = async () => {
           My Brain
         </h1>
         <p class="text-slate-400 text-xs font-bold tracking-widest uppercase">
-          AI Knowledge Base
+          ズボラ専用 AI秘書
         </p>
       </div>
 
       <div class="w-full space-y-6">
         <p class="text-slate-300 text-sm text-center leading-relaxed mb-4">
-          予定と記憶をAIが統合。<br />
-          あなたの「第2の脳」を始めましょう。
+          LINEに投げるだけ。<br />
+          カレンダーと記憶をAIが勝手に整理。<br />
+          <span class="text-indigo-400 font-bold">「予定直前のカンペ通知」</span
+          >で<br />
+          もう準備はいりません。
         </p>
 
         <button
@@ -5067,18 +5866,6 @@ const handleGoogleLogin = async () => {
           </svg>
           Googleで始める
         </button>
-
-        <p class="text-[10px] text-slate-500 text-center mt-6">
-          利用を開始することで、<br />
-          <router-link to="/legal" class="underline hover:text-slate-400"
-            >利用規約</router-link
-          >
-          および
-          <router-link to="/privacy" class="underline hover:text-slate-400"
-            >プライバシーポリシー</router-link
-          >
-          に同意したものとみなします。
-        </p>
       </div>
     </div>
   </div>
@@ -5116,229 +5903,165 @@ const {
   handleInput,
 } = useInputFooter(inputMode);
 
-const { currentUser, startSubscription, isSaving, isAiThinking, isSpeaking } =
-  useMyBrain();
+const { currentUser, isSaving, isAiThinking, isSpeaking } = useMyBrain();
 
-const remainingCount = computed(() =>
-  currentUser.value?.isPro ? 9999 : 5 - (currentUser.value?.dailyUsage || 0),
-);
+// バイブレーション
+const haptic = () => {
+  if (navigator.vibrate) navigator.vibrate(10);
+};
 </script>
 
 <template>
-  <footer
-    class="fixed bottom-0 w-full bg-slate-900/95 backdrop-blur-md border-t border-slate-800 p-4 pb-8 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.3)]"
-  >
-    <div class="max-w-md mx-auto relative">
+  <footer class="fixed bottom-0 w-full z-40 pointer-events-none">
+    <div
+      class="absolute bottom-0 w-full h-40 bg-gradient-to-t from-[#09090b] via-[#09090b]/95 to-transparent"
+    ></div>
+
+    <div class="max-w-xl mx-auto px-4 pb-6 relative pointer-events-auto">
       <div
         v-if="isSaving || isAiThinking || isSpeaking"
-        class="absolute -top-16 left-0 right-0 flex justify-center"
+        class="flex justify-center mb-4"
       >
         <div
-          class="bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg font-bold text-xs flex items-center gap-2 animate-pulse"
+          class="bg-indigo-600/90 backdrop-blur text-white px-4 py-1.5 rounded-full shadow-lg font-bold text-xs flex items-center gap-2 animate-pulse border border-indigo-400/30"
         >
-          <span class="text-lg">{{
-            isSpeaking ? "🗣️" : isSaving ? "🧠" : "🤖"
+          <span class="text-sm">{{
+            isSpeaking ? "🗣️" : isSaving ? "🧠" : "✨"
           }}</span>
           {{
             isSpeaking
               ? "読み上げ中..."
               : isSaving
-                ? "脳に書き込み中..."
+                ? "処理中..."
                 : "AIが思考中..."
           }}
         </div>
       </div>
 
-      <div class="flex items-center justify-between px-2 mb-3">
-        <div class="text-[10px] font-bold text-slate-400">
-          <span
-            v-if="currentUser?.isPro"
-            class="text-yellow-400 flex items-center gap-1"
-            >👑 PRO Plan</span
-          >
-          <span v-else
-            >Free: 残り
-            <span
-              :class="remainingCount === 0 ? 'text-red-500' : 'text-white'"
-              >{{ remainingCount }}</span
-            >
-            / 5回</span
-          >
-        </div>
-
-        <div class="flex flex-col items-end gap-1">
+      <div
+        class="bg-[#18181b] border border-[#27272a] rounded-[32px] shadow-2xl overflow-hidden transition-all duration-300 focus-within:border-indigo-500/50"
+      >
+        <div class="flex p-1 gap-1 overflow-x-auto scrollbar-hide">
           <button
-            v-if="!currentUser?.isPro"
-            @click="startSubscription"
-            class="text-[10px] bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-3 py-1 rounded-full font-bold shadow hover:opacity-90 transition"
+            v-for="mode in ['memo', 'chat', 'url', 'calendar']"
+            :key="mode"
+            @click="
+              inputMode = mode as any;
+              haptic();
+            "
+            class="flex-1 py-2 rounded-full text-[10px] font-bold transition whitespace-nowrap text-center relative"
+            :class="
+              inputMode === mode
+                ? 'text-white'
+                : 'text-slate-500 hover:text-slate-300'
+            "
           >
-            🚀 PROへ (¥1,000)
+            <span
+              v-if="inputMode === mode"
+              class="absolute inset-0 bg-[#27272a] rounded-full -z-10"
+            ></span>
+            {{
+              mode === "memo"
+                ? "Memo"
+                : mode === "chat"
+                  ? "Chat"
+                  : mode === "url"
+                    ? "URL"
+                    : "Schedule"
+            }}
           </button>
-
-          <router-link
-            to="/legal"
-            class="text-[9px] text-slate-500 hover:text-slate-300 transition underline"
-          >
-            特定商取引法に基づく表記
-          </router-link>
         </div>
-      </div>
 
-      <div
-        class="flex bg-slate-800 p-1 rounded-xl mb-3 relative overflow-hidden"
-      >
         <div
-          class="absolute top-1 bottom-1 bg-white/10 rounded-lg transition-all duration-300 ease-out"
-          :style="{
-            left:
-              inputMode === 'memo'
-                ? '2px'
-                : inputMode === 'url'
-                  ? '25%'
-                  : inputMode === 'chat'
-                    ? '50%'
-                    : '75%',
-            width: 'calc(25% - 4px)',
-          }"
-        ></div>
-        <button
-          @click="inputMode = 'memo'"
-          :class="[
-            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
-            inputMode === 'memo' ? 'text-white' : 'text-slate-400',
-          ]"
-        >
-          📝 メモ
-        </button>
-        <button
-          @click="inputMode = 'url'"
-          :class="[
-            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
-            inputMode === 'url' ? 'text-green-400' : 'text-slate-400',
-          ]"
-        >
-          🌐 URL
-        </button>
-        <button
-          @click="inputMode = 'chat'"
-          :class="[
-            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
-            inputMode === 'chat' ? 'text-blue-400' : 'text-slate-400',
-          ]"
-        >
-          🔍 会話
-        </button>
-        <button
-          @click="inputMode = 'calendar'"
-          :class="[
-            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
-            inputMode === 'calendar' ? 'text-orange-400' : 'text-slate-400',
-          ]"
-        >
-          📅 予定
-        </button>
-      </div>
-
-      <div
-        v-if="selectedFiles.length > 0"
-        class="relative mb-2 flex gap-2 overflow-x-auto pb-2 scrollbar-hide animate-fade-in"
-      >
-        <div
-          v-for="(preview, index) in filePreviews"
-          :key="index"
-          class="relative flex-shrink-0"
-        >
-          <img
-            :src="preview"
-            class="h-20 w-20 rounded-lg border border-slate-600 object-cover"
-          />
-        </div>
-        <div
-          v-for="(file, index) in selectedFiles.slice(filePreviews.length)"
-          :key="'file' + index"
-          class="relative flex-shrink-0"
+          v-if="selectedFiles.length > 0"
+          class="flex gap-2 overflow-x-auto px-4 pb-2"
         >
           <div
-            class="h-20 w-20 bg-slate-800 rounded-lg border border-slate-600 flex flex-col items-center justify-center p-2"
+            v-for="(preview, idx) in filePreviews"
+            :key="idx"
+            class="relative group"
           >
-            <span class="text-2xl">📄</span>
-            <span
-              class="text-[8px] text-slate-400 truncate w-full text-center mt-1"
-              >{{ file.name }}</span
+            <img
+              :src="preview"
+              class="h-14 w-14 rounded-lg object-cover border border-[#27272a]"
+            />
+            <button
+              @click="clearFiles"
+              class="absolute -top-1 -right-1 bg-slate-800 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] border border-slate-600"
             >
+              ×
+            </button>
           </div>
         </div>
 
-        <button
-          @click="clearFiles"
-          class="absolute top-0 right-0 bg-slate-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-500 shadow-lg z-10"
-        >
-          ×
-        </button>
-      </div>
+        <div class="flex items-end gap-2 px-3 pb-3 pt-1">
+          <div v-if="inputMode === 'memo'" class="pb-1.5">
+            <input
+              type="file"
+              ref="fileInputRef"
+              class="hidden"
+              multiple
+              @change="handleFileSelect"
+              accept="image/*"
+            />
+            <button
+              @click="
+                fileInputRef?.click();
+                haptic();
+              "
+              class="p-2 text-slate-400 hover:text-white hover:bg-[#27272a] rounded-full transition"
+            >
+              📎
+            </button>
+          </div>
+          <div v-if="inputMode === 'chat'" class="pb-1.5">
+            <button
+              @click="
+                toggleListening;
+                haptic();
+              "
+              class="p-2 rounded-full transition"
+              :class="
+                isListening
+                  ? 'bg-red-500/20 text-red-500 animate-pulse'
+                  : 'text-slate-400 hover:text-white hover:bg-[#27272a]'
+              "
+            >
+              🎙️
+            </button>
+          </div>
 
-      <div class="relative flex items-end gap-2">
-        <div v-if="inputMode === 'memo'" class="flex-shrink-0">
-          <input
-            type="file"
-            ref="fileInputRef"
-            accept="image/*,application/pdf,text/plain,audio/*"
-            class="hidden"
-            multiple
-            @change="handleFileSelect"
-          />
-          <button
-            @click="fileInputRef?.click()"
-            class="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-xl text-slate-400 hover:text-white transition"
-          >
-            📎
-          </button>
-        </div>
-
-        <div v-if="inputMode === 'chat'" class="flex-shrink-0">
-          <button
-            @click="toggleListening"
-            class="w-10 h-10 flex items-center justify-center rounded-xl transition border"
-            :class="
-              isListening
-                ? 'bg-red-500/20 text-red-500 border-red-500 animate-pulse'
-                : 'bg-slate-800 text-slate-400 border-transparent hover:text-white'
+          <textarea
+            v-model="inputText"
+            rows="1"
+            class="flex-1 bg-transparent text-white placeholder-slate-600 text-sm py-3 max-h-32 focus:outline-none resize-none"
+            :placeholder="
+              inputMode === 'chat'
+                ? 'AIに指示...(ワンショット入力可)'
+                : '記憶、タスク、予定を入力...'
             "
+            @input="
+              (e) => {
+                (e.target as HTMLTextAreaElement).style.height = 'auto';
+                (e.target as HTMLTextAreaElement).style.height =
+                  (e.target as HTMLTextAreaElement).scrollHeight + 'px';
+                handleInput();
+              }
+            "
+            @keydown.enter.ctrl="handleSend(inputMode as any)"
+          ></textarea>
+
+          <button
+            @click="
+              handleSend(inputMode as any);
+              haptic();
+            "
+            :disabled="!inputText && selectedFiles.length === 0"
+            class="mb-1 p-2 bg-indigo-600 text-white rounded-full w-9 h-9 flex items-center justify-center hover:bg-indigo-500 active:scale-90 transition disabled:opacity-30 disabled:scale-100 shadow-lg shadow-indigo-500/20"
           >
-            🎙️
+            ↑
           </button>
         </div>
-
-        <textarea
-          v-model="inputText"
-          rows="3"
-          class="flex-1 bg-slate-800 border border-slate-700 text-white rounded-2xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 resize-none leading-relaxed text-sm"
-          :placeholder="
-            isListening
-              ? 'お話しください...'
-              : inputMode === 'url'
-                ? 'https://...'
-                : inputMode === 'memo'
-                  ? '何を記憶しますか？'
-                  : inputMode === 'calendar'
-                    ? 'カレンダーを見ながらメモ...'
-                    : 'AIに質問...'
-          "
-          @input="handleInput"
-          @keydown.enter.ctrl="handleSend(inputMode as any)"
-        ></textarea>
-
-        <button
-          @click="handleSend(inputMode as any)"
-          :disabled="
-            (!inputText && selectedFiles.length === 0) ||
-            isSaving ||
-            isAiThinking
-          "
-          class="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg self-end mb-1"
-        >
-          ↑
-        </button>
       </div>
     </div>
   </footer>
@@ -5372,12 +6095,12 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from "firebase/auth";
+import { getApp } from "firebase/app";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from "axios";
 import type { Memory, ChatLog, User, Todo, DailyReport } from "@/types";
 
-// Payment Linkを直接指定
 const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/6oU28r4Hi71dglzd1z6AM00";
 const ADMIN_EMAILS = ["gongedonghuam@gmail.com"];
 
@@ -5391,68 +6114,55 @@ const isAiThinking = ref(false);
 const isSaving = ref(false);
 const isSpeaking = ref(false);
 const activeTag = ref<string | null>(null);
-
-// カレンダー接続状態管理
 const isCalendarConnected = ref(true);
 
-// --- ヘルパー: Google API トークンリフレッシュ ---
+// ---------------- Helper Functions ----------------
+
 const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
   let token = localStorage.getItem("google_calendar_token");
   if (!token) {
     isCalendarConnected.value = false;
     return null;
   }
-
   try {
     const res = await callback(token);
     isCalendarConnected.value = true;
     return res;
   } catch (e: any) {
     if (e.response && e.response.status === 401) {
-      console.log("Token expired, trying silent refresh...");
-      try {
-        const provider = new GoogleAuthProvider();
-        provider.addScope("https://www.googleapis.com/auth/calendar");
-        const result = await signInWithPopup(auth, provider);
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        const newToken = credential?.accessToken;
-
-        if (newToken) {
-          localStorage.setItem("google_calendar_token", newToken);
-          isCalendarConnected.value = true;
-          return await callback(newToken);
-        }
-      } catch (refreshError) {
-        console.warn("Token refresh blocked or failed:", refreshError);
-        isCalendarConnected.value = false;
-        return null;
-      }
+      localStorage.removeItem("google_calendar_token");
+      isCalendarConnected.value = false;
+      return null;
     }
-    console.error("API Call Error:", e);
     throw e;
   }
 };
 
-// 手動再接続用
 const reconnectCalendar = async () => {
   try {
     const provider = new GoogleAuthProvider();
     provider.addScope("https://www.googleapis.com/auth/calendar");
+    provider.setCustomParameters({
+      prompt: "select_account consent",
+      access_type: "offline",
+    });
+
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const token = credential?.accessToken;
+
     if (token) {
       localStorage.setItem("google_calendar_token", token);
       isCalendarConnected.value = true;
-      alert("再接続しました！");
+      alert("カレンダーを再接続しました！");
       window.location.reload();
     }
   } catch (e: any) {
+    console.error("Reconnect Error:", e);
     alert("再接続に失敗しました: " + e.message);
   }
 };
 
-// ヘルパー: 画像変換
 const fileToGenerativePart = async (file: File) => {
   return new Promise<{ inlineData: { data: string; mimeType: string } }>(
     (resolve, reject) => {
@@ -5480,7 +6190,88 @@ const cosineSimilarity = (vecA: number[], vecB: number[]) => {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 };
 
-// --- カレンダー関連 ---
+function extractJson(text: string): string {
+  let clean = text
+    .replace(/```json/g, "")
+    .replace(/```/g, "")
+    .trim();
+  const firstOpen = clean.indexOf("{");
+  const lastClose = clean.lastIndexOf("}");
+  if (firstOpen !== -1 && lastClose !== -1) {
+    return clean.substring(firstOpen, lastClose + 1);
+  }
+  return clean;
+}
+
+// ★修正: useNextNs.ts から移植した「動的モデル解決ロジック」
+const resolveGeminiModel = async (apiKey: string): Promise<string> => {
+  try {
+    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const listResponse = await fetch(listUrl);
+
+    if (!listResponse.ok) {
+      throw new Error(`Model list fetch failed: ${listResponse.statusText}`);
+    }
+
+    const listData = await listResponse.json();
+
+    // generateContentをサポートしているモデルをフィルタリング
+    const generationModels = (listData.models || []).filter((m: any) =>
+      m.supportedGenerationMethods?.includes("generateContent"),
+    );
+
+    // "gemini-1.5-flash" を優先して探す
+    const flash = generationModels.find((m: any) =>
+      m.name.includes("gemini-1.5-flash"),
+    );
+
+    // 見つかればそれ、なければリストの最初を使う
+    // "models/" プレフィックスを除去して返す
+    const targetModel = (flash || generationModels[0])?.name.replace(
+      "models/",
+      "",
+    );
+
+    if (!targetModel) throw new Error("No available generation models found.");
+
+    return targetModel;
+  } catch (e) {
+    console.warn(
+      "Dynamic model resolution failed, falling back to gemini-1.5-flash",
+      e,
+    );
+    return "gemini-1.5-flash"; // 最悪の場合のフォールバック
+  }
+};
+
+// ★修正: 動的モデルを使う生成関数
+const generateContentWithRetry = async (
+  apiKey: string,
+  promptParts: any[],
+  isJsonMode = false,
+) => {
+  try {
+    // 1. モデル名を動的に決定
+    const modelName = await resolveGeminiModel(apiKey);
+    console.log("Selected AI Model:", modelName);
+
+    // 2. 生成実行
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const config = isJsonMode ? { responseMimeType: "application/json" } : {};
+
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: config,
+    });
+
+    const result = await model.generateContent(promptParts);
+    return result.response.text();
+  } catch (e: any) {
+    console.error("AI Generation Error:", e);
+    throw new Error("AI processing failed: " + e.message);
+  }
+};
+
 const fetchCalendarEvents = async () => {
   return await callGoogleApi(async (token) => {
     const now = new Date().toISOString();
@@ -5540,38 +6331,12 @@ const speakText = (text: string) => {
   window.speechSynthesis.speak(utterance);
 };
 
+// ---------------- Main Composable ----------------
+
 export function useMyBrain() {
   const getEmbeddingModel = (apiKey: string) => {
     const genAI = new GoogleGenerativeAI(apiKey);
     return genAI.getGenerativeModel({ model: "text-embedding-004" });
-  };
-
-  const getSmartModelName = async (apiKey: string): Promise<string> => {
-    try {
-      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-      const response = await fetch(listUrl);
-      if (!response.ok) throw new Error("Model fetch failed");
-      const data = await response.json();
-      const models = data.models || [];
-      const viableModels = models.filter((m: any) =>
-        m.supportedGenerationMethods?.includes("generateContent"),
-      );
-      const preferredOrder = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-pro",
-        "gemini-pro",
-      ];
-      for (const pref of preferredOrder) {
-        const found = viableModels.find((m: any) => m.name.includes(pref));
-        if (found) return found.name.replace("models/", "");
-      }
-      if (viableModels.length > 0)
-        return viableModels[0].name.replace("models/", "");
-      return "gemini-1.5-flash";
-    } catch (e) {
-      return "gemini-1.5-flash";
-    }
   };
 
   const checkAndIncrementUsage = async (): Promise<boolean> => {
@@ -5603,26 +6368,11 @@ export function useMyBrain() {
     if (!currentUser.value) return;
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
-        generationConfig: { responseMimeType: "application/json" },
-      });
       const prompt = `以下のメモから「やるべきこと（ToDo）」を抽出しJSONで返して。
         { "tasks": ["タスク1", "タスク2"] }
         メモ: ${text}`;
-
-      const result = await model.generateContent(prompt);
-      const rawText = result.response.text();
-      const jsonStr = rawText.replace(/```json|```/g, "").trim();
-
-      let data;
-      try {
-        data = JSON.parse(jsonStr);
-      } catch {
-        data = { tasks: [] };
-      }
-
+      const rawText = await generateContentWithRetry(apiKey, [prompt], true);
+      const data = JSON.parse(extractJson(rawText));
       const tasks: string[] = data.tasks || [];
       if (tasks.length > 0) {
         const batch = writeBatch(db);
@@ -5654,8 +6404,7 @@ export function useMyBrain() {
         createdAt: serverTimestamp(),
       });
     } catch (e) {
-      console.error("Manual todo add failed:", e);
-      alert("タスクの追加に失敗しました");
+      console.error(e);
     }
   };
 
@@ -5687,24 +6436,14 @@ export function useMyBrain() {
     const dailyMemories = memSnap.docs
       .map((d) => d.data().text)
       .join("\n---\n");
-
     if (!dailyMemories) return;
 
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
-        generationConfig: { responseMimeType: "application/json" },
-      });
       const prompt = `昨日のメモを元に日刊レポートを作成。出力JSON: { "content": "総括", "highlights": ["要点1"] }\nメモ: ${dailyMemories}`;
-      const result = await model.generateContent(prompt);
-      const data = JSON.parse(
-        result.response
-          .text()
-          .replace(/```json|```/g, "")
-          .trim(),
-      );
+      const rawText = await generateContentWithRetry(apiKey, [prompt], true);
+      const data = JSON.parse(extractJson(rawText));
+
       await addDoc(collection(db, "daily_reports"), {
         userId: currentUser.value.uid,
         date: dateStr,
@@ -5713,17 +6452,76 @@ export function useMyBrain() {
         createdAt: serverTimestamp(),
       });
     } catch (e) {
-      console.error("Report generation failed:", e);
+      console.error(e);
     }
   };
 
   const startSubscription = async () => {
     if (!currentUser.value) return;
-    const confirmed = confirm(
-      "PROプラン（月額980円）の決済画面へ移動しますか？",
+    if (confirm("PROプラン（月額980円）の決済画面へ移動しますか？")) {
+      window.location.href = STRIPE_PAYMENT_LINK;
+    }
+  };
+
+  const fetchMemories = async () => {
+    if (!currentUser.value) return;
+    loading.value = true;
+    try {
+      let q = query(
+        collection(db, "memories"),
+        where("userId", "==", currentUser.value.uid),
+        orderBy("createdAt", "desc"),
+      );
+      const snap = await getDocs(q);
+      memories.value = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as Memory,
+      );
+    } catch (e) {
+      console.error(e);
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const fetchChatLogs = async () => {
+    if (!currentUser.value) return;
+    const q = query(
+      collection(db, "chat_logs"),
+      where("userId", "==", currentUser.value.uid),
+      orderBy("createdAt", "desc"),
+      limit(50),
     );
-    if (!confirmed) return;
-    window.location.href = STRIPE_PAYMENT_LINK;
+    const snap = await getDocs(q);
+    chatLogs.value = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as ChatLog)
+      .reverse();
+  };
+
+  const fetchTodos = async () => {
+    if (!currentUser.value) return;
+    const q = query(
+      collection(db, "todos"),
+      where("userId", "==", currentUser.value.uid),
+      orderBy("createdAt", "desc"),
+    );
+    onSnapshot(q, (snap) => {
+      todos.value = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Todo);
+    });
+  };
+
+  const fetchReports = async () => {
+    if (!currentUser.value) return;
+    const q = query(
+      collection(db, "daily_reports"),
+      where("userId", "==", currentUser.value.uid),
+      orderBy("createdAt", "desc"),
+      limit(5),
+    );
+    onSnapshot(q, (snap) => {
+      dailyReports.value = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as DailyReport,
+      );
+    });
   };
 
   const initAuth = () => {
@@ -5779,71 +6577,6 @@ export function useMyBrain() {
     window.location.reload();
   };
 
-  const fetchMemories = async () => {
-    if (!currentUser.value) return;
-    loading.value = true;
-    try {
-      let q = query(
-        collection(db, "memories"),
-        where("userId", "==", currentUser.value.uid),
-        orderBy("createdAt", "desc"),
-      );
-      const snap = await getDocs(q);
-      memories.value = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() }) as Memory,
-      );
-    } catch (e) {
-      console.error(e);
-    } finally {
-      loading.value = false;
-    }
-  };
-
-  const fetchChatLogs = async () => {
-    if (!currentUser.value) return;
-    try {
-      const q = query(
-        collection(db, "chat_logs"),
-        where("userId", "==", currentUser.value.uid),
-        orderBy("createdAt", "desc"),
-        limit(50),
-      );
-      const snap = await getDocs(q);
-      chatLogs.value = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }) as ChatLog)
-        .reverse();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const fetchTodos = async () => {
-    if (!currentUser.value) return;
-    const q = query(
-      collection(db, "todos"),
-      where("userId", "==", currentUser.value.uid),
-      orderBy("createdAt", "desc"),
-    );
-    onSnapshot(q, (snap) => {
-      todos.value = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Todo);
-    });
-  };
-
-  const fetchReports = async () => {
-    if (!currentUser.value) return;
-    const q = query(
-      collection(db, "daily_reports"),
-      where("userId", "==", currentUser.value.uid),
-      orderBy("createdAt", "desc"),
-      limit(5),
-    );
-    onSnapshot(q, (snap) => {
-      dailyReports.value = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() }) as DailyReport,
-      );
-    });
-  };
-
   const selectTag = async (tag: string | null) => {
     activeTag.value = tag;
   };
@@ -5852,48 +6585,60 @@ export function useMyBrain() {
     return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
   });
 
+  const allTags = computed(() => {
+    const tags = new Set<string>();
+    memories.value.forEach((m) => m.tags?.forEach((t) => tags.add(t)));
+    return Array.from(tags);
+  });
+
   const findRelatedMemories = async (text: string): Promise<Memory[]> => {
     if (!text.trim() || memories.value.length === 0) return [];
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) return [];
+
       const genAI = new GoogleGenerativeAI(apiKey);
       const embedModel = genAI.getGenerativeModel({
         model: "text-embedding-004",
       });
+
       const result = await embedModel.embedContent(text);
       const vec = result.embedding.values;
+
+      const threshold = 0.55;
+
       const candidates = memories.value
         .map((m) => ({
           ...m,
           score: m.embedding ? cosineSimilarity(vec, m.embedding) : 0,
         }))
-        .filter((m) => m.score && m.score > 0.45)
+        .filter((m) => m.score && m.score > threshold)
         .sort((a, b) => (b.score || 0) - (a.score || 0))
-        .slice(0, 10);
+        .slice(0, 5);
+
       if (candidates.length === 0) return [];
-      const modelName = await getSmartModelName(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: { responseMimeType: "application/json" },
-      });
-      const candidatesText = candidates
-        .map((c) => `ID: ${c.id}\n内容: ${c.aiSummary || c.text.slice(0, 100)}`)
-        .join("\n---\n");
-      const prompt = `検索クエリ: ${text}\n候補:\n${candidatesText}\n文脈的に関連するIDを選んでJSONで返して: { "selectedIds": ["ID"] }`;
-      const aiRes = await model.generateContent(prompt);
-      const aiJson = JSON.parse(aiRes.response.text());
-      const selectedIds: string[] = aiJson.selectedIds || [];
-      const finalResults = candidates.filter((c) => selectedIds.includes(c.id));
-      const highConfidenceResults = candidates.filter(
-        (c) => (c.score || 0) > 0.85 && !selectedIds.includes(c.id),
+
+      const verifyPrompt = `
+        以下の【検索クエリ】に対して、【候補メモ】の中から本当に関連性が高いものだけを選んでください。
+        全く関係ない場合は空の配列を返してください。
+        【検索クエリ】
+        ${text}
+        【候補メモ】
+        ${candidates.map((c, i) => `${i}: ${c.text}`).join("\n")}
+        出力はJSON形式のみ: { "indices": [0, 2] } 
+      `;
+
+      const verifyRes = await generateContentWithRetry(
+        apiKey,
+        [{ text: verifyPrompt }],
+        true,
       );
-      const merged = [...finalResults, ...highConfidenceResults];
-      return Array.from(new Map(merged.map((m) => [m.id, m])).values()).slice(
-        0,
-        3,
-      );
+      const verifyJson = JSON.parse(extractJson(verifyRes));
+      const validIndices: number[] = verifyJson.indices || [];
+
+      return candidates.filter((_, i) => validIndices.includes(i));
     } catch (e) {
+      console.error("Search Error:", e);
       return [];
     }
   };
@@ -5901,35 +6646,23 @@ export function useMyBrain() {
   const addMemory = async (text: string, files?: File[] | null) => {
     if (!(await checkAndIncrementUsage())) return null;
     isSaving.value = true;
-    if (!currentUser.value) return null;
     try {
       const hasImages = files && files.length > 0;
       const docRef = await addDoc(collection(db, "memories"), {
-        userId: currentUser.value.uid,
+        userId: currentUser.value!.uid,
         text: hasImages ? `(解析中...) ${text}` : text,
         createdAt: serverTimestamp(),
         tags: [],
         aiSummary: "保存中...",
         hasImage: !!hasImages,
-        fileType: null, // undefined非対応のためnull
+        fileType: hasImages ? "image/jpeg" : null,
       });
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        await updateDoc(docRef, { aiSummary: "APIキー未設定" });
-        return null;
-      }
-
-      const modelName = await getSmartModelName(apiKey);
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: { responseMimeType: "application/json" },
-      });
 
       let promptParts: any[] = [];
-      if (files && files.length > 0) {
+      if (hasImages) {
         const imageParts = await Promise.all(
-          files.map((f) => fileToGenerativePart(f)),
+          files!.map((f) => fileToGenerativePart(f)),
         );
         promptParts.push(...imageParts);
         promptParts.push({
@@ -5940,13 +6673,9 @@ export function useMyBrain() {
           text: `以下のテキストを整理して。${text} 出力JSON:{summary, tags, fullText}`,
         });
       }
-      const res = await model.generateContent(promptParts);
-      let aiData;
-      try {
-        aiData = JSON.parse(res.response.text());
-      } catch {
-        aiData = { summary: text.substring(0, 30), tags: [], fullText: text };
-      }
+
+      const resText = await generateContentWithRetry(apiKey, promptParts, true);
+      const aiData = JSON.parse(extractJson(resText));
 
       const finalText = hasImages
         ? `【解析済み】${text}\n\n${aiData.fullText || ""}`
@@ -5962,30 +6691,19 @@ export function useMyBrain() {
         embedding: embedding,
       });
 
-      // ローカル更新
       memories.value.unshift({
         id: docRef.id,
-        userId: currentUser.value.uid,
+        userId: currentUser.value!.uid,
         text: finalText,
         aiSummary: aiData.summary,
         tags: aiData.tags,
         createdAt: new Date(),
         hasImage: !!hasImages,
-        fileType: null,
+        fileType: hasImages ? "image/jpeg" : null,
         embedding: embedding,
       });
-
       generateTasksFromMemory(docRef.id, finalText);
-
-      return memories.value
-        .filter((m) => m.id !== docRef.id && m.embedding)
-        .map((m) => ({
-          ...m,
-          score: cosineSimilarity(embedding, m.embedding!),
-        }))
-        .filter((m) => m.score > 0.65)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 3);
+      return [];
     } catch (e) {
       alert("保存エラー");
       return null;
@@ -5998,7 +6716,10 @@ export function useMyBrain() {
     if (!(await checkAndIncrementUsage())) return;
     isSaving.value = true;
     try {
-      const func = httpsCallable(getFunctions(), "scrapeUrl");
+      const func = httpsCallable(
+        getFunctions(getApp(), "asia-northeast1"),
+        "scrapeUrl",
+      );
       const res: any = await func({ url });
       if (res.data.success) {
         await addMemory(
@@ -6022,19 +6743,22 @@ export function useMyBrain() {
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) throw new Error("APIキー未設定");
+
       const embedModel = getEmbeddingModel(apiKey);
       const qEmbed = await embedModel.embedContent(question);
       const qVec = qEmbed.embedding.values;
+
       const scoredMemories = memories.value
         .map((m) => ({
           ...m,
           score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
         }))
         .sort((a, b) => b.score - a.score);
+
       const context = scoredMemories
-        .slice(0, 20)
-        .map((m) => `- ${m.text.slice(0, 500)}`)
-        .join("\n\n");
+        .slice(0, 10)
+        .map((m) => `- ${m.text.slice(0, 300)}`)
+        .join("\n");
       const calendarEvents = await fetchCalendarEvents();
       const calendarContext = calendarEvents
         ? `\n【直近の予定】\n${calendarEvents}\n`
@@ -6043,21 +6767,22 @@ export function useMyBrain() {
         timeZone: "Asia/Tokyo",
       });
 
-      const modelName = await getSmartModelName(apiKey);
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const prompt = `あなたは「第2の脳」。現在日時: ${nowStr}\n${calendarContext}\n【記憶】\n${context}\n【質問】${question}\n出力JSON: { "answer": "回答", "mermaid": null, "calendarAction": null }`;
+      const prompt = `
+        あなたはユーザーの「第2の脳」です。現在日時: ${nowStr}
+        ${calendarContext}
+        【参照する記憶】
+        ${context}
+        【質問】
+        ${question}
+        【指示】
+        質問に対する答えだけを生成してください。記憶の羅列は禁止。
+        出力JSON: { "answer": "回答テキスト", "mermaid": null, "calendarAction": null }
+      `;
 
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
-      let data;
-      try {
-        data = JSON.parse(text.replace(/```json|```/g, "").trim());
-      } catch {
-        data = { answer: text, mermaid: null, calendarAction: null };
-      }
-
+      const text = await generateContentWithRetry(apiKey, [prompt], true);
+      const data = JSON.parse(extractJson(text));
       let finalAnswer = data.answer;
+
       if (data.calendarAction) {
         try {
           await addEventToGoogleCalendar(
@@ -6067,17 +6792,19 @@ export function useMyBrain() {
             data.calendarAction.colorId,
           );
           finalAnswer += `\n\n✅ 予定登録: ${data.calendarAction.title}`;
-        } catch (e: any) {
-          finalAnswer += `\n⚠️ エラー: ${e.message}`;
+        } catch {
+          finalAnswer += `\n⚠️ エラー: 予定登録失敗`;
         }
       }
 
       const logData = {
         userId: currentUser.value!.uid,
-        question: question,
+        question,
         answer: finalAnswer,
         mermaidCode: data.mermaid || null,
         createdAt: serverTimestamp(),
+        displayAnswer: "",
+        isAnimating: true,
       };
       const logRef = await addDoc(collection(db, "chat_logs"), logData);
       chatLogs.value.push({
@@ -6121,34 +6848,39 @@ export function useMyBrain() {
     await deleteDoc(doc(db, "todos", id));
   };
 
-  const allTags = computed(() => {
-    const tags = new Set<string>();
-    memories.value.forEach((m) => m.tags?.forEach((t) => tags.add(t)));
-    return Array.from(tags);
-  });
+  // ★追加: LINE連携ロジック
+  const startLineAuth = () => {
+    const channelId = import.meta.env.VITE_LINE_LOGIN_CHANNEL_ID;
+    const redirectUri = window.location.origin + "/app";
+    const state = Math.random().toString(36).substring(7);
 
-  // ★追加: LINE連携解除
-  const unlinkLine = async () => {
-    if (!currentUser.value) return;
-    if (
-      !confirm(
-        "LINE連携を解除しますか？\n\n解除すると、LINEからのメモ保存や通知機能が使えなくなります。",
-      )
-    )
+    if (!channelId) {
+      alert("LINEチャネルIDが設定されていません(.envを確認)");
       return;
+    }
 
+    const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${channelId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=profile%20openid`;
+    window.location.href = url;
+  };
+
+  // ★追加: 連携解除ロジック
+  const unlinkLine = async () => {
+    if (!confirm("LINE連携を解除しますか？")) return;
+    loading.value = true;
     try {
-      const func = httpsCallable(getFunctions(), "unlinkLineAccount");
-      await func();
+      const functions = getFunctions(getApp(), "asia-northeast1");
+      const unlinkFunc = httpsCallable(functions, "unlinkLineAccount");
+      await unlinkFunc();
 
-      // ローカルの状態も即座に更新
       if (currentUser.value) {
         currentUser.value.isLineLinked = false;
       }
-      alert("LINE連携を解除しました。");
+      alert("解除しました");
     } catch (e: any) {
       console.error(e);
-      alert("解除に失敗しました: " + e.message);
+      alert("解除に失敗しました");
+    } finally {
+      loading.value = false;
     }
   };
 
@@ -6183,7 +6915,8 @@ export function useMyBrain() {
     addManualTodo,
     callGoogleApi,
     reconnectCalendar,
-    unlinkLine, // ★追加
+    startLineAuth, // ★公開
+    unlinkLine, // ★公開
   };
 }
 </file>
@@ -6202,7 +6935,6 @@ import ChatList from "@/components/ChatList/ChatList.vue";
 import InputFooter from "@/components/InputFooter/InputFooter.vue";
 import MemoryModal from "@/components/MemoryModal/MemoryModal.vue";
 import FullCalendar from "@fullcalendar/vue3";
-import BaseModal from "@/components/BaseModal/BaseModal.vue";
 
 const {
   inputMode,
@@ -6226,11 +6958,12 @@ const {
   deleteTodo,
   dailyReports,
   isReportModalOpen,
-  isCalendarConnected, // ★追加
-  reconnectCalendar, // ★追加
+  isCalendarConnected,
+  reconnectCalendar,
 } = useHomeView();
 
-const { addManualTodo } = useMyBrain();
+// ★修正: currentUser, startLineAuth を追加で取得
+const { addManualTodo, currentUser, startLineAuth } = useMyBrain();
 const newTaskTitle = ref("");
 
 const submitTask = async () => {
@@ -6241,670 +6974,356 @@ const submitTask = async () => {
 
 const latestReport =
   dailyReports.value.length > 0 ? dailyReports.value[0] : null;
+
+// バイブレーション機能
+const haptic = () => {
+  if (navigator.vibrate) navigator.vibrate(10);
+};
 </script>
 
 <template>
   <div
-    class="h-[100dvh] flex flex-col bg-slate-950 text-slate-200 font-sans relative overflow-hidden"
+    class="h-[100dvh] flex flex-col bg-[#09090b] text-[#f8fafc] font-sans relative overflow-hidden"
   >
-    <Transition name="toast">
-      <div
-        v-if="showSuccessToast"
-        class="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-green-500 text-white px-6 py-4 rounded-full shadow-2xl flex items-center gap-3 border-2 border-green-400 w-[90%] max-w-sm"
-      >
-        <span class="text-2xl">✅</span>
-        <div>
-          <p class="font-bold text-sm">LINE連携完了！</p>
-        </div>
-      </div>
-    </Transition>
-
     <AppHeader />
     <TagFilter />
 
-    <div v-if="latestReport && !isReportModalOpen" class="px-4 pt-2">
+    <div
+      v-if="latestReport && !isReportModalOpen && inputMode === 'memo'"
+      class="px-4 pt-4 pb-2 animate-fade-in"
+    >
       <button
-        @click="isReportModalOpen = true"
-        class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-3 flex items-center justify-between shadow-lg"
+        @click="
+          isReportModalOpen = true;
+          haptic();
+        "
+        class="w-full bg-gradient-to-r from-slate-900 to-[#121214] border border-[#27272a] rounded-2xl p-4 flex items-center justify-between shadow-lg shadow-black/20 group active:scale-[0.98] transition-transform"
       >
-        <div class="flex items-center gap-2">
-          <span class="text-xl">📰</span>
+        <div class="flex items-center gap-3">
+          <div
+            class="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400"
+          >
+            📰
+          </div>
           <div class="text-left">
-            <div class="text-[10px] font-bold opacity-80">DAILY REPORT</div>
-            <div class="text-xs font-bold text-white">
-              {{ latestReport.date }} のまとめ
+            <div
+              class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5"
+            >
+              Daily Insight
+            </div>
+            <div class="text-sm font-bold text-slate-200">
+              {{ latestReport.date }} の振り返り
             </div>
           </div>
         </div>
-        <span class="text-xs">→</span>
+        <span class="text-slate-600 text-lg">→</span>
       </button>
     </div>
 
     <main
       ref="chatContainerRef"
       class="flex-1 overflow-y-auto scrollbar-hide transition-all"
-      :class="inputMode === 'calendar' ? 'p-0 md:p-6' : 'p-4 pb-72'"
+      :class="inputMode === 'calendar' ? 'p-0' : 'p-4 pb-40'"
     >
-      <div v-if="inputMode === 'memo'" class="mb-6">
-        <div class="flex items-center gap-2 mb-2 px-1">
-          <span class="text-sm font-bold text-slate-400"
-            >🔥 TASKS (AI Extracted)</span
-          >
-        </div>
-
-        <div class="flex gap-2 mb-4">
+      <div v-if="inputMode === 'memo'" class="mb-6 animate-fade-in">
+        <div class="flex gap-2 mb-6">
           <input
             v-model="newTaskTitle"
             @keydown.enter="submitTask"
             type="text"
             placeholder="タスクを追加..."
-            class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-blue-500 placeholder-slate-600"
+            class="flex-1 bg-[#18181b] border border-[#27272a] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition placeholder-slate-600"
           />
           <button
-            @click="submitTask"
-            class="bg-slate-800 text-white w-10 h-10 rounded-xl flex items-center justify-center hover:bg-slate-700 active:scale-95 transition"
+            @click="
+              submitTask;
+              haptic();
+            "
+            class="bg-indigo-600 text-white w-12 h-auto rounded-xl flex items-center justify-center hover:bg-indigo-500 active:scale-95 transition shadow-lg shadow-indigo-900/30"
           >
             ＋
           </button>
         </div>
 
-        <div
-          v-if="todos.length === 0"
-          class="text-xs text-slate-600 px-2 py-4 border border-slate-800 rounded-xl text-center border-dashed"
-        >
-          タスクはありません
-        </div>
-        <div v-else class="space-y-2">
+        <div v-if="todos.length > 0" class="space-y-2 mb-8">
+          <h3 class="text-xs font-bold text-slate-500 tracking-wider mb-2 px-1">
+            TASKS
+          </h3>
           <div
             v-for="todo in todos"
             :key="todo.id"
-            class="flex items-center gap-3 bg-slate-900/50 p-3 rounded-xl border border-slate-800 transition"
-            :class="{ 'opacity-50': todo.isCompleted }"
+            class="flex items-center gap-3 bg-[#18181b] p-3.5 rounded-xl border border-[#27272a] transition active:scale-[0.99]"
+            :class="{ 'opacity-50 grayscale': todo.isCompleted }"
           >
             <button
-              @click="toggleTodo(todo.id, todo.isCompleted)"
-              class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition"
+              @click="
+                toggleTodo(todo.id, todo.isCompleted);
+                haptic();
+              "
+              class="w-5 h-5 rounded-md border-2 flex items-center justify-center transition"
               :class="
                 todo.isCompleted
-                  ? 'bg-blue-500 border-blue-500'
-                  : 'border-slate-600'
+                  ? 'bg-indigo-500 border-indigo-500'
+                  : 'border-slate-600 hover:border-indigo-400'
               "
             >
-              <span v-if="todo.isCompleted" class="text-[10px] text-white"
+              <span
+                v-if="todo.isCompleted"
+                class="text-[10px] text-white font-bold"
                 >✓</span
               >
             </button>
             <span
-              class="flex-1 text-sm font-bold truncate"
-              :class="{ 'line-through text-slate-500': todo.isCompleted }"
+              class="flex-1 text-sm font-medium truncate text-slate-300"
+              :class="{ 'line-through': todo.isCompleted }"
             >
               {{ todo.title }}
             </span>
             <button
               @click="deleteTodo(todo.id)"
-              class="text-slate-600 hover:text-red-400"
+              class="text-slate-600 hover:text-red-400 px-2"
             >
               ×
             </button>
           </div>
         </div>
+
+        <h3 class="text-xs font-bold text-slate-500 tracking-wider mb-2 px-1">
+          MEMORIES
+        </h3>
+        <MemoList @openDetail="onOpenDetail" />
       </div>
 
-      <MemoList
-        v-if="inputMode === 'memo' || inputMode === 'url'"
-        @openDetail="onOpenDetail"
-      />
+      <div v-if="inputMode === 'url'" class="animate-fade-in">
+        <div class="text-center py-10 text-slate-600 text-sm">
+          URLを貼り付けると、AIが要約してここに保存します。
+        </div>
+        <MemoList @openDetail="onOpenDetail" />
+      </div>
+
       <ChatList v-if="inputMode === 'chat'" />
 
       <div
         v-if="inputMode === 'calendar'"
-        class="w-full h-full flex flex-col animate-fade-in relative md:max-w-6xl md:mx-auto"
+        class="w-full h-full flex flex-col animate-fade-in relative bg-[#09090b]"
       >
-        <div
-          class="hidden md:block absolute top-[-50px] left-[-50px] w-64 h-64 bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none"
-        ></div>
-        <div
-          class="hidden md:block absolute bottom-[-50px] right-[-50px] w-80 h-80 bg-blue-600/10 rounded-full blur-[100px] pointer-events-none"
-        ></div>
-
-        <div
-          class="calendar-wrapper backdrop-blur-xl bg-slate-900/60 md:bg-slate-800/40 relative flex flex-col border-b md:border border-slate-700/30 md:rounded-3xl shadow-2xl overflow-hidden"
-        >
-          <div
-            v-if="!isCalendarConnected"
-            class="absolute inset-0 bg-slate-950/80 z-30 flex flex-col items-center justify-center backdrop-blur-sm p-6 text-center"
-          >
-            <p class="text-slate-300 font-bold mb-4">
-              Googleカレンダーとの接続が切れました
-            </p>
-            <button
-              @click="reconnectCalendar"
-              class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2"
-            >
-              <span class="text-xl">🔄</span> 再接続する
-            </button>
-          </div>
-
-          <div
-            v-if="calendarLoading"
-            class="absolute inset-0 bg-slate-950/60 z-20 flex items-center justify-center backdrop-blur-sm"
-          >
+        <div class="flex-1 p-0 md:p-6 overflow-hidden relative">
+          <div class="absolute top-4 left-4 right-4 z-20 flex flex-col gap-2">
             <div
-              class="animate-spin h-12 w-12 border-4 border-indigo-500 rounded-full border-t-transparent shadow-[0_0_20px_rgba(99,102,241,0.6)]"
-            ></div>
+              v-if="!isCalendarConnected"
+              class="bg-red-500/10 border border-red-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between"
+            >
+              <span class="text-red-400 text-xs font-bold">未接続</span>
+              <button
+                @click="reconnectCalendar"
+                class="bg-red-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold"
+              >
+                再接続
+              </button>
+            </div>
+
+            <div
+              v-if="currentUser && !currentUser.isLineLinked"
+              class="bg-green-500/10 border border-green-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between animate-fade-in"
+            >
+              <div class="flex items-center gap-2">
+                <span class="text-xl">💬</span>
+                <span class="text-green-400 text-xs font-bold"
+                  >LINEで通知を受け取る</span
+                >
+              </div>
+              <button
+                @click="startLineAuth"
+                class="bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold hover:bg-green-400 transition"
+              >
+                連携する
+              </button>
+            </div>
           </div>
 
-          <div class="p-1 md:p-6 h-full">
-            <FullCalendar
-              :options="calendarOptions"
-              class="w-full h-full font-sans cyber-calendar"
-            />
-          </div>
+          <FullCalendar
+            :options="calendarOptions"
+            class="w-full h-full font-sans cyber-calendar"
+          />
         </div>
       </div>
     </main>
 
-    <div
-      v-if="isReportModalOpen && latestReport"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-      @click.self="isReportModalOpen = false"
-    >
-      <div
-        class="bg-slate-900 w-full max-w-md rounded-3xl p-6 shadow-2xl border border-slate-700 max-h-[80vh] overflow-y-auto"
-      >
-        <h2 class="text-xl font-bold text-white mb-1">📅 Daily Report</h2>
-        <p class="text-xs text-slate-400 mb-6">{{ latestReport.date }}</p>
-
-        <div class="space-y-6">
-          <div>
-            <h3 class="text-sm font-bold text-indigo-400 mb-2">総括</h3>
-            <p class="text-sm text-slate-300 leading-relaxed">
-              {{ latestReport.content }}
-            </p>
-          </div>
-
-          <div>
-            <h3 class="text-sm font-bold text-indigo-400 mb-2">ハイライト</h3>
-            <ul class="space-y-2">
-              <li
-                v-for="(h, i) in latestReport.highlights"
-                :key="i"
-                class="flex gap-2 text-sm text-slate-300"
-              >
-                <span class="text-indigo-500">•</span>
-                {{ h }}
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <button
-          @click="isReportModalOpen = false"
-          class="mt-8 w-full py-3 bg-slate-800 rounded-xl text-white font-bold"
-        >
-          閉じる
-        </button>
-      </div>
-    </div>
+    <MemoryModal :memory="editingMemory" @close="editingMemory = null" />
+    <InputFooter :modelValue="inputMode" @update:modelValue="onModeChange" />
 
     <div
       v-if="isBottomSheetOpen"
       class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity"
       @click="closeBottomSheet"
     ></div>
-
     <div
-      class="fixed bottom-0 left-0 w-full z-50 bg-[#1A1D26] rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.6)] transform transition-transform duration-300 ease-out flex flex-col max-h-[85vh] border-t border-slate-700/50"
+      class="fixed bottom-0 left-0 w-full z-50 bg-[#121214] rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] transform transition-transform duration-300 ease-out flex flex-col max-h-[85vh] border-t border-[#27272a]"
       :class="isBottomSheetOpen ? 'translate-y-0' : 'translate-y-full'"
     >
       <div
         class="w-full flex justify-center pt-3 pb-2"
         @click="closeBottomSheet"
       >
-        <div class="w-10 h-1 bg-slate-600/50 rounded-full"></div>
+        <div class="w-12 h-1.5 bg-slate-700/50 rounded-full"></div>
       </div>
 
       <div
-        class="px-6 pb-4 pt-1 border-b border-slate-800/50 flex justify-between items-end"
+        class="px-6 pb-4 pt-2 border-b border-[#27272a] flex justify-between items-end"
       >
         <div>
-          <div
-            class="text-xs font-bold text-slate-400 mb-1 font-mono tracking-wider"
-          >
-            {{ selectedDateStr.split("-")[0] }}.{{
-              selectedDateStr.split("-")[1]
-            }}
+          <div class="text-xs font-bold text-indigo-400 mb-0.5 tracking-wider">
+            SELECTED DATE
           </div>
-          <div class="flex items-baseline gap-2">
-            <span class="text-4xl font-black text-white tracking-tighter">
-              {{ selectedDateStr.split("-")[2] }}
-            </span>
-            <span class="text-lg font-bold text-slate-500 uppercase">
-              {{
-                new Date(selectedDateStr).toLocaleDateString("en-US", {
-                  weekday: "short",
-                })
-              }}
-            </span>
+          <div class="text-2xl font-bold text-white tracking-tight">
+            {{ selectedDateStr }}
           </div>
         </div>
-
         <button
           @click="closeBottomSheet"
-          class="bg-slate-800/80 p-2 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition"
+          class="bg-[#27272a] p-2 rounded-full text-slate-400 hover:text-white"
         >
-          <span class="text-xl leading-none">×</span>
+          ✕
         </button>
       </div>
 
-      <div class="flex-1 overflow-y-auto p-5 pb-10">
-        <div class="space-y-4 mb-10">
-          <div
-            v-if="selectedDateEvents.length === 0"
-            class="flex flex-col items-center justify-center py-10 text-slate-600 opacity-60"
-          >
-            <span class="text-4xl mb-3">☕️</span>
-            <p class="text-xs font-bold tracking-widest">NO EVENTS</p>
-          </div>
-
+      <div class="flex-1 overflow-y-auto p-6 pb-12">
+        <div
+          v-if="selectedDateEvents.length === 0"
+          class="text-center py-12 text-slate-600"
+        >
+          <p class="text-sm font-bold">No Events</p>
+        </div>
+        <div v-else class="space-y-3">
           <div
             v-for="(ev, idx) in selectedDateEvents"
             :key="idx"
-            class="relative pl-4 group"
+            class="bg-[#18181b] p-4 rounded-xl border border-[#27272a] flex gap-4 hover:border-indigo-500/30 transition"
           >
             <div
-              class="absolute left-[7px] top-2 bottom-[-16px] w-[2px] bg-slate-800 group-last:hidden"
-            ></div>
-            <div
-              class="absolute left-0 top-2 w-4 h-4 rounded-full border-2 border-[#1A1D26]"
+              class="w-1 h-auto rounded-full"
               :style="{ backgroundColor: ev.backgroundColor }"
             ></div>
-
-            <div
-              class="ml-4 p-4 bg-slate-800/40 rounded-2xl border border-slate-700/30 flex justify-between items-start active:scale-[0.98] transition backdrop-blur-sm"
-            >
-              <div class="flex-1 min-w-0">
-                <div
-                  class="text-xs font-mono text-slate-400 mb-1 flex items-center gap-2"
-                >
-                  <span :style="{ color: ev.backgroundColor }">●</span>
-                  {{ formatTimeRange(ev) }}
-                </div>
-                <div class="text-base font-bold text-slate-100 leading-snug">
-                  {{ ev.title }}
-                </div>
+            <div class="flex-1">
+              <div class="text-xs text-slate-400 font-mono mb-1">
+                {{ formatTimeRange(ev) }}
               </div>
+              <div class="text-sm font-bold text-white">{{ ev.title }}</div>
+            </div>
+            <button
+              @click.stop="deleteEvent(ev.id)"
+              class="text-slate-600 hover:text-red-500"
+            >
+              🗑️
+            </button>
+          </div>
+        </div>
 
-              <button
-                @click.stop="deleteEvent(ev.id)"
-                class="ml-2 w-8 h-8 flex items-center justify-center rounded-full text-slate-600 hover:text-rose-500 hover:bg-rose-500/10 transition"
-              >
-                🗑️
-              </button>
+        <div
+          v-if="relatedMemories.length > 0"
+          class="mt-8 pt-8 border-t border-[#27272a]"
+        >
+          <h4
+            class="text-xs font-bold text-slate-500 mb-4 tracking-wider flex items-center gap-2"
+          >
+            <span>🧠</span> 関連する記憶
+          </h4>
+          <div class="grid gap-2">
+            <div
+              v-for="m in relatedMemories"
+              :key="m.id"
+              @click="onOpenDetail(m)"
+              class="bg-[#18181b] border border-[#27272a] p-3 rounded-xl text-xs text-slate-300 hover:bg-[#27272a] cursor-pointer leading-relaxed"
+            >
+              {{ m.aiSummary || m.text.substring(0, 50) }}
             </div>
           </div>
         </div>
 
-        <div v-if="selectedDateEvents.length > 0">
-          <div class="flex items-center gap-2 mb-4 px-1 opacity-80">
-            <span class="text-lg">🧠</span>
-            <span class="text-xs font-bold text-slate-400 tracking-wider"
-              >RELATED MEMORIES</span
-            >
-          </div>
+        <div
+          v-else-if="selectedDateEvents.length > 0 && !isSearchingMemories"
+          class="mt-8 pt-8 border-t border-[#27272a] text-center"
+        >
+          <p class="text-xs text-slate-600">関連する記憶はありませんでした</p>
+        </div>
 
-          <div v-if="isSearchingMemories" class="flex justify-center py-6">
-            <div class="flex gap-1">
-              <div
-                class="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce"
-                style="animation-delay: 0s"
-              ></div>
-              <div
-                class="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce"
-                style="animation-delay: 0.1s"
-              ></div>
-              <div
-                class="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce"
-                style="animation-delay: 0.2s"
-              ></div>
-            </div>
-          </div>
-
-          <div v-else class="grid gap-3">
-            <div
-              v-for="memo in relatedMemories"
-              :key="memo.id"
-              @click="onOpenDetail(memo)"
-              class="bg-gradient-to-br from-indigo-900/20 to-slate-800/30 border border-indigo-500/20 p-4 rounded-2xl hover:border-indigo-500/40 transition cursor-pointer"
-            >
-              <div class="flex justify-between items-start mb-2">
-                <span
-                  class="text-[9px] font-bold bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full"
-                >
-                  AI Summary
-                </span>
-                <span class="text-[10px] text-slate-500 font-mono">
-                  {{
-                    new Date(memo.createdAt?.toDate?.()).toLocaleDateString()
-                  }}
-                </span>
-              </div>
-              <p class="text-xs text-slate-300 leading-relaxed line-clamp-2">
-                {{ memo.aiSummary || memo.text }}
-              </p>
-            </div>
-
-            <div
-              v-if="relatedMemories.length === 0"
-              class="text-center py-4 text-xs text-slate-600"
-            >
-              関連する記憶はありませんでした
-            </div>
-          </div>
+        <div
+          v-else-if="isSearchingMemories"
+          class="mt-8 pt-8 border-t border-[#27272a] text-center"
+        >
+          <p class="text-xs text-slate-500 animate-pulse">
+            関連情報を検索中...
+          </p>
         </div>
       </div>
     </div>
-
-    <MemoryModal :memory="editingMemory" @close="editingMemory = null" />
-    <InputFooter :modelValue="inputMode" @update:modelValue="onModeChange" />
   </div>
 </template>
-
-<style>
-/* styleタグの中身は変更なし */
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-.toast-enter-active,
-.toast-leave-active {
-  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  transform: translate(-50%, -20px);
-}
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.animate-fade-in {
-  animation: fadeIn 0.4s ease-out;
-}
-
-.calendar-wrapper {
-  height: calc(100dvh - 310px);
-}
-
-@media (min-width: 768px) {
-  .calendar-wrapper {
-    height: calc(100dvh - 250px);
-  }
-}
-
-/* Cyber Glass Theme */
-.fc {
-  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
-  --fc-border-color: rgba(255, 255, 255, 0.1);
-  --fc-today-bg-color: rgba(99, 102, 241, 0.15);
-  --fc-page-bg-color: transparent;
-  --fc-neutral-bg-color: transparent;
-}
-
-.fc .fc-toolbar-title {
-  font-size: 1.1rem !important;
-  font-weight: 800 !important;
-  color: #f1f5f9;
-  letter-spacing: 0.05em;
-  text-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
-}
-@media (min-width: 768px) {
-  .fc .fc-toolbar-title {
-    font-size: 1.5rem !important;
-  }
-}
-
-.fc .fc-button {
-  background-color: rgba(255, 255, 255, 0.03) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  color: #cbd5e1 !important;
-  border-radius: 12px !important;
-  padding: 0.3rem 0.6rem !important;
-  transition: all 0.2s;
-}
-.fc .fc-button:hover {
-  background-color: rgba(255, 255, 255, 0.1) !important;
-  color: white !important;
-  border-color: rgba(255, 255, 255, 0.3) !important;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
-}
-.fc .fc-button-active {
-  background-color: rgba(99, 102, 241, 0.4) !important;
-  border-color: rgba(99, 102, 241, 0.6) !important;
-  color: white !important;
-  box-shadow: 0 0 15px rgba(99, 102, 241, 0.3) !important;
-}
-
-.fc-col-header-cell-cushion {
-  color: #94a3b8;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 8px 0 !important;
-  letter-spacing: 0.05em;
-}
-@media (min-width: 768px) {
-  .fc-col-header-cell-cushion {
-    font-size: 0.85rem;
-  }
-}
-
-.fc-daygrid-day-number {
-  color: #e2e8f0;
-  font-size: 0.85rem;
-  font-weight: 600;
-  padding: 4px 8px !important;
-  opacity: 0.9;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-}
-@media (min-width: 768px) {
-  .fc-daygrid-day-number {
-    font-size: 1rem;
-    padding: 8px 12px !important;
-  }
-}
-
-.fc-event {
-  border: none !important;
-  background: transparent !important;
-  margin-top: 2px !important;
-  cursor: pointer;
-}
-
-.fc-content-custom {
-  display: flex;
-  align-items: center;
-  background-color: rgba(30, 41, 59, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 2px 0;
-  border-radius: 4px;
-  overflow: hidden;
-  transition:
-    transform 0.15s,
-    box-shadow 0.15s;
-  width: 100%;
-}
-@media (min-width: 768px) {
-  .fc-content-custom {
-    padding: 3px 0;
-    border-radius: 6px;
-    background-color: rgba(51, 65, 85, 0.7);
-  }
-  .fc-content-custom:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    background-color: rgba(71, 85, 105, 0.9);
-    z-index: 10;
-  }
-}
-
-.fc-marker {
-  width: 3px;
-  height: 12px;
-  border-radius: 2px;
-  margin-left: 4px;
-  margin-right: 4px;
-  box-shadow: 0 0 6px currentColor;
-  flex-shrink: 0;
-}
-@media (min-width: 768px) {
-  .fc-marker {
-    height: 16px;
-    width: 4px;
-    margin-left: 6px;
-    margin-right: 6px;
-  }
-}
-
-.fc-details {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  overflow: hidden;
-  padding-right: 4px;
-  width: 100%;
-}
-
-.fc-time-custom {
-  color: #94a3b8;
-  font-size: 0.65rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-@media (min-width: 768px) {
-  .fc-time-custom {
-    font-size: 0.75rem;
-    color: #cbd5e1;
-  }
-}
-
-.fc-title-custom {
-  color: #f1f5f9;
-  font-size: 0.7rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 600;
-}
-@media (min-width: 768px) {
-  .fc-title-custom {
-    font-size: 0.75rem;
-  }
-}
-
-@media (max-width: 640px) {
-  .fc-toolbar-title {
-    font-size: 1.1rem !important;
-  }
-  .fc-time-custom {
-    display: none;
-  }
-  .fc-marker {
-    margin-right: 4px;
-    margin-left: 4px;
-  }
-  .fc-button {
-    padding: 0.25rem 0.5rem !important;
-  }
-  .fc-daygrid-more-link {
-    font-size: 0.7rem;
-    color: #818cf8 !important;
-    font-weight: bold;
-    text-decoration: none !important;
-    background: rgba(129, 140, 248, 0.1);
-    padding: 2px 6px;
-    border-radius: 4px;
-    display: block;
-    margin-top: 2px;
-  }
-}
-</style>
 </file>
 
 <file path=".firebase/hosting.ZGlzdA.cache">
-registerSW.js,1769087388512,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-sw.js,1769087389275,66120d76c4eaaebacc40612da57144ce83ddc5a2561f82dc4f5012cbdaa78689
-workbox-8c29f6e4.js,1769087389275,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-manifest.webmanifest,1769087388512,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-index.html,1769087388512,2a182a30409f1b267d1dd8d59512d4a66039293489019466a8486673483c25c0
-firebase-messaging-sw.js,1769087388053,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-lp.html,1769087388059,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/stateDiagram-FKZM4ZOC-D3WOgbcY.js,1769087388512,fc603767cb57a9ad7eec44dbb40a1fe7aa5e3d4385ef981cf692f249a446a85c
-assets/xychartDiagram-PRI3JC2R-CnoGYOss.js,1769087388512,e123a45c835286fba652cbe5741ca4c57ac9d19099db8288f6a73f882cf924a1
-assets/stateDiagram-v2-4FDKWEC3-CMJ4D7to.js,1769087388512,2093b9762a18d6ebbeeaae98227e9ee92d19bf2a9c05c8da6845a447b8bc834c
-assets/timeline-definition-IT6M3QCI-CQ3rIX09.js,1769087388512,c4ad3fdf6f49abf7bc53dd23813fdb6b4045f5995cc89db025d5e0e59d820376
-assets/requirementDiagram-UZGBJVZJ-Dwlx6VuZ.js,1769087388512,3164428af9ac93271c6fbda3940c8949526cec25038c30bb650e5ee7d8a6002e
-assets/pieDiagram-ADFJNKIX-BxdXQe7t.js,1769087388512,794114d5c7dd7d3218f31c12b3d17435f33544d55bac8a9d4eb28f583cd26f31
-assets/ordinal-Cboi1Yqb.js,1769087388512,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/min-BNgV5drd.js,1769087388512,0c5186fb1bd098643a789e94255b089ca7b1ca29cb4c17382dd280c6ee354150
-assets/quadrantDiagram-AYHSOK5B-C4Vl7Mvx.js,1769087388512,c62a67fd9f2a5c51805c8556ce700143e04090810b3bc969d664affab7bd2d19
-assets/sankeyDiagram-TZEHDZUN-D9ILwLJ4.js,1769087388512,ad681d7310b2c73d31c725940c7b02d001e1730f33766091802deb16c0fedbff
-assets/mindmap-definition-VGOIOE7T-BcRvjwPV.js,1769087388512,763128d74a5fbf50fd4156807fb30bf4c20e16ec5c0eb1bf9555875dc070c86e
-assets/linear-CeM6IO9l.js,1769087388512,b636151a7abcb72911f40db5d8084689bf242b409c93cb5a40081ccb58d0e452
-assets/init-Gi6I4Gst.js,1769087388512,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/infoDiagram-WHAUD3N6-haG9Rr2X.js,1769087388512,a7df6b4665b2e01ae64e432a79ccd7274b8403bb11bcb12e5229139adabd7922
-assets/journeyDiagram-XKPGCS4Q-Dnz3Xq7t.js,1769087388512,eca9bbbc6a7654aaeb75bd47a62fd3496b0e323463fcedd7b7942834b05da92a
-assets/kanban-definition-3W4ZIXB7-Dp-NIJgy.js,1769087388512,e19d1325988ce4951f33905dc9daa9fa70bb9d08753388f3e9a7866ad7f139f2
-assets/layout-Bw9Qb1z-.js,1769087388512,f6a7c6843421c61f4ee01a95467112932dc88074732de54b008adc07383e7300
-assets/index-C0ds9tTC.css,1769087388512,94b06599cca036e2587b30d02708f49f534ad6268945343943a03951dc9af986
-assets/gitGraphDiagram-NY62KEGX-Dofw9PHt.js,1769087388512,4a687e3eb6863edf2b4d0be59bec3ddd21c89b3eec1036a23d91ba59fb2f6219
-assets/diagram-S2PKOQOG-DIrR8-DX.js,1769087388512,a9d444c6524ffe353f83b2a8453352f673d4bd275e5fbb387736488b0eebc3e9
-assets/erDiagram-Q2GNP2WA-CFRGzJVI.js,1769087388512,87481c95482eb7d5007ffcd5ead3de20e61c762971c5c68d8bcafe3f8fe254b3
-assets/graph-D82VRSvT.js,1769087388512,f8a50e854f91899efcab90fe1c285aa2c1cbdff8eeb33c23c6a0f904a3a8d509
-assets/defaultLocale-DX6XiGOO.js,1769087388512,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/diagram-PSM6KHXK-BUYiQWq2.js,1769087388512,0517f0296ce346eb3fe8bc6809031e66b7fedf32cc3e2c8131d31f77cee7c5e1
-assets/dagre-6UL2VRFP-BP7oN89H.js,1769087388512,27635d7badf90d0a6e61508f912f794310136cd475661022cd39ac6b04f9987a
-assets/diagram-QEK2KX5R-CI5NIi0G.js,1769087388512,158f46b6bc18188501ac6adeca148e8b0f473b7d9ec56240e458ea5a76ad6b6e
-assets/classDiagram-v2-WZHVMYZB-D0EcyOQ0.js,1769087388512,4cfd01e80773c0922f92be321411a8522e48c75c980d85dbbfa6d4046df56e98
-assets/clone-CQCkPK6c.js,1769087388512,cabc6162c3a8ab7c81e7376022d270fcf302250b49c227aa1cc1e7096118a130
-assets/classDiagram-2ON5EDUG-D0EcyOQ0.js,1769087388512,4cfd01e80773c0922f92be321411a8522e48c75c980d85dbbfa6d4046df56e98
-assets/chunk-QZHKN3VN-BMbD7r-V.js,1769087388512,a8b1f9880caa457689f851261597975c0cc97c4a01ea2661375df43f0c509757
-assets/chunk-TZMSLE5B-DJVbbbhu.js,1769087388512,c69d9aedacf6a2a1756960ed33e785e8f1d7e9caabffa528e7bd55435ad72340
-assets/flowDiagram-NV44I4VS-BeuI4WxL.js,1769087388512,1f94ee7857db0d4129388da32e35f20f4c5cfd28e6a7426d022a03c52f70010d
-assets/ganttDiagram-JELNMOA3-CLANzD1p.js,1769087388512,0b60e62dc7dc47f731af52cfa8251f058848c453be2a9663084b3c70728c678f
-assets/sequenceDiagram-WL72ISMW-Cvzpixux.js,1769087388512,3933c79269e0d575654c7dc942d60ea3b47409b20af2cc184cdeb93ede363c09
-assets/cose-bilkent-S5V4N54A-BUK0pjar.js,1769087388512,3a52d6f15782a658c6735fec5ff6455c01a5cae0650bb8055f81950b31d6c8b7
-assets/chunk-QN33PNHL-CRHEMEXn.js,1769087388512,c3c5a418430e0276d5ca9c7ed30c3dea585c0476cfef41bdcbc59dad0d35b5e1
-assets/chunk-FMBD7UC4-B9VZFPWC.js,1769087388512,0da30d682e9e62555d7911408a3064ba95ee86d238f1eba71f13b46614fff1bc
-assets/chunk-55IACEB6-UcC1MNhz.js,1769087388512,112ea55f0b44e1f49ce8753edc252ae85f5dabbd66b210faf37362474e63465b
-assets/chunk-4BX2VUAB-BxfN5FJW.js,1769087388512,3f339f1ecccd7168717f3f52fe5e746ebdba9ed5ea0dffd40dc0e70cb0e0a4eb
-assets/channel-DlCjFQDd.js,1769087388512,99f2d051e482303878fd166c402e2b6095ca153dc80ed5a2c10129a738f8c671
-assets/chunk-DI55MBZ5-cG4F_00v.js,1769087388512,e76f99e7bea4427c375c68c1bb97c94e000d8a56cf21a4cd94dbb5540e0e3f0c
-assets/chunk-B4BG7PRW-CV6n-bg2.js,1769087388512,2f3b421981a0ee63063a89040d985f7d53a8ff80fef7c4b5ebf19bc43486f083
-assets/arc-CeRXhSvN.js,1769087388512,4d1bdf25ab1f6a3553a9887ffa59d70dd0505273dcbe2ac45d6d5b1e598b8cf5
-assets/_baseUniq-BS-Pok4s.js,1769087388512,6007ef9307160e3f00f773f73436c08b85e7d3c1630f1139b0f2531672f14ed7
-assets/c4Diagram-YG6GDRKO-BkOWbGDF.js,1769087388512,915bd05880ea3513deaa06ca4574834cabf4658210677317995ed7e87598ff03
-assets/blockDiagram-VD42YOAC-DtNf_ICo.js,1769087388512,704ce0a995df773f996a9d7e4533f1510c54a6104eb326546bf121d75865c67c
-assets/architectureDiagram-VXUJARFQ-BXRCC3au.js,1769087388512,85042ea42df1dfbdba8deacbeb385880961e47b3bf04b1a0a49188ca7ad9d596
-assets/katex-Cu_Erd72.js,1769087388512,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-BIYqxnSR.js,1769087388512,ebf0dd2c5f77cd8dd0904e5e19777e3deff0d9d19fde7b8f3a2c761c478682f1
-assets/cytoscape.esm-CyJtwmzi.js,1769087388512,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-BHbZsuNe.js,1769087388513,d077d9e5c08859219fab6b58c043b2d92e40048d51a926f91e46c7b26ece37d8
-logo.png,1769087388058,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-192x192.png,1769087388068,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1769087388077,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-apple-touch-icon.png,1769087388053,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+registerSW.js,1769521560274,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+sw.js,1769521560980,a324d970e4cc6a25cfa8cc369290fb3c3dba02db3b5a8a20f2d2171b4f7a5a77
+manifest.webmanifest,1769521560274,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+index.html,1769521560274,979aacf090626fb6714e6b233d883a0625c75a1a1139bfb71f8a0881962e4762
+workbox-8c29f6e4.js,1769521560980,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+firebase-messaging-sw.js,1769521559843,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+assets/stateDiagram-v2-4FDKWEC3-ChWm8KpE.js,1769521560273,60191487b7cd05de009eda608fd71b40e5c8d9bc5efadfdc5d406192d6471545
+lp.html,1769521559846,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/timeline-definition-IT6M3QCI-CwhQ8Uj1.js,1769521560273,cd47ac6086a810059143edad7debb48e4f7f9b798fd8fda14c346c3c4fde6033
+assets/xychartDiagram-PRI3JC2R-C6Apy0Pi.js,1769521560274,30bf69e3873683167d05002ef9fc5c20dd231f2bdaa8ed8929290552b788a787
+assets/stateDiagram-FKZM4ZOC-Bd6fRkVN.js,1769521560273,72720bcab8e4ae06a477ab1eee141b4f560805da1954f9127549201b3fbb464c
+assets/ordinal-Cboi1Yqb.js,1769521560274,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/pieDiagram-ADFJNKIX-Dv07gzYW.js,1769521560274,cf3ea1bcdbbcc9460976dba57135f829ee9bca98d6f23a4089ccd54d1ca32455
+assets/sankeyDiagram-TZEHDZUN-CALgbDhm.js,1769521560274,b2bb89706d1514ac2bbf3cf0f938af7e9fa0c104c30d860010848dd0448115d0
+assets/min-B2V0gSRO.js,1769521560274,8d117a5f0a76278bcaa81873012fa9710d3a3922ef6299b6b265c0de4f75e867
+assets/linear-DNCNhDDW.js,1769521560274,f31459acedf3305c211f8995a1fe26111b1f2c4117cf498287dd9d188d4d588d
+assets/quadrantDiagram-AYHSOK5B-DD9Dpkf5.js,1769521560273,8b23594c65d0b9543012858c61c2eb7383e79f57678347a29f322d975f20a4e3
+assets/requirementDiagram-UZGBJVZJ-DaQfGS7t.js,1769521560273,fd92d13a9adf0df11f4bef97cf3f2b527d15e72797f874abdb69d83d0c6600f6
+assets/init-Gi6I4Gst.js,1769521560274,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/infoDiagram-WHAUD3N6-W-ccn5bX.js,1769521560273,a1d5ab8194b2b1df7b07ff2761eaf9822805e43d8d91c71c36c9be21c341dad5
+assets/kanban-definition-3W4ZIXB7-CuxHvIhf.js,1769521560273,1596474c69cdb914d75a1f6642c20603dd2f3d94e72b44f3e420c2b82f44aab5
+assets/layout-D-7tJ3ER.js,1769521560274,4e1b2cf0da16225cd46bfedbe9213f5bae969e98d38abdfdc40efba16471707f
+assets/gitGraphDiagram-NY62KEGX-C2pcunCf.js,1769521560273,5a77fa910f5852eb04678a6c04b155ca6e1ba7e6491534f82f9db13d92b72f77
+assets/journeyDiagram-XKPGCS4Q-DVStNntr.js,1769521560273,66e24920b72466981948de8e3a236836365c5f3b3793affcf03b753ff2cbaa98
+assets/mindmap-definition-VGOIOE7T-CfTlLySY.js,1769521560274,147bcb95e0460444becedcbc16bbe7b94ee7fd2b1bb065194ee9e49610379f77
+assets/graph-C0A4cbaw.js,1769521560274,401968bc5ce600cb8d0c175fed201f5418e6f0fabfb8442876009e8f98c4396b
+assets/diagram-QEK2KX5R-9QCdGSyN.js,1769521560273,54598e163c769b6a3d4db53e20bbe401ba6a8849b6e4d2c5a377e7da9cf88809
+assets/index-DkmZYhlE.css,1769521560273,ed6d94fb20a6e23c57a90bbcb097333bdf284a9669b5bc68d05a2372b6de48d7
+assets/diagram-S2PKOQOG-B5tKBnKg.js,1769521560273,40875f6cf1c5fce784209d830833c09e517bf762376d693b3e7c51721dd095e0
+assets/diagram-PSM6KHXK-B1_uWSvb.js,1769521560274,ab562020d946bc34feb058b4f464186910b66ccd679a82f534af653007da6a0a
+assets/defaultLocale-DX6XiGOO.js,1769521560274,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/classDiagram-v2-WZHVMYZB-aNJ2Z2gk.js,1769521560273,f8791a0ac6b742625837277420c66b0b67b2cc99c83f7551abdf8fd909697ad2
+assets/clone-CnnaaBWs.js,1769521560273,b95b476b6bbf791bd08499c59b5e12a73a1c062bd2f359224ad0e8c713f8eede
+assets/classDiagram-2ON5EDUG-aNJ2Z2gk.js,1769521560273,f8791a0ac6b742625837277420c66b0b67b2cc99c83f7551abdf8fd909697ad2
+assets/erDiagram-Q2GNP2WA-CqF6AzYo.js,1769521560274,ff7c93252f8c4a8efdce04984c426cffff7c531eb1b89f9e7d86c45754fb1a8c
+assets/chunk-TZMSLE5B-Dze8tfjC.js,1769521560273,e29cc7b1379b613192941a0c471355e1dd868ca0e0b0492955e948e79f00ca0d
+assets/dagre-6UL2VRFP-BGsryA_K.js,1769521560274,cecb5cc3aecb69da0760da504d1c87b0f5123911acbabe8d14d1d2055a0d2edc
+assets/chunk-QZHKN3VN-BXuV9WDA.js,1769521560273,db254a16e48cfa18e830599568dfb28aacff6c17b24c6846099f2a89156a034c
+assets/flowDiagram-NV44I4VS-C736DPm5.js,1769521560273,2afb0d0d86b3cf890bfa3e7378288917c4c6ff47fcc09c69a354b4416c3dbc21
+assets/sequenceDiagram-WL72ISMW-CQyj4toE.js,1769521560273,57ec648f7502fee9ddbb086820fb13d9f51b39ab540cfd2d8fc96ceec95cd9dd
+assets/ganttDiagram-JELNMOA3--6rZfSg0.js,1769521560274,8601bf2216d3cb9418bbae35450d8017c348081c1250d0d304bfc3a645213c45
+assets/cose-bilkent-S5V4N54A-DU_FHx1b.js,1769521560274,11b34788fe6f899005edfc7911aec4845ce3b62318c831f4d271f69a62c513b4
+assets/chunk-QN33PNHL-DLGono6V.js,1769521560273,537fb35b841d6467d81191e46644e19e548c7d19f2b848ed40bfb5d95f683dc7
+assets/chunk-FMBD7UC4-C5ueI_PW.js,1769521560273,1aa85ac3415e16b475c4ccdffcbfff1f03a3ffe75fa7057708325be523e53257
+assets/chunk-55IACEB6-yYTAYgZC.js,1769521560273,35e9d62bf7ebc863c0d9a0693ff5999b9eca4b548e423feaa84d23ce11f843f4
+assets/chunk-4BX2VUAB-20IL_HQf.js,1769521560274,f012b4c8cd9b168df3147c113655d3537cf146a29736b8891db6416cdd8738a8
+assets/chunk-DI55MBZ5-B8zeClTc.js,1769521560273,11b1124c2a5f51981c47c06b0e0be66584095d4018cae52aa6238987c4b04f8c
+assets/channel-2aUfP22y.js,1769521560273,79c974f25d4ba8051c8391c419d61c4f474ce1f91cc3934582092176e2b63c5c
+assets/chunk-B4BG7PRW-BqVcZxrh.js,1769521560273,e5e9c969e14b09c0ffbc07ee5c974e07090c8e509804110b3670175b5fe066f0
+assets/arc-CtqeQQa9.js,1769521560273,87da90b28fd58a4979b37641335f66b07392acc7d1a4d615545238ff9244e356
+assets/_baseUniq-CV9_aFfE.js,1769521560274,8f52b5472f5f6fc66fc1fd6165b44ebf190765076242384ed5402eaf8c2af14a
+assets/c4Diagram-YG6GDRKO-BJusfdzV.js,1769521560273,59b97f52a56e8341dbfc4def98c65fc7a55193332c5b4f10a3a6f2da518bae6a
+assets/blockDiagram-VD42YOAC-OwIWN4Mi.js,1769521560273,3ea25e327f67da41414b30a4d1a798ac85d7bf7a3d4cff40d748f379351ef40e
+assets/architectureDiagram-VXUJARFQ-DK3djJLw.js,1769521560274,31a41df5631fe9340a529649fcd54743db97d974de2f12c743914289d220fa7e
+assets/katex-Cu_Erd72.js,1769521560274,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-DfcRX1jV.js,1769521560274,463687fb852ace1a741949fbd52b6a2e1ed91fa810f3c0b3cc5a2bdb24a08560
+assets/cytoscape.esm-CyJtwmzi.js,1769521560274,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-Mg7nvxRK.js,1769521560274,f7d4235e82b88371ac8dcdbb9a8d81507e76a7821e78bcb8338c5526c140586e
+pwa-192x192.png,1769521559851,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1769521559857,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+logo.png,1769521559844,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1769521559842,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>

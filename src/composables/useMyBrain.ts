@@ -24,12 +24,12 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from "firebase/auth";
+import { getApp } from "firebase/app";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from "axios";
 import type { Memory, ChatLog, User, Todo, DailyReport } from "@/types";
 
-// Payment Linkを直接指定
 const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/6oU28r4Hi71dglzd1z6AM00";
 const ADMIN_EMAILS = ["gongedonghuam@gmail.com"];
 
@@ -43,68 +43,55 @@ const isAiThinking = ref(false);
 const isSaving = ref(false);
 const isSpeaking = ref(false);
 const activeTag = ref<string | null>(null);
-
-// カレンダー接続状態管理
 const isCalendarConnected = ref(true);
 
-// --- ヘルパー: Google API トークンリフレッシュ ---
+// ---------------- Helper Functions ----------------
+
 const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
   let token = localStorage.getItem("google_calendar_token");
   if (!token) {
     isCalendarConnected.value = false;
     return null;
   }
-
   try {
     const res = await callback(token);
     isCalendarConnected.value = true;
     return res;
   } catch (e: any) {
     if (e.response && e.response.status === 401) {
-      console.log("Token expired, trying silent refresh...");
-      try {
-        const provider = new GoogleAuthProvider();
-        provider.addScope("https://www.googleapis.com/auth/calendar");
-        const result = await signInWithPopup(auth, provider);
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        const newToken = credential?.accessToken;
-
-        if (newToken) {
-          localStorage.setItem("google_calendar_token", newToken);
-          isCalendarConnected.value = true;
-          return await callback(newToken);
-        }
-      } catch (refreshError) {
-        console.warn("Token refresh blocked or failed:", refreshError);
-        isCalendarConnected.value = false;
-        return null;
-      }
+      localStorage.removeItem("google_calendar_token");
+      isCalendarConnected.value = false;
+      return null;
     }
-    console.error("API Call Error:", e);
     throw e;
   }
 };
 
-// 手動再接続用
 const reconnectCalendar = async () => {
   try {
     const provider = new GoogleAuthProvider();
     provider.addScope("https://www.googleapis.com/auth/calendar");
+    provider.setCustomParameters({
+      prompt: "select_account consent",
+      access_type: "offline",
+    });
+
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const token = credential?.accessToken;
+
     if (token) {
       localStorage.setItem("google_calendar_token", token);
       isCalendarConnected.value = true;
-      alert("再接続しました！");
+      alert("カレンダーを再接続しました！");
       window.location.reload();
     }
   } catch (e: any) {
+    console.error("Reconnect Error:", e);
     alert("再接続に失敗しました: " + e.message);
   }
 };
 
-// ヘルパー: 画像変換
 const fileToGenerativePart = async (file: File) => {
   return new Promise<{ inlineData: { data: string; mimeType: string } }>(
     (resolve, reject) => {
@@ -132,7 +119,88 @@ const cosineSimilarity = (vecA: number[], vecB: number[]) => {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 };
 
-// --- カレンダー関連 ---
+function extractJson(text: string): string {
+  let clean = text
+    .replace(/```json/g, "")
+    .replace(/```/g, "")
+    .trim();
+  const firstOpen = clean.indexOf("{");
+  const lastClose = clean.lastIndexOf("}");
+  if (firstOpen !== -1 && lastClose !== -1) {
+    return clean.substring(firstOpen, lastClose + 1);
+  }
+  return clean;
+}
+
+// ★修正: useNextNs.ts から移植した「動的モデル解決ロジック」
+const resolveGeminiModel = async (apiKey: string): Promise<string> => {
+  try {
+    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const listResponse = await fetch(listUrl);
+
+    if (!listResponse.ok) {
+      throw new Error(`Model list fetch failed: ${listResponse.statusText}`);
+    }
+
+    const listData = await listResponse.json();
+
+    // generateContentをサポートしているモデルをフィルタリング
+    const generationModels = (listData.models || []).filter((m: any) =>
+      m.supportedGenerationMethods?.includes("generateContent"),
+    );
+
+    // "gemini-1.5-flash" を優先して探す
+    const flash = generationModels.find((m: any) =>
+      m.name.includes("gemini-1.5-flash"),
+    );
+
+    // 見つかればそれ、なければリストの最初を使う
+    // "models/" プレフィックスを除去して返す
+    const targetModel = (flash || generationModels[0])?.name.replace(
+      "models/",
+      "",
+    );
+
+    if (!targetModel) throw new Error("No available generation models found.");
+
+    return targetModel;
+  } catch (e) {
+    console.warn(
+      "Dynamic model resolution failed, falling back to gemini-1.5-flash",
+      e,
+    );
+    return "gemini-1.5-flash"; // 最悪の場合のフォールバック
+  }
+};
+
+// ★修正: 動的モデルを使う生成関数
+const generateContentWithRetry = async (
+  apiKey: string,
+  promptParts: any[],
+  isJsonMode = false,
+) => {
+  try {
+    // 1. モデル名を動的に決定
+    const modelName = await resolveGeminiModel(apiKey);
+    console.log("Selected AI Model:", modelName);
+
+    // 2. 生成実行
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const config = isJsonMode ? { responseMimeType: "application/json" } : {};
+
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: config,
+    });
+
+    const result = await model.generateContent(promptParts);
+    return result.response.text();
+  } catch (e: any) {
+    console.error("AI Generation Error:", e);
+    throw new Error("AI processing failed: " + e.message);
+  }
+};
+
 const fetchCalendarEvents = async () => {
   return await callGoogleApi(async (token) => {
     const now = new Date().toISOString();
@@ -192,38 +260,12 @@ const speakText = (text: string) => {
   window.speechSynthesis.speak(utterance);
 };
 
+// ---------------- Main Composable ----------------
+
 export function useMyBrain() {
   const getEmbeddingModel = (apiKey: string) => {
     const genAI = new GoogleGenerativeAI(apiKey);
     return genAI.getGenerativeModel({ model: "text-embedding-004" });
-  };
-
-  const getSmartModelName = async (apiKey: string): Promise<string> => {
-    try {
-      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-      const response = await fetch(listUrl);
-      if (!response.ok) throw new Error("Model fetch failed");
-      const data = await response.json();
-      const models = data.models || [];
-      const viableModels = models.filter((m: any) =>
-        m.supportedGenerationMethods?.includes("generateContent"),
-      );
-      const preferredOrder = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-pro",
-        "gemini-pro",
-      ];
-      for (const pref of preferredOrder) {
-        const found = viableModels.find((m: any) => m.name.includes(pref));
-        if (found) return found.name.replace("models/", "");
-      }
-      if (viableModels.length > 0)
-        return viableModels[0].name.replace("models/", "");
-      return "gemini-1.5-flash";
-    } catch (e) {
-      return "gemini-1.5-flash";
-    }
   };
 
   const checkAndIncrementUsage = async (): Promise<boolean> => {
@@ -255,26 +297,11 @@ export function useMyBrain() {
     if (!currentUser.value) return;
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
-        generationConfig: { responseMimeType: "application/json" },
-      });
       const prompt = `以下のメモから「やるべきこと（ToDo）」を抽出しJSONで返して。
         { "tasks": ["タスク1", "タスク2"] }
         メモ: ${text}`;
-
-      const result = await model.generateContent(prompt);
-      const rawText = result.response.text();
-      const jsonStr = rawText.replace(/```json|```/g, "").trim();
-
-      let data;
-      try {
-        data = JSON.parse(jsonStr);
-      } catch {
-        data = { tasks: [] };
-      }
-
+      const rawText = await generateContentWithRetry(apiKey, [prompt], true);
+      const data = JSON.parse(extractJson(rawText));
       const tasks: string[] = data.tasks || [];
       if (tasks.length > 0) {
         const batch = writeBatch(db);
@@ -306,8 +333,7 @@ export function useMyBrain() {
         createdAt: serverTimestamp(),
       });
     } catch (e) {
-      console.error("Manual todo add failed:", e);
-      alert("タスクの追加に失敗しました");
+      console.error(e);
     }
   };
 
@@ -339,24 +365,14 @@ export function useMyBrain() {
     const dailyMemories = memSnap.docs
       .map((d) => d.data().text)
       .join("\n---\n");
-
     if (!dailyMemories) return;
 
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
-        generationConfig: { responseMimeType: "application/json" },
-      });
       const prompt = `昨日のメモを元に日刊レポートを作成。出力JSON: { "content": "総括", "highlights": ["要点1"] }\nメモ: ${dailyMemories}`;
-      const result = await model.generateContent(prompt);
-      const data = JSON.parse(
-        result.response
-          .text()
-          .replace(/```json|```/g, "")
-          .trim(),
-      );
+      const rawText = await generateContentWithRetry(apiKey, [prompt], true);
+      const data = JSON.parse(extractJson(rawText));
+
       await addDoc(collection(db, "daily_reports"), {
         userId: currentUser.value.uid,
         date: dateStr,
@@ -365,17 +381,76 @@ export function useMyBrain() {
         createdAt: serverTimestamp(),
       });
     } catch (e) {
-      console.error("Report generation failed:", e);
+      console.error(e);
     }
   };
 
   const startSubscription = async () => {
     if (!currentUser.value) return;
-    const confirmed = confirm(
-      "PROプラン（月額980円）の決済画面へ移動しますか？",
+    if (confirm("PROプラン（月額980円）の決済画面へ移動しますか？")) {
+      window.location.href = STRIPE_PAYMENT_LINK;
+    }
+  };
+
+  const fetchMemories = async () => {
+    if (!currentUser.value) return;
+    loading.value = true;
+    try {
+      let q = query(
+        collection(db, "memories"),
+        where("userId", "==", currentUser.value.uid),
+        orderBy("createdAt", "desc"),
+      );
+      const snap = await getDocs(q);
+      memories.value = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as Memory,
+      );
+    } catch (e) {
+      console.error(e);
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const fetchChatLogs = async () => {
+    if (!currentUser.value) return;
+    const q = query(
+      collection(db, "chat_logs"),
+      where("userId", "==", currentUser.value.uid),
+      orderBy("createdAt", "desc"),
+      limit(50),
     );
-    if (!confirmed) return;
-    window.location.href = STRIPE_PAYMENT_LINK;
+    const snap = await getDocs(q);
+    chatLogs.value = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as ChatLog)
+      .reverse();
+  };
+
+  const fetchTodos = async () => {
+    if (!currentUser.value) return;
+    const q = query(
+      collection(db, "todos"),
+      where("userId", "==", currentUser.value.uid),
+      orderBy("createdAt", "desc"),
+    );
+    onSnapshot(q, (snap) => {
+      todos.value = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Todo);
+    });
+  };
+
+  const fetchReports = async () => {
+    if (!currentUser.value) return;
+    const q = query(
+      collection(db, "daily_reports"),
+      where("userId", "==", currentUser.value.uid),
+      orderBy("createdAt", "desc"),
+      limit(5),
+    );
+    onSnapshot(q, (snap) => {
+      dailyReports.value = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as DailyReport,
+      );
+    });
   };
 
   const initAuth = () => {
@@ -431,71 +506,6 @@ export function useMyBrain() {
     window.location.reload();
   };
 
-  const fetchMemories = async () => {
-    if (!currentUser.value) return;
-    loading.value = true;
-    try {
-      let q = query(
-        collection(db, "memories"),
-        where("userId", "==", currentUser.value.uid),
-        orderBy("createdAt", "desc"),
-      );
-      const snap = await getDocs(q);
-      memories.value = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() }) as Memory,
-      );
-    } catch (e) {
-      console.error(e);
-    } finally {
-      loading.value = false;
-    }
-  };
-
-  const fetchChatLogs = async () => {
-    if (!currentUser.value) return;
-    try {
-      const q = query(
-        collection(db, "chat_logs"),
-        where("userId", "==", currentUser.value.uid),
-        orderBy("createdAt", "desc"),
-        limit(50),
-      );
-      const snap = await getDocs(q);
-      chatLogs.value = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }) as ChatLog)
-        .reverse();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const fetchTodos = async () => {
-    if (!currentUser.value) return;
-    const q = query(
-      collection(db, "todos"),
-      where("userId", "==", currentUser.value.uid),
-      orderBy("createdAt", "desc"),
-    );
-    onSnapshot(q, (snap) => {
-      todos.value = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Todo);
-    });
-  };
-
-  const fetchReports = async () => {
-    if (!currentUser.value) return;
-    const q = query(
-      collection(db, "daily_reports"),
-      where("userId", "==", currentUser.value.uid),
-      orderBy("createdAt", "desc"),
-      limit(5),
-    );
-    onSnapshot(q, (snap) => {
-      dailyReports.value = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() }) as DailyReport,
-      );
-    });
-  };
-
   const selectTag = async (tag: string | null) => {
     activeTag.value = tag;
   };
@@ -504,48 +514,60 @@ export function useMyBrain() {
     return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
   });
 
+  const allTags = computed(() => {
+    const tags = new Set<string>();
+    memories.value.forEach((m) => m.tags?.forEach((t) => tags.add(t)));
+    return Array.from(tags);
+  });
+
   const findRelatedMemories = async (text: string): Promise<Memory[]> => {
     if (!text.trim() || memories.value.length === 0) return [];
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) return [];
+
       const genAI = new GoogleGenerativeAI(apiKey);
       const embedModel = genAI.getGenerativeModel({
         model: "text-embedding-004",
       });
+
       const result = await embedModel.embedContent(text);
       const vec = result.embedding.values;
+
+      const threshold = 0.55;
+
       const candidates = memories.value
         .map((m) => ({
           ...m,
           score: m.embedding ? cosineSimilarity(vec, m.embedding) : 0,
         }))
-        .filter((m) => m.score && m.score > 0.45)
+        .filter((m) => m.score && m.score > threshold)
         .sort((a, b) => (b.score || 0) - (a.score || 0))
-        .slice(0, 10);
+        .slice(0, 5);
+
       if (candidates.length === 0) return [];
-      const modelName = await getSmartModelName(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: { responseMimeType: "application/json" },
-      });
-      const candidatesText = candidates
-        .map((c) => `ID: ${c.id}\n内容: ${c.aiSummary || c.text.slice(0, 100)}`)
-        .join("\n---\n");
-      const prompt = `検索クエリ: ${text}\n候補:\n${candidatesText}\n文脈的に関連するIDを選んでJSONで返して: { "selectedIds": ["ID"] }`;
-      const aiRes = await model.generateContent(prompt);
-      const aiJson = JSON.parse(aiRes.response.text());
-      const selectedIds: string[] = aiJson.selectedIds || [];
-      const finalResults = candidates.filter((c) => selectedIds.includes(c.id));
-      const highConfidenceResults = candidates.filter(
-        (c) => (c.score || 0) > 0.85 && !selectedIds.includes(c.id),
+
+      const verifyPrompt = `
+        以下の【検索クエリ】に対して、【候補メモ】の中から本当に関連性が高いものだけを選んでください。
+        全く関係ない場合は空の配列を返してください。
+        【検索クエリ】
+        ${text}
+        【候補メモ】
+        ${candidates.map((c, i) => `${i}: ${c.text}`).join("\n")}
+        出力はJSON形式のみ: { "indices": [0, 2] } 
+      `;
+
+      const verifyRes = await generateContentWithRetry(
+        apiKey,
+        [{ text: verifyPrompt }],
+        true,
       );
-      const merged = [...finalResults, ...highConfidenceResults];
-      return Array.from(new Map(merged.map((m) => [m.id, m])).values()).slice(
-        0,
-        3,
-      );
+      const verifyJson = JSON.parse(extractJson(verifyRes));
+      const validIndices: number[] = verifyJson.indices || [];
+
+      return candidates.filter((_, i) => validIndices.includes(i));
     } catch (e) {
+      console.error("Search Error:", e);
       return [];
     }
   };
@@ -553,35 +575,23 @@ export function useMyBrain() {
   const addMemory = async (text: string, files?: File[] | null) => {
     if (!(await checkAndIncrementUsage())) return null;
     isSaving.value = true;
-    if (!currentUser.value) return null;
     try {
       const hasImages = files && files.length > 0;
       const docRef = await addDoc(collection(db, "memories"), {
-        userId: currentUser.value.uid,
+        userId: currentUser.value!.uid,
         text: hasImages ? `(解析中...) ${text}` : text,
         createdAt: serverTimestamp(),
         tags: [],
         aiSummary: "保存中...",
         hasImage: !!hasImages,
-        fileType: null, // undefined非対応のためnull
+        fileType: hasImages ? "image/jpeg" : null,
       });
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        await updateDoc(docRef, { aiSummary: "APIキー未設定" });
-        return null;
-      }
-
-      const modelName = await getSmartModelName(apiKey);
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: { responseMimeType: "application/json" },
-      });
 
       let promptParts: any[] = [];
-      if (files && files.length > 0) {
+      if (hasImages) {
         const imageParts = await Promise.all(
-          files.map((f) => fileToGenerativePart(f)),
+          files!.map((f) => fileToGenerativePart(f)),
         );
         promptParts.push(...imageParts);
         promptParts.push({
@@ -592,13 +602,9 @@ export function useMyBrain() {
           text: `以下のテキストを整理して。${text} 出力JSON:{summary, tags, fullText}`,
         });
       }
-      const res = await model.generateContent(promptParts);
-      let aiData;
-      try {
-        aiData = JSON.parse(res.response.text());
-      } catch {
-        aiData = { summary: text.substring(0, 30), tags: [], fullText: text };
-      }
+
+      const resText = await generateContentWithRetry(apiKey, promptParts, true);
+      const aiData = JSON.parse(extractJson(resText));
 
       const finalText = hasImages
         ? `【解析済み】${text}\n\n${aiData.fullText || ""}`
@@ -614,30 +620,19 @@ export function useMyBrain() {
         embedding: embedding,
       });
 
-      // ローカル更新
       memories.value.unshift({
         id: docRef.id,
-        userId: currentUser.value.uid,
+        userId: currentUser.value!.uid,
         text: finalText,
         aiSummary: aiData.summary,
         tags: aiData.tags,
         createdAt: new Date(),
         hasImage: !!hasImages,
-        fileType: null,
+        fileType: hasImages ? "image/jpeg" : null,
         embedding: embedding,
       });
-
       generateTasksFromMemory(docRef.id, finalText);
-
-      return memories.value
-        .filter((m) => m.id !== docRef.id && m.embedding)
-        .map((m) => ({
-          ...m,
-          score: cosineSimilarity(embedding, m.embedding!),
-        }))
-        .filter((m) => m.score > 0.65)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 3);
+      return [];
     } catch (e) {
       alert("保存エラー");
       return null;
@@ -650,7 +645,10 @@ export function useMyBrain() {
     if (!(await checkAndIncrementUsage())) return;
     isSaving.value = true;
     try {
-      const func = httpsCallable(getFunctions(), "scrapeUrl");
+      const func = httpsCallable(
+        getFunctions(getApp(), "asia-northeast1"),
+        "scrapeUrl",
+      );
       const res: any = await func({ url });
       if (res.data.success) {
         await addMemory(
@@ -674,19 +672,22 @@ export function useMyBrain() {
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) throw new Error("APIキー未設定");
+
       const embedModel = getEmbeddingModel(apiKey);
       const qEmbed = await embedModel.embedContent(question);
       const qVec = qEmbed.embedding.values;
+
       const scoredMemories = memories.value
         .map((m) => ({
           ...m,
           score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
         }))
         .sort((a, b) => b.score - a.score);
+
       const context = scoredMemories
-        .slice(0, 20)
-        .map((m) => `- ${m.text.slice(0, 500)}`)
-        .join("\n\n");
+        .slice(0, 10)
+        .map((m) => `- ${m.text.slice(0, 300)}`)
+        .join("\n");
       const calendarEvents = await fetchCalendarEvents();
       const calendarContext = calendarEvents
         ? `\n【直近の予定】\n${calendarEvents}\n`
@@ -695,21 +696,22 @@ export function useMyBrain() {
         timeZone: "Asia/Tokyo",
       });
 
-      const modelName = await getSmartModelName(apiKey);
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const prompt = `あなたは「第2の脳」。現在日時: ${nowStr}\n${calendarContext}\n【記憶】\n${context}\n【質問】${question}\n出力JSON: { "answer": "回答", "mermaid": null, "calendarAction": null }`;
+      const prompt = `
+        あなたはユーザーの「第2の脳」です。現在日時: ${nowStr}
+        ${calendarContext}
+        【参照する記憶】
+        ${context}
+        【質問】
+        ${question}
+        【指示】
+        質問に対する答えだけを生成してください。記憶の羅列は禁止。
+        出力JSON: { "answer": "回答テキスト", "mermaid": null, "calendarAction": null }
+      `;
 
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
-      let data;
-      try {
-        data = JSON.parse(text.replace(/```json|```/g, "").trim());
-      } catch {
-        data = { answer: text, mermaid: null, calendarAction: null };
-      }
-
+      const text = await generateContentWithRetry(apiKey, [prompt], true);
+      const data = JSON.parse(extractJson(text));
       let finalAnswer = data.answer;
+
       if (data.calendarAction) {
         try {
           await addEventToGoogleCalendar(
@@ -719,17 +721,19 @@ export function useMyBrain() {
             data.calendarAction.colorId,
           );
           finalAnswer += `\n\n✅ 予定登録: ${data.calendarAction.title}`;
-        } catch (e: any) {
-          finalAnswer += `\n⚠️ エラー: ${e.message}`;
+        } catch {
+          finalAnswer += `\n⚠️ エラー: 予定登録失敗`;
         }
       }
 
       const logData = {
         userId: currentUser.value!.uid,
-        question: question,
+        question,
         answer: finalAnswer,
         mermaidCode: data.mermaid || null,
         createdAt: serverTimestamp(),
+        displayAnswer: "",
+        isAnimating: true,
       };
       const logRef = await addDoc(collection(db, "chat_logs"), logData);
       chatLogs.value.push({
@@ -773,34 +777,39 @@ export function useMyBrain() {
     await deleteDoc(doc(db, "todos", id));
   };
 
-  const allTags = computed(() => {
-    const tags = new Set<string>();
-    memories.value.forEach((m) => m.tags?.forEach((t) => tags.add(t)));
-    return Array.from(tags);
-  });
+  // ★追加: LINE連携ロジック
+  const startLineAuth = () => {
+    const channelId = import.meta.env.VITE_LINE_LOGIN_CHANNEL_ID;
+    const redirectUri = window.location.origin + "/app";
+    const state = Math.random().toString(36).substring(7);
 
-  // ★追加: LINE連携解除
-  const unlinkLine = async () => {
-    if (!currentUser.value) return;
-    if (
-      !confirm(
-        "LINE連携を解除しますか？\n\n解除すると、LINEからのメモ保存や通知機能が使えなくなります。",
-      )
-    )
+    if (!channelId) {
+      alert("LINEチャネルIDが設定されていません(.envを確認)");
       return;
+    }
 
+    const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${channelId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=profile%20openid`;
+    window.location.href = url;
+  };
+
+  // ★追加: 連携解除ロジック
+  const unlinkLine = async () => {
+    if (!confirm("LINE連携を解除しますか？")) return;
+    loading.value = true;
     try {
-      const func = httpsCallable(getFunctions(), "unlinkLineAccount");
-      await func();
+      const functions = getFunctions(getApp(), "asia-northeast1");
+      const unlinkFunc = httpsCallable(functions, "unlinkLineAccount");
+      await unlinkFunc();
 
-      // ローカルの状態も即座に更新
       if (currentUser.value) {
         currentUser.value.isLineLinked = false;
       }
-      alert("LINE連携を解除しました。");
+      alert("解除しました");
     } catch (e: any) {
       console.error(e);
-      alert("解除に失敗しました: " + e.message);
+      alert("解除に失敗しました");
+    } finally {
+      loading.value = false;
     }
   };
 
@@ -835,6 +844,7 @@ export function useMyBrain() {
     addManualTodo,
     callGoogleApi,
     reconnectCalendar,
-    unlinkLine, // ★追加
+    startLineAuth, // ★公開
+    unlinkLine, // ★公開
   };
 }

@@ -3,7 +3,6 @@ import { ref } from "vue";
 import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 import { useRouter } from "vue-router";
-import { googleProvider } from "@/firebase";
 
 const router = useRouter();
 const loading = ref(false);
@@ -14,30 +13,47 @@ const db = getFirestore();
 const handleGoogleLogin = async () => {
   loading.value = true;
   try {
-    // 権限を '.events' からカレンダー全体へのアクセスに変更
-    googleProvider.addScope("https://www.googleapis.com/auth/calendar");
+    const provider = new GoogleAuthProvider();
 
-    const result = await signInWithPopup(auth, googleProvider);
+    // ★重要: カレンダーへの読み書き権限
+    provider.addScope("https://www.googleapis.com/auth/calendar.events");
+    provider.addScope("https://www.googleapis.com/auth/calendar.readonly"); // 読み取り用
+
+    // ★重要: リフレッシュトークンを取得するための設定
+    provider.setCustomParameters({
+      prompt: "consent", // 毎回承認画面を出す（これがないとリフレッシュトークンが来ない場合がある）
+      access_type: "offline", // バックエンドアクセスのために必須
+    });
+
+    const result = await signInWithPopup(auth, provider);
     const user = result.user;
 
-    // カレンダー操作に必要なトークンを取り出して保存
+    // ★ここがハック: Firebase SDKの隠しプロパティからOAuthのリフレッシュトークンを取得
+    // ※通常の credential.accessToken は1時間で切れるため、バックグラウンド処理には使えない
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    const token = credential?.accessToken;
-    if (token) {
-      localStorage.setItem("google_calendar_token", token);
-    }
+    const tokenResponse = (result as any)._tokenResponse; // 型定義にはないが実在する
+    const refreshToken = tokenResponse?.oauthRefreshToken;
 
+    // ユーザー基本情報保存
     const userRef = doc(db, "users", user.uid);
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists()) {
-      await setDoc(userRef, {
+    await setDoc(
+      userRef,
+      {
         email: user.email,
         displayName: user.displayName,
         photoURL: user.photoURL,
-        role: "student",
-        createdAt: new Date(),
+        lastLogin: new Date(),
+      },
+      { merge: true },
+    );
+
+    // ★重要: リフレッシュトークンを保存 (バックエンドがカレンダーを見るため)
+    if (refreshToken) {
+      await setDoc(doc(db, "users", user.uid, "system", "tokens"), {
+        refreshToken: refreshToken,
+        updatedAt: new Date(),
       });
+      console.log("Offline token saved.");
     }
 
     router.push("/app");
@@ -70,14 +86,17 @@ const handleGoogleLogin = async () => {
           My Brain
         </h1>
         <p class="text-slate-400 text-xs font-bold tracking-widest uppercase">
-          AI Knowledge Base
+          ズボラ専用 AI秘書
         </p>
       </div>
 
       <div class="w-full space-y-6">
         <p class="text-slate-300 text-sm text-center leading-relaxed mb-4">
-          予定と記憶をAIが統合。<br />
-          あなたの「第2の脳」を始めましょう。
+          LINEに投げるだけ。<br />
+          カレンダーと記憶をAIが勝手に整理。<br />
+          <span class="text-indigo-400 font-bold">「予定直前のカンペ通知」</span
+          >で<br />
+          もう準備はいりません。
         </p>
 
         <button
@@ -109,18 +128,6 @@ const handleGoogleLogin = async () => {
           </svg>
           Googleで始める
         </button>
-
-        <p class="text-[10px] text-slate-500 text-center mt-6">
-          利用を開始することで、<br />
-          <router-link to="/legal" class="underline hover:text-slate-400"
-            >利用規約</router-link
-          >
-          および
-          <router-link to="/privacy" class="underline hover:text-slate-400"
-            >プライバシーポリシー</router-link
-          >
-          に同意したものとみなします。
-        </p>
       </div>
     </div>
   </div>

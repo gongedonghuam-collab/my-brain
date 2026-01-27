@@ -28,229 +28,165 @@ const {
   handleInput,
 } = useInputFooter(inputMode);
 
-const { currentUser, startSubscription, isSaving, isAiThinking, isSpeaking } =
-  useMyBrain();
+const { currentUser, isSaving, isAiThinking, isSpeaking } = useMyBrain();
 
-const remainingCount = computed(() =>
-  currentUser.value?.isPro ? 9999 : 5 - (currentUser.value?.dailyUsage || 0),
-);
+// バイブレーション
+const haptic = () => {
+  if (navigator.vibrate) navigator.vibrate(10);
+};
 </script>
 
 <template>
-  <footer
-    class="fixed bottom-0 w-full bg-slate-900/95 backdrop-blur-md border-t border-slate-800 p-4 pb-8 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.3)]"
-  >
-    <div class="max-w-md mx-auto relative">
+  <footer class="fixed bottom-0 w-full z-40 pointer-events-none">
+    <div
+      class="absolute bottom-0 w-full h-40 bg-gradient-to-t from-[#09090b] via-[#09090b]/95 to-transparent"
+    ></div>
+
+    <div class="max-w-xl mx-auto px-4 pb-6 relative pointer-events-auto">
       <div
         v-if="isSaving || isAiThinking || isSpeaking"
-        class="absolute -top-16 left-0 right-0 flex justify-center"
+        class="flex justify-center mb-4"
       >
         <div
-          class="bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg font-bold text-xs flex items-center gap-2 animate-pulse"
+          class="bg-indigo-600/90 backdrop-blur text-white px-4 py-1.5 rounded-full shadow-lg font-bold text-xs flex items-center gap-2 animate-pulse border border-indigo-400/30"
         >
-          <span class="text-lg">{{
-            isSpeaking ? "🗣️" : isSaving ? "🧠" : "🤖"
+          <span class="text-sm">{{
+            isSpeaking ? "🗣️" : isSaving ? "🧠" : "✨"
           }}</span>
           {{
             isSpeaking
               ? "読み上げ中..."
               : isSaving
-                ? "脳に書き込み中..."
+                ? "処理中..."
                 : "AIが思考中..."
           }}
         </div>
       </div>
 
-      <div class="flex items-center justify-between px-2 mb-3">
-        <div class="text-[10px] font-bold text-slate-400">
-          <span
-            v-if="currentUser?.isPro"
-            class="text-yellow-400 flex items-center gap-1"
-            >👑 PRO Plan</span
-          >
-          <span v-else
-            >Free: 残り
-            <span
-              :class="remainingCount === 0 ? 'text-red-500' : 'text-white'"
-              >{{ remainingCount }}</span
-            >
-            / 5回</span
-          >
-        </div>
-
-        <div class="flex flex-col items-end gap-1">
+      <div
+        class="bg-[#18181b] border border-[#27272a] rounded-[32px] shadow-2xl overflow-hidden transition-all duration-300 focus-within:border-indigo-500/50"
+      >
+        <div class="flex p-1 gap-1 overflow-x-auto scrollbar-hide">
           <button
-            v-if="!currentUser?.isPro"
-            @click="startSubscription"
-            class="text-[10px] bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-3 py-1 rounded-full font-bold shadow hover:opacity-90 transition"
+            v-for="mode in ['memo', 'chat', 'url', 'calendar']"
+            :key="mode"
+            @click="
+              inputMode = mode as any;
+              haptic();
+            "
+            class="flex-1 py-2 rounded-full text-[10px] font-bold transition whitespace-nowrap text-center relative"
+            :class="
+              inputMode === mode
+                ? 'text-white'
+                : 'text-slate-500 hover:text-slate-300'
+            "
           >
-            🚀 PROへ (¥1,000)
+            <span
+              v-if="inputMode === mode"
+              class="absolute inset-0 bg-[#27272a] rounded-full -z-10"
+            ></span>
+            {{
+              mode === "memo"
+                ? "Memo"
+                : mode === "chat"
+                  ? "Chat"
+                  : mode === "url"
+                    ? "URL"
+                    : "Schedule"
+            }}
           </button>
-
-          <router-link
-            to="/legal"
-            class="text-[9px] text-slate-500 hover:text-slate-300 transition underline"
-          >
-            特定商取引法に基づく表記
-          </router-link>
         </div>
-      </div>
 
-      <div
-        class="flex bg-slate-800 p-1 rounded-xl mb-3 relative overflow-hidden"
-      >
         <div
-          class="absolute top-1 bottom-1 bg-white/10 rounded-lg transition-all duration-300 ease-out"
-          :style="{
-            left:
-              inputMode === 'memo'
-                ? '2px'
-                : inputMode === 'url'
-                  ? '25%'
-                  : inputMode === 'chat'
-                    ? '50%'
-                    : '75%',
-            width: 'calc(25% - 4px)',
-          }"
-        ></div>
-        <button
-          @click="inputMode = 'memo'"
-          :class="[
-            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
-            inputMode === 'memo' ? 'text-white' : 'text-slate-400',
-          ]"
-        >
-          📝 メモ
-        </button>
-        <button
-          @click="inputMode = 'url'"
-          :class="[
-            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
-            inputMode === 'url' ? 'text-green-400' : 'text-slate-400',
-          ]"
-        >
-          🌐 URL
-        </button>
-        <button
-          @click="inputMode = 'chat'"
-          :class="[
-            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
-            inputMode === 'chat' ? 'text-blue-400' : 'text-slate-400',
-          ]"
-        >
-          🔍 会話
-        </button>
-        <button
-          @click="inputMode = 'calendar'"
-          :class="[
-            'flex-1 py-2 text-xs font-bold rounded-lg relative z-10 transition',
-            inputMode === 'calendar' ? 'text-orange-400' : 'text-slate-400',
-          ]"
-        >
-          📅 予定
-        </button>
-      </div>
-
-      <div
-        v-if="selectedFiles.length > 0"
-        class="relative mb-2 flex gap-2 overflow-x-auto pb-2 scrollbar-hide animate-fade-in"
-      >
-        <div
-          v-for="(preview, index) in filePreviews"
-          :key="index"
-          class="relative flex-shrink-0"
-        >
-          <img
-            :src="preview"
-            class="h-20 w-20 rounded-lg border border-slate-600 object-cover"
-          />
-        </div>
-        <div
-          v-for="(file, index) in selectedFiles.slice(filePreviews.length)"
-          :key="'file' + index"
-          class="relative flex-shrink-0"
+          v-if="selectedFiles.length > 0"
+          class="flex gap-2 overflow-x-auto px-4 pb-2"
         >
           <div
-            class="h-20 w-20 bg-slate-800 rounded-lg border border-slate-600 flex flex-col items-center justify-center p-2"
+            v-for="(preview, idx) in filePreviews"
+            :key="idx"
+            class="relative group"
           >
-            <span class="text-2xl">📄</span>
-            <span
-              class="text-[8px] text-slate-400 truncate w-full text-center mt-1"
-              >{{ file.name }}</span
+            <img
+              :src="preview"
+              class="h-14 w-14 rounded-lg object-cover border border-[#27272a]"
+            />
+            <button
+              @click="clearFiles"
+              class="absolute -top-1 -right-1 bg-slate-800 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] border border-slate-600"
             >
+              ×
+            </button>
           </div>
         </div>
 
-        <button
-          @click="clearFiles"
-          class="absolute top-0 right-0 bg-slate-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-500 shadow-lg z-10"
-        >
-          ×
-        </button>
-      </div>
+        <div class="flex items-end gap-2 px-3 pb-3 pt-1">
+          <div v-if="inputMode === 'memo'" class="pb-1.5">
+            <input
+              type="file"
+              ref="fileInputRef"
+              class="hidden"
+              multiple
+              @change="handleFileSelect"
+              accept="image/*"
+            />
+            <button
+              @click="
+                fileInputRef?.click();
+                haptic();
+              "
+              class="p-2 text-slate-400 hover:text-white hover:bg-[#27272a] rounded-full transition"
+            >
+              📎
+            </button>
+          </div>
+          <div v-if="inputMode === 'chat'" class="pb-1.5">
+            <button
+              @click="
+                toggleListening;
+                haptic();
+              "
+              class="p-2 rounded-full transition"
+              :class="
+                isListening
+                  ? 'bg-red-500/20 text-red-500 animate-pulse'
+                  : 'text-slate-400 hover:text-white hover:bg-[#27272a]'
+              "
+            >
+              🎙️
+            </button>
+          </div>
 
-      <div class="relative flex items-end gap-2">
-        <div v-if="inputMode === 'memo'" class="flex-shrink-0">
-          <input
-            type="file"
-            ref="fileInputRef"
-            accept="image/*,application/pdf,text/plain,audio/*"
-            class="hidden"
-            multiple
-            @change="handleFileSelect"
-          />
-          <button
-            @click="fileInputRef?.click()"
-            class="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-xl text-slate-400 hover:text-white transition"
-          >
-            📎
-          </button>
-        </div>
-
-        <div v-if="inputMode === 'chat'" class="flex-shrink-0">
-          <button
-            @click="toggleListening"
-            class="w-10 h-10 flex items-center justify-center rounded-xl transition border"
-            :class="
-              isListening
-                ? 'bg-red-500/20 text-red-500 border-red-500 animate-pulse'
-                : 'bg-slate-800 text-slate-400 border-transparent hover:text-white'
+          <textarea
+            v-model="inputText"
+            rows="1"
+            class="flex-1 bg-transparent text-white placeholder-slate-600 text-sm py-3 max-h-32 focus:outline-none resize-none"
+            :placeholder="
+              inputMode === 'chat'
+                ? 'AIに指示...(ワンショット入力可)'
+                : '記憶、タスク、予定を入力...'
             "
+            @input="
+              (e) => {
+                (e.target as HTMLTextAreaElement).style.height = 'auto';
+                (e.target as HTMLTextAreaElement).style.height =
+                  (e.target as HTMLTextAreaElement).scrollHeight + 'px';
+                handleInput();
+              }
+            "
+            @keydown.enter.ctrl="handleSend(inputMode as any)"
+          ></textarea>
+
+          <button
+            @click="
+              handleSend(inputMode as any);
+              haptic();
+            "
+            :disabled="!inputText && selectedFiles.length === 0"
+            class="mb-1 p-2 bg-indigo-600 text-white rounded-full w-9 h-9 flex items-center justify-center hover:bg-indigo-500 active:scale-90 transition disabled:opacity-30 disabled:scale-100 shadow-lg shadow-indigo-500/20"
           >
-            🎙️
+            ↑
           </button>
         </div>
-
-        <textarea
-          v-model="inputText"
-          rows="3"
-          class="flex-1 bg-slate-800 border border-slate-700 text-white rounded-2xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 resize-none leading-relaxed text-sm"
-          :placeholder="
-            isListening
-              ? 'お話しください...'
-              : inputMode === 'url'
-                ? 'https://...'
-                : inputMode === 'memo'
-                  ? '何を記憶しますか？'
-                  : inputMode === 'calendar'
-                    ? 'カレンダーを見ながらメモ...'
-                    : 'AIに質問...'
-          "
-          @input="handleInput"
-          @keydown.enter.ctrl="handleSend(inputMode as any)"
-        ></textarea>
-
-        <button
-          @click="handleSend(inputMode as any)"
-          :disabled="
-            (!inputText && selectedFiles.length === 0) ||
-            isSaving ||
-            isAiThinking
-          "
-          class="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-blue-600 rounded-full text-white disabled:opacity-50 disabled:bg-slate-700 transition shadow-lg self-end mb-1"
-        >
-          ↑
-        </button>
       </div>
     </div>
   </footer>

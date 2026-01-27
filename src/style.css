@@ -3,64 +3,233 @@
 @tailwind utilities;
 
 :root {
-  /* 影の質感をApple風に調整 */
-  --shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
-  --shadow-card: 0 10px 40px -10px rgba(0, 0, 0, 0.08);
+  /* モダンSaaS ダークテーマ (Notion/Cron風) */
+  --bg-main: #09090b; /* 漆黒の背景 */
+  --bg-sub: #18181b; /* カード背景 */
+  --bg-hover: #27272a; /* ホバー時 */
+  --border: #27272a; /* 境界線 */
+  --primary: #6366f1; /* Indigo 500 (知的で落ち着いた青紫) */
+  --text-main: #f8fafc; /* ほぼ白 */
+  --text-muted: #94a3b8; /* グレー */
+
+  /* FullCalendar カスタマイズ変数 */
+  --fc-border-color: #27272a;
+  --fc-today-bg-color: rgba(99, 102, 241, 0.08); /* 今日の背景 */
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: transparent;
+  --fc-list-event-hover-bg-color: #27272a;
 }
 
 body {
-  /* 真っ白(#ffffff)ではなく、目に優しいごく薄いグレー */
-  background-color: #f8fafc;
-  color: #1e293b;
-  /* iOSのような滑らかな文字レンダリング */
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  /* 日本語フォントの最適化 */
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans",
-    Meiryo, sans-serif;
+  overflow: hidden; /* アプリライクな挙動 */
 }
 
-/* スクロールバーを隠してスタイリッシュに */
-.no-scrollbar::-webkit-scrollbar {
+/* スクロールバー隠し */
+.scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
-.no-scrollbar {
+.scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
 
-/* グラスモーフィズム（すりガラス）効果 */
-.glass {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+/* --- FullCalendar 大改造 --- */
+
+.fc {
+  font-family: inherit;
 }
 
-/* 高級感のあるカード */
-.modern-card {
-  background: white;
-  border-radius: 24px;
-  box-shadow: var(--shadow-soft);
-  border: 1px solid rgba(241, 245, 249, 1);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+/* ツールバー (年月表示など) */
+.fc .fc-toolbar {
+  margin-bottom: 1.5rem !important;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
-.modern-card:active {
-  transform: scale(0.99);
+.fc .fc-toolbar-title {
+  font-size: 1.25rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+}
+
+/* ボタン (今日、< >) */
+.fc .fc-button {
+  background-color: transparent !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  padding: 0.4rem 0.8rem !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease;
+}
+.fc .fc-button:hover {
+  background-color: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+}
+.fc .fc-button:active {
+  transform: scale(0.95);
+}
+
+/* カレンダーグリッド */
+.fc-theme-standard td,
+.fc-theme-standard th {
+  border-color: var(--border) !important;
+}
+.fc .fc-col-header-cell-cushion {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 0 !important;
+}
+
+/* 日付 */
+.fc-daygrid-day-top {
+  justify-content: center;
+  padding-top: 6px;
+}
+.fc-daygrid-day-number {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-main);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+/* 今日 */
+.fc-day-today .fc-daygrid-day-number {
+  background-color: var(--primary);
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+}
+
+/* イベント (予定) */
+.fc-event {
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 2px 4px !important;
+  margin: 1px 2px !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    filter 0.1s ease;
+}
+.fc-event:active {
+  transform: scale(0.95);
+}
+/* 終日イベント */
+.fc-h-event {
+  background-color: rgba(99, 102, 241, 0.2); /* 薄い紫 */
+  border-left: 3px solid var(--primary) !important;
+  color: #e0e7ff !important;
+}
+/* 時間付きイベントのドット */
+.fc-daygrid-event-dot {
+  border-color: var(--primary) !important;
+}
+
+/* リスト表示 */
+.fc-list {
+  border-color: var(--border) !important;
+}
+.fc-list-event:hover td {
+  background-color: var(--bg-hover) !important;
 }
 
 /* アニメーション */
-@keyframes fadeInScale {
+@keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: scale(0.98) translateY(10px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: translateY(0);
   }
 }
-.animate-enter {
-  animation: fadeInScale 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.animate-fade-in {
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* --- ★以下、カレンダーのモダン化CSS --- */
+
+/* イベントのデザインを「ベタ塗り」から「左線＋半透明」に変える */
+.fc-daygrid-event {
+  background-color: transparent !important; /* 背景を透明に */
+  border: none !important;
+  margin-bottom: 2px !important;
+  border-radius: 4px !important;
+  position: relative;
+  padding-left: 8px !important; /* 左に色線のスペース */
+  overflow: hidden;
+}
+
+/* イベントの背景（うっすら色をつける） */
+.fc-daygrid-event::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(
+    --fc-event-border-color,
+    #6366f1
+  ); /* イベントの色を使う */
+  opacity: 0.15; /* 透明度15% */
+  z-index: -1;
+}
+
+/* 左側のアクセントライン */
+.fc-daygrid-event::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px; /* 左線の太さ */
+  height: 100%;
+  background-color: var(--fc-event-border-color, #6366f1);
+  border-radius: 2px 0 0 2px;
+}
+
+/* テキストの色 */
+.fc-event-title,
+.fc-time-custom,
+.fc-title-custom {
+  color: #e2e8f0 !important; /* 文字は白系 */
+  font-weight: 500;
+  font-size: 0.75rem;
+}
+
+/* 時間表示のスタイル */
+.fc-time-custom {
+  opacity: 0.7;
+  margin-right: 4px;
+  font-size: 0.7rem;
+}
+
+/* 今日の日付の丸の色（紫に統一） */
+.fc-day-today .fc-daygrid-day-number {
+  background-color: #6366f1 !important;
+  color: white !important;
 }
