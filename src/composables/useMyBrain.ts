@@ -132,72 +132,98 @@ function extractJson(text: string): string {
   return clean;
 }
 
-// ★修正: useNextNs.ts から移植した「動的モデル解決ロジック」
-const resolveGeminiModel = async (apiKey: string): Promise<string> => {
+// ---------------------------------------------------------
+// Helper: AI Model Management (変更なし・安定版)
+// ---------------------------------------------------------
+
+const fetchAvailableModels = async (apiKey: string) => {
   try {
     const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
     const listResponse = await fetch(listUrl);
-
-    if (!listResponse.ok) {
-      throw new Error(`Model list fetch failed: ${listResponse.statusText}`);
-    }
-
+    if (!listResponse.ok) return [];
     const listData = await listResponse.json();
-
-    // generateContentをサポートしているモデルをフィルタリング
-    const generationModels = (listData.models || []).filter((m: any) =>
-      m.supportedGenerationMethods?.includes("generateContent"),
-    );
-
-    // "gemini-1.5-flash" を優先して探す
-    const flash = generationModels.find((m: any) =>
-      m.name.includes("gemini-1.5-flash"),
-    );
-
-    // 見つかればそれ、なければリストの最初を使う
-    // "models/" プレフィックスを除去して返す
-    const targetModel = (flash || generationModels[0])?.name.replace(
-      "models/",
-      "",
-    );
-
-    if (!targetModel) throw new Error("No available generation models found.");
-
-    return targetModel;
+    return listData.models || [];
   } catch (e) {
-    console.warn(
-      "Dynamic model resolution failed, falling back to gemini-1.5-flash",
-      e,
-    );
-    return "gemini-1.5-flash"; // 最悪の場合のフォールバック
+    console.warn("Failed to fetch model list:", e);
+    return [];
   }
 };
 
-// ★修正: 動的モデルを使う生成関数
+const resolveGeminiModel = async (apiKey: string): Promise<string> => {
+  const models = await fetchAvailableModels(apiKey);
+  const generationModels = models.filter((m: any) =>
+    m.supportedGenerationMethods?.includes("generateContent"),
+  );
+  let target = generationModels.find((m: any) =>
+    m.name.includes("gemini-1.5-flash"),
+  );
+  if (!target) {
+    target = generationModels.find((m: any) =>
+      m.name.includes("gemini-1.5-pro"),
+    );
+  }
+  if (!target && generationModels.length > 0) {
+    target = generationModels[0];
+  }
+  if (target) {
+    return target.name.replace("models/", "");
+  }
+  return "gemini-1.5-flash";
+};
+
+const getEmbeddingModel = async (apiKey: string) => {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  try {
+    const models = await fetchAvailableModels(apiKey);
+    const embeddingModels = models.filter((m: any) =>
+      m.supportedGenerationMethods?.includes("embedContent"),
+    );
+    let target = embeddingModels.find((m: any) =>
+      m.name.includes("text-embedding-004"),
+    );
+    if (!target) {
+      target = embeddingModels.find((m: any) =>
+        m.name.includes("embedding-001"),
+      );
+    }
+    if (!target && embeddingModels.length > 0) {
+      target = embeddingModels[0];
+    }
+    const modelName = target
+      ? target.name.replace("models/", "")
+      : "embedding-001";
+    return genAI.getGenerativeModel({ model: modelName });
+  } catch (e) {
+    return genAI.getGenerativeModel({ model: "embedding-001" });
+  }
+};
+
 const generateContentWithRetry = async (
   apiKey: string,
   promptParts: any[],
   isJsonMode = false,
 ) => {
   try {
-    // 1. モデル名を動的に決定
     const modelName = await resolveGeminiModel(apiKey);
-    console.log("Selected AI Model:", modelName);
-
-    // 2. 生成実行
     const genAI = new GoogleGenerativeAI(apiKey);
     const config = isJsonMode ? { responseMimeType: "application/json" } : {};
-
     const model = genAI.getGenerativeModel({
       model: modelName,
       generationConfig: config,
     });
-
     const result = await model.generateContent(promptParts);
     return result.response.text();
   } catch (e: any) {
-    console.error("AI Generation Error:", e);
-    throw new Error("AI processing failed: " + e.message);
+    console.error("AI Generation Error (Primary):", e);
+    try {
+      console.log("Retrying with gemini-pro...");
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      const result = await model.generateContent(promptParts);
+      return result.response.text();
+    } catch (retryError: any) {
+      throw new Error("AI processing failed completely: " + retryError.message);
+    }
   }
 };
 
@@ -263,11 +289,6 @@ const speakText = (text: string) => {
 // ---------------- Main Composable ----------------
 
 export function useMyBrain() {
-  const getEmbeddingModel = (apiKey: string) => {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    return genAI.getGenerativeModel({ model: "text-embedding-004" });
-  };
-
   const checkAndIncrementUsage = async (): Promise<boolean> => {
     if (!currentUser.value) return false;
     if (currentUser.value.isPro) return true;
@@ -520,23 +541,21 @@ export function useMyBrain() {
     return Array.from(tags);
   });
 
+  // ★修正: 最新のメモも強制的に含めて検索する
   const findRelatedMemories = async (text: string): Promise<Memory[]> => {
     if (!text.trim() || memories.value.length === 0) return [];
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) return [];
 
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const embedModel = genAI.getGenerativeModel({
-        model: "text-embedding-004",
-      });
-
+      const embedModel = await getEmbeddingModel(apiKey);
       const result = await embedModel.embedContent(text);
       const vec = result.embedding.values;
 
       const threshold = 0.55;
 
-      const candidates = memories.value
+      // ベクトル検索候補
+      const vecCandidates = memories.value
         .map((m) => ({
           ...m,
           score: m.embedding ? cosineSimilarity(vec, m.embedding) : 0,
@@ -545,15 +564,29 @@ export function useMyBrain() {
         .sort((a, b) => (b.score || 0) - (a.score || 0))
         .slice(0, 5);
 
-      if (candidates.length === 0) return [];
+      // ★追加: 最新5件を強制的に候補に入れる (文脈理解用)
+      const latestMemories = memories.value
+        .slice(0, 5)
+        .map((m) => ({ ...m, score: 1.0 }));
+
+      // 統合して重複排除
+      const allCandidates = [...latestMemories, ...vecCandidates];
+      const uniqueCandidates = Array.from(
+        new Map(allCandidates.map((item) => [item.id, item])).values(),
+      );
+
+      if (uniqueCandidates.length === 0) return [];
 
       const verifyPrompt = `
         以下の【検索クエリ】に対して、【候補メモ】の中から本当に関連性が高いものだけを選んでください。
+        「買い物リスト」や「タスク」などのキーワードがある場合は、日付が新しくても古くても関連するものを選んでください。
         全く関係ない場合は空の配列を返してください。
+
         【検索クエリ】
         ${text}
         【候補メモ】
-        ${candidates.map((c, i) => `${i}: ${c.text}`).join("\n")}
+        ${uniqueCandidates.map((c, i) => `${i} (ID:${c.id}): ${c.text}`).join("\n")}
+        
         出力はJSON形式のみ: { "indices": [0, 2] } 
       `;
 
@@ -565,7 +598,7 @@ export function useMyBrain() {
       const verifyJson = JSON.parse(extractJson(verifyRes));
       const validIndices: number[] = verifyJson.indices || [];
 
-      return candidates.filter((_, i) => validIndices.includes(i));
+      return uniqueCandidates.filter((_, i) => validIndices.includes(i));
     } catch (e) {
       console.error("Search Error:", e);
       return [];
@@ -609,7 +642,8 @@ export function useMyBrain() {
       const finalText = hasImages
         ? `【解析済み】${text}\n\n${aiData.fullText || ""}`
         : text;
-      const embModel = getEmbeddingModel(apiKey);
+
+      const embModel = await getEmbeddingModel(apiKey);
       const embResult = await embModel.embedContent(finalText);
       const embedding = embResult.embedding.values;
 
@@ -673,21 +707,48 @@ export function useMyBrain() {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) throw new Error("APIキー未設定");
 
-      const embedModel = getEmbeddingModel(apiKey);
+      const embedModel = await getEmbeddingModel(apiKey);
       const qEmbed = await embedModel.embedContent(question);
       const qVec = qEmbed.embedding.values;
 
-      const scoredMemories = memories.value
+      const threshold = 0.55;
+
+      // 既存の類似検索
+      const vecCandidates = memories.value
         .map((m) => ({
           ...m,
           score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
         }))
-        .sort((a, b) => b.score - a.score);
+        .filter((m) => m.score && m.score > threshold)
+        .sort((a, b) => (b.score || 0) - (a.score || 0))
+        .slice(0, 5);
 
-      const context = scoredMemories
-        .slice(0, 10)
-        .map((m) => `- ${m.text.slice(0, 300)}`)
+      // ★追加: 最新5件を必ず含める (文脈理解用)
+      const latestMemories = memories.value
+        .slice(0, 5)
+        .map((m) => ({ ...m, score: 1.0 }));
+
+      // ★追加: キーワード検索も併用 (買い物リスト対策)
+      const keywords = question.split(/[\s,、　]+/);
+      const keywordCandidates = memories.value
+        .filter((m) => keywords.some((k) => k.length > 1 && m.text.includes(k)))
+        .slice(0, 3)
+        .map((m) => ({ ...m, score: 0.9 }));
+
+      // 全候補を統合して重複排除
+      const allCandidates = [
+        ...latestMemories,
+        ...vecCandidates,
+        ...keywordCandidates,
+      ];
+      const uniqueCandidates = Array.from(
+        new Map(allCandidates.map((item) => [item.id, item])).values(),
+      );
+
+      const context = uniqueCandidates
+        .map((m) => `ID:${m.id} | ${m.text.slice(0, 300)}`)
         .join("\n");
+
       const calendarEvents = await fetchCalendarEvents();
       const calendarContext = calendarEvents
         ? `\n【直近の予定】\n${calendarEvents}\n`
@@ -696,36 +757,86 @@ export function useMyBrain() {
         timeZone: "Asia/Tokyo",
       });
 
+      // ★プロンプト強化: アバウトな指示でも動くように具体例を提示
       const prompt = `
         あなたはユーザーの「第2の脳」です。現在日時: ${nowStr}
         ${calendarContext}
-        【参照する記憶】
+        【参照する記憶(ID付き)】
         ${context}
-        【質問】
+        【ユーザー入力】
         ${question}
+
         【指示】
-        質問に対する答えだけを生成してください。記憶の羅列は禁止。
-        出力JSON: { "answer": "回答テキスト", "mermaid": null, "calendarAction": null }
+        ユーザーの意図を汲み取り、適切なアクションを選択してください。
+        
+        判断基準:
+        - "これ追加して"や"買っておいて"等の指示があり、直近の記憶に関連するものがあれば MEMORY_APPEND
+        - タスク追加依頼("〜する"、"ToDo"など)なら TASK_ADD
+        - 予定作成依頼("明日10時"など日時指定)なら CALENDAR_ADD
+        - メモ保存依頼なら MEMORY_ADD
+        - それ以外は CHAT (質問への回答など)
+
+        出力はJSON形式のみ:
+        {
+          "action": "CALENDAR_ADD" | "TASK_ADD" | "MEMORY_APPEND" | "MEMORY_ADD" | "CHAT",
+          "data": {
+            "title": "予定/タスク名",
+            "start": "日時(ISO)",
+            "end": "日時(ISO)",
+            "targetId": "追記対象のメモID",
+            "content": "追記内容",
+            "summary": "メモ要約"
+          },
+          "answer": "ユーザーへの回答テキスト",
+          "mermaid": null,
+          "calendarAction": null
+        }
       `;
 
       const text = await generateContentWithRetry(apiKey, [prompt], true);
       const data = JSON.parse(extractJson(text));
       let finalAnswer = data.answer;
 
-      if (data.calendarAction) {
+      // ★アクション実行処理
+      if (data.action === "CALENDAR_ADD") {
         try {
           await addEventToGoogleCalendar(
-            data.calendarAction.title,
-            data.calendarAction.start,
-            data.calendarAction.end,
-            data.calendarAction.colorId,
+            data.data.title,
+            data.data.start,
+            data.data.end,
+            "9",
           );
-          finalAnswer += `\n\n✅ 予定登録: ${data.calendarAction.title}`;
+          finalAnswer += `\n\n✅ 予定を登録しました: ${data.data.title}`;
         } catch {
-          finalAnswer += `\n⚠️ エラー: 予定登録失敗`;
+          finalAnswer += `\n⚠️ 予定登録に失敗しました`;
         }
+      } else if (data.action === "TASK_ADD") {
+        await addManualTodo(data.data.title);
+        finalAnswer += `\n\n✅ タスクに追加しました: ${data.data.title}`;
+      } else if (data.action === "MEMORY_APPEND" && data.data.targetId) {
+        try {
+          const docRef = doc(db, "memories", data.data.targetId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const oldText = docSnap.data().text;
+            const newText = `${oldText}\n(追記) ${data.data.content}`;
+            await updateDoc(docRef, { text: newText });
+            finalAnswer += `\n\n📝 メモに追記しました`;
+            // メモリリスト更新のためリロード
+            const idx = memories.value.findIndex(
+              (m) => m.id === data.data.targetId,
+            );
+            if (idx !== -1) memories.value[idx].text = newText;
+          }
+        } catch {
+          finalAnswer += `\n⚠️ 追記に失敗しました`;
+        }
+      } else if (data.action === "MEMORY_ADD") {
+        await addMemory(data.data.content || question, null);
+        finalAnswer += `\n\n📝 メモしました`;
       }
 
+      // チャットログ保存
       const logData = {
         userId: currentUser.value!.uid,
         question,
@@ -777,7 +888,6 @@ export function useMyBrain() {
     await deleteDoc(doc(db, "todos", id));
   };
 
-  // ★追加: LINE連携ロジック
   const startLineAuth = () => {
     const channelId = import.meta.env.VITE_LINE_LOGIN_CHANNEL_ID;
     const redirectUri = window.location.origin + "/app";
@@ -792,7 +902,6 @@ export function useMyBrain() {
     window.location.href = url;
   };
 
-  // ★追加: 連携解除ロジック
   const unlinkLine = async () => {
     if (!confirm("LINE連携を解除しますか？")) return;
     loading.value = true;
@@ -844,7 +953,7 @@ export function useMyBrain() {
     addManualTodo,
     callGoogleApi,
     reconnectCalendar,
-    startLineAuth, // ★公開
-    unlinkLine, // ★公開
+    startLineAuth,
+    unlinkLine,
   };
 }

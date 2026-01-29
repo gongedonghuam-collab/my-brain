@@ -112,7 +112,7 @@ const haptic = () => {
           />
           <button
             @click="
-              submitTask;
+              submitTask();
               haptic();
             "
             class="bg-indigo-600 text-white w-12 h-auto rounded-xl flex items-center justify-center hover:bg-indigo-500 active:scale-95 transition shadow-lg shadow-indigo-900/30"

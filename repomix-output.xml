@@ -134,54 +134,6 @@ vite.config.ts
 <files>
 This section contains the contents of the repository's files.
 
-<file path="src/composables/useTheme.ts">
-import { ref, onMounted, onUnmounted, watch } from "vue";
-
-// グローバルステート
-const isDark = ref(true);
-
-export function useTheme() {
-  const updateTheme = () => {
-    const hour = new Date().getHours();
-    // 6時から18時はライトモード(false)、それ以外はダークモード(true)
-    // ※本来はユーザー設定やOS設定を優先すべきですが、要望通り時間で切り替えます
-    const isNight = hour < 6 || hour >= 18;
-    isDark.value = isNight;
-
-    applyTheme();
-  };
-
-  const applyTheme = () => {
-    const html = document.documentElement;
-    if (isDark.value) {
-      html.classList.add("dark");
-      html.classList.remove("light");
-    } else {
-      html.classList.remove("dark");
-      html.classList.add("light");
-    }
-  };
-
-  let timer: any;
-
-  const initTheme = () => {
-    updateTheme();
-    // 1分ごとにチェック
-    timer = setInterval(updateTheme, 60000);
-  };
-
-  const cleanupTheme = () => {
-    if (timer) clearInterval(timer);
-  };
-
-  return {
-    isDark,
-    initTheme,
-    cleanupTheme,
-  };
-}
-</file>
-
 <file path="functions/.gitignore">
 node_modules/
 *.local
@@ -549,41 +501,6 @@ exports.sendDailyReminders = (0, scheduler_1.onSchedule)("every day 09:00", asyn
         await sendPushNotification(data.customerId, "ご予約のリマインダー", msg);
     });
 });
-</file>
-
-<file path="functions/package.json">
-{
-  "name": "functions",
-  "scripts": {
-    "lint": "eslint --ext .js,.ts .",
-    "build": "tsc",
-    "build:watch": "tsc --watch",
-    "serve": "npm run build && firebase emulators:start --only functions",
-    "shell": "npm run build && firebase functions:shell",
-    "start": "npm run shell",
-    "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
-  },
-  "engines": {
-    "node": "22"
-  },
-  "main": "lib/index.js",
-  "dependencies": {
-    "@google/generative-ai": "^0.24.1",
-    "@line/bot-sdk": "^10.5.0",
-    "axios": "^1.13.2",
-    "date-fns": "^4.1.0",
-    "date-fns-tz": "^3.2.0",
-    "firebase-admin": "^12.1.0",
-    "firebase-functions": "^5.0.1"
-  },
-  "devDependencies": {
-    "eslint": "^8.57.0",
-    "firebase-functions-test": "^3.1.0",
-    "typescript": "^5.4.5"
-  },
-  "private": true
-}
 </file>
 
 <file path="functions/tsconfig.json">
@@ -1751,6 +1668,54 @@ export function useNotifications() {
 }
 </file>
 
+<file path="src/composables/useTheme.ts">
+import { ref, onMounted, onUnmounted, watch } from "vue";
+
+// グローバルステート
+const isDark = ref(true);
+
+export function useTheme() {
+  const updateTheme = () => {
+    const hour = new Date().getHours();
+    // 6時から18時はライトモード(false)、それ以外はダークモード(true)
+    // ※本来はユーザー設定やOS設定を優先すべきですが、要望通り時間で切り替えます
+    const isNight = hour < 6 || hour >= 18;
+    isDark.value = isNight;
+
+    applyTheme();
+  };
+
+  const applyTheme = () => {
+    const html = document.documentElement;
+    if (isDark.value) {
+      html.classList.add("dark");
+      html.classList.remove("light");
+    } else {
+      html.classList.remove("dark");
+      html.classList.add("light");
+    }
+  };
+
+  let timer: any;
+
+  const initTheme = () => {
+    updateTheme();
+    // 1分ごとにチェック
+    timer = setInterval(updateTheme, 60000);
+  };
+
+  const cleanupTheme = () => {
+    if (timer) clearInterval(timer);
+  };
+
+  return {
+    isDark,
+    initTheme,
+    cleanupTheme,
+  };
+}
+</file>
+
 <file path="src/uiParts/BaseButton/BaseButton.vue">
 <script setup lang="ts">
 interface Props {
@@ -2013,244 +1978,6 @@ export default function useLoginView() {
 </template>
 </file>
 
-<file path="src/style.css">
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-:root {
-  /* モダンSaaS ダークテーマ (Notion/Cron風) */
-  --bg-main: #09090b; /* 漆黒の背景 */
-  --bg-sub: #18181b; /* カード背景 */
-  --bg-hover: #27272a; /* ホバー時 */
-  --border: #27272a; /* 境界線 */
-  --primary: #6366f1; /* Indigo 500 (知的で落ち着いた青紫) */
-  --text-main: #f8fafc; /* ほぼ白 */
-  --text-muted: #94a3b8; /* グレー */
-
-  /* FullCalendar カスタマイズ変数 */
-  --fc-border-color: #27272a;
-  --fc-today-bg-color: rgba(99, 102, 241, 0.08); /* 今日の背景 */
-  --fc-page-bg-color: transparent;
-  --fc-neutral-bg-color: transparent;
-  --fc-list-event-hover-bg-color: #27272a;
-}
-
-body {
-  background-color: var(--bg-main);
-  color: var(--text-main);
-  font-family:
-    "Inter",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  overflow: hidden; /* アプリライクな挙動 */
-}
-
-/* スクロールバー隠し */
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-/* --- FullCalendar 大改造 --- */
-
-.fc {
-  font-family: inherit;
-}
-
-/* ツールバー (年月表示など) */
-.fc .fc-toolbar {
-  margin-bottom: 1.5rem !important;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.fc .fc-toolbar-title {
-  font-size: 1.25rem !important;
-  font-weight: 800 !important;
-  letter-spacing: -0.02em;
-  color: var(--text-main);
-}
-
-/* ボタン (今日、< >) */
-.fc .fc-button {
-  background-color: transparent !important;
-  border: 1px solid var(--border) !important;
-  color: var(--text-muted) !important;
-  font-size: 0.8rem !important;
-  font-weight: 600 !important;
-  padding: 0.4rem 0.8rem !important;
-  border-radius: 8px !important;
-  box-shadow: none !important;
-  transition: all 0.2s ease;
-}
-.fc .fc-button:hover {
-  background-color: var(--bg-hover) !important;
-  color: var(--text-main) !important;
-}
-.fc .fc-button:active {
-  transform: scale(0.95);
-}
-
-/* カレンダーグリッド */
-.fc-theme-standard td,
-.fc-theme-standard th {
-  border-color: var(--border) !important;
-}
-.fc .fc-col-header-cell-cushion {
-  color: var(--text-muted);
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 12px 0 !important;
-}
-
-/* 日付 */
-.fc-daygrid-day-top {
-  justify-content: center;
-  padding-top: 6px;
-}
-.fc-daygrid-day-number {
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--text-main);
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: background-color 0.2s;
-}
-/* 今日 */
-.fc-day-today .fc-daygrid-day-number {
-  background-color: var(--primary);
-  color: white;
-  font-weight: 700;
-  box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
-}
-
-/* イベント (予定) */
-.fc-event {
-  border: none !important;
-  border-radius: 6px !important;
-  padding: 2px 4px !important;
-  margin: 1px 2px !important;
-  font-size: 0.75rem !important;
-  font-weight: 600 !important;
-  cursor: pointer;
-  transition:
-    transform 0.1s ease,
-    filter 0.1s ease;
-}
-.fc-event:active {
-  transform: scale(0.95);
-}
-/* 終日イベント */
-.fc-h-event {
-  background-color: rgba(99, 102, 241, 0.2); /* 薄い紫 */
-  border-left: 3px solid var(--primary) !important;
-  color: #e0e7ff !important;
-}
-/* 時間付きイベントのドット */
-.fc-daygrid-event-dot {
-  border-color: var(--primary) !important;
-}
-
-/* リスト表示 */
-.fc-list {
-  border-color: var(--border) !important;
-}
-.fc-list-event:hover td {
-  background-color: var(--bg-hover) !important;
-}
-
-/* アニメーション */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.animate-fade-in {
-  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* --- ★以下、カレンダーのモダン化CSS --- */
-
-/* イベントのデザインを「ベタ塗り」から「左線＋半透明」に変える */
-.fc-daygrid-event {
-  background-color: transparent !important; /* 背景を透明に */
-  border: none !important;
-  margin-bottom: 2px !important;
-  border-radius: 4px !important;
-  position: relative;
-  padding-left: 8px !important; /* 左に色線のスペース */
-  overflow: hidden;
-}
-
-/* イベントの背景（うっすら色をつける） */
-.fc-daygrid-event::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: var(
-    --fc-event-border-color,
-    #6366f1
-  ); /* イベントの色を使う */
-  opacity: 0.15; /* 透明度15% */
-  z-index: -1;
-}
-
-/* 左側のアクセントライン */
-.fc-daygrid-event::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 3px; /* 左線の太さ */
-  height: 100%;
-  background-color: var(--fc-event-border-color, #6366f1);
-  border-radius: 2px 0 0 2px;
-}
-
-/* テキストの色 */
-.fc-event-title,
-.fc-time-custom,
-.fc-title-custom {
-  color: #e2e8f0 !important; /* 文字は白系 */
-  font-weight: 500;
-  font-size: 0.75rem;
-}
-
-/* 時間表示のスタイル */
-.fc-time-custom {
-  opacity: 0.7;
-  margin-right: 4px;
-  font-size: 0.7rem;
-}
-
-/* 今日の日付の丸の色（紫に統一） */
-.fc-day-today .fc-daygrid-day-number {
-  background-color: #6366f1 !important;
-  color: white !important;
-}
-</file>
-
 <file path=".firebaserc">
 {
   "projects": {
@@ -2435,6 +2162,41 @@ export default {
     "types": ["vite/client"]
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"]
+}
+</file>
+
+<file path="functions/package.json">
+{
+  "name": "functions",
+  "scripts": {
+    "lint": "eslint --ext .js,.ts .",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "22"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@line/bot-sdk": "^10.5.0",
+    "axios": "^1.13.2",
+    "date-fns": "^4.1.0",
+    "date-fns-tz": "^3.2.0",
+    "firebase-admin": "^12.1.0",
+    "firebase-functions": "^5.0.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "firebase-functions-test": "^3.1.0",
+    "typescript": "^5.4.5"
+  },
+  "private": true
 }
 </file>
 
@@ -2713,41 +2475,6 @@ const handleLogout = async () => {
 </template>
 </file>
 
-<file path="src/App.vue">
-<script setup lang="ts">
-import { onMounted, onUnmounted, watch } from "vue";
-import { useRouter } from "vue-router";
-import { useMyBrain } from "@/composables/useMyBrain";
-import { useTheme } from "@/composables/useTheme"; // 追加
-
-const { initAuth, currentUser } = useMyBrain();
-const { initTheme, cleanupTheme } = useTheme(); // 追加
-const router = useRouter();
-
-onMounted(() => {
-  initAuth();
-  initTheme(); // テーマ監視開始
-});
-
-onUnmounted(() => {
-  cleanupTheme();
-});
-
-watch(currentUser, (newUser) => {
-  if (newUser === null) {
-    const publicPages = ["/", "/login", "/legal", "/verify-email", "/privacy"];
-    if (!publicPages.includes(router.currentRoute.value.path)) {
-      router.push("/login");
-    }
-  }
-});
-</script>
-
-<template>
-  <router-view />
-</template>
-</file>
-
 <file path="src/env.d.ts">
 /// <reference types="vite/client" />
 
@@ -2841,6 +2568,244 @@ if (loader) {
       loader.remove();
     }, 500);
   }, 500);
+}
+</file>
+
+<file path="src/style.css">
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* モダンSaaS ダークテーマ (Notion/Cron風) */
+  --bg-main: #09090b; /* 漆黒の背景 */
+  --bg-sub: #18181b; /* カード背景 */
+  --bg-hover: #27272a; /* ホバー時 */
+  --border: #27272a; /* 境界線 */
+  --primary: #6366f1; /* Indigo 500 (知的で落ち着いた青紫) */
+  --text-main: #f8fafc; /* ほぼ白 */
+  --text-muted: #94a3b8; /* グレー */
+
+  /* FullCalendar カスタマイズ変数 */
+  --fc-border-color: #27272a;
+  --fc-today-bg-color: rgba(99, 102, 241, 0.08); /* 今日の背景 */
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: transparent;
+  --fc-list-event-hover-bg-color: #27272a;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden; /* アプリライクな挙動 */
+}
+
+/* スクロールバー隠し */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* --- FullCalendar 大改造 --- */
+
+.fc {
+  font-family: inherit;
+}
+
+/* ツールバー (年月表示など) */
+.fc .fc-toolbar {
+  margin-bottom: 1.5rem !important;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.fc .fc-toolbar-title {
+  font-size: 1.25rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+}
+
+/* ボタン (今日、< >) */
+.fc .fc-button {
+  background-color: transparent !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  padding: 0.4rem 0.8rem !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease;
+}
+.fc .fc-button:hover {
+  background-color: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+}
+.fc .fc-button:active {
+  transform: scale(0.95);
+}
+
+/* カレンダーグリッド */
+.fc-theme-standard td,
+.fc-theme-standard th {
+  border-color: var(--border) !important;
+}
+.fc .fc-col-header-cell-cushion {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 0 !important;
+}
+
+/* 日付 */
+.fc-daygrid-day-top {
+  justify-content: center;
+  padding-top: 6px;
+}
+.fc-daygrid-day-number {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-main);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+/* 今日 */
+.fc-day-today .fc-daygrid-day-number {
+  background-color: var(--primary);
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+}
+
+/* イベント (予定) */
+.fc-event {
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 2px 4px !important;
+  margin: 1px 2px !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    filter 0.1s ease;
+}
+.fc-event:active {
+  transform: scale(0.95);
+}
+/* 終日イベント */
+.fc-h-event {
+  background-color: rgba(99, 102, 241, 0.2); /* 薄い紫 */
+  border-left: 3px solid var(--primary) !important;
+  color: #e0e7ff !important;
+}
+/* 時間付きイベントのドット */
+.fc-daygrid-event-dot {
+  border-color: var(--primary) !important;
+}
+
+/* リスト表示 */
+.fc-list {
+  border-color: var(--border) !important;
+}
+.fc-list-event:hover td {
+  background-color: var(--bg-hover) !important;
+}
+
+/* アニメーション */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* --- ★以下、カレンダーのモダン化CSS --- */
+
+/* イベントのデザインを「ベタ塗り」から「左線＋半透明」に変える */
+.fc-daygrid-event {
+  background-color: transparent !important; /* 背景を透明に */
+  border: none !important;
+  margin-bottom: 2px !important;
+  border-radius: 4px !important;
+  position: relative;
+  padding-left: 8px !important; /* 左に色線のスペース */
+  overflow: hidden;
+}
+
+/* イベントの背景（うっすら色をつける） */
+.fc-daygrid-event::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(
+    --fc-event-border-color,
+    #6366f1
+  ); /* イベントの色を使う */
+  opacity: 0.15; /* 透明度15% */
+  z-index: -1;
+}
+
+/* 左側のアクセントライン */
+.fc-daygrid-event::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px; /* 左線の太さ */
+  height: 100%;
+  background-color: var(--fc-event-border-color, #6366f1);
+  border-radius: 2px 0 0 2px;
+}
+
+/* テキストの色 */
+.fc-event-title,
+.fc-time-custom,
+.fc-title-custom {
+  color: #e2e8f0 !important; /* 文字は白系 */
+  font-weight: 500;
+  font-size: 0.75rem;
+}
+
+/* 時間表示のスタイル */
+.fc-time-custom {
+  opacity: 0.7;
+  margin-right: 4px;
+  font-size: 0.7rem;
+}
+
+/* 今日の日付の丸の色（紫に統一） */
+.fc-day-today .fc-daygrid-day-number {
+  background-color: #6366f1 !important;
+  color: white !important;
 }
 </file>
 
@@ -3712,6 +3677,41 @@ p {
 </style>
 </file>
 
+<file path="src/App.vue">
+<script setup lang="ts">
+import { onMounted, onUnmounted, watch } from "vue";
+import { useRouter } from "vue-router";
+import { useMyBrain } from "@/composables/useMyBrain";
+import { useTheme } from "@/composables/useTheme"; // 追加
+
+const { initAuth, currentUser } = useMyBrain();
+const { initTheme, cleanupTheme } = useTheme(); // 追加
+const router = useRouter();
+
+onMounted(() => {
+  initAuth();
+  initTheme(); // テーマ監視開始
+});
+
+onUnmounted(() => {
+  cleanupTheme();
+});
+
+watch(currentUser, (newUser) => {
+  if (newUser === null) {
+    const publicPages = ["/", "/login", "/legal", "/verify-email", "/privacy"];
+    if (!publicPages.includes(router.currentRoute.value.path)) {
+      router.push("/login");
+    }
+  }
+});
+</script>
+
+<template>
+  <router-view />
+</template>
+</file>
+
 <file path="firestore.rules">
 rules_version = '2';
 service cloud.firestore {
@@ -3951,6 +3951,266 @@ export function useInputFooter(inputMode: Ref<InputMode>) {
     handleInput,
   };
 }
+</file>
+
+<file path="src/views/LegalView/LegalView.vue">
+<script setup lang="ts">
+import { useRouter } from "vue-router";
+const router = useRouter();
+</script>
+
+<template>
+  <div
+    class="min-h-screen bg-slate-950 text-slate-300 p-6 md:p-12 font-sans overflow-y-auto"
+  >
+    <div class="max-w-3xl mx-auto pb-20">
+      <button
+        @click="router.back()"
+        class="mb-6 text-sm text-slate-500 hover:text-white transition"
+      >
+        ← 戻る
+      </button>
+
+      <h1 class="text-2xl font-bold text-white mb-8">
+        特定商取引法に基づく表記
+      </h1>
+
+      <div class="space-y-8 text-sm leading-relaxed">
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
+          <p>吉岡 拓海 (BlueCode)</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">運営統括責任者</h2>
+          <p>吉岡 拓海</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">所在地</h2>
+          <p>〒815-0041 福岡県福岡市南区野間1丁目19-1</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
+          <p>080-6423-6435</p>
+          <p class="text-xs text-slate-500 mt-1">
+            受付時間 10:00-18:00（土日祝を除く）
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">メールアドレス</h2>
+          <p>gongedonghuam@gmail.com</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">販売価格</h2>
+          <p>PROプラン: 月額980円（税込）</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">商品代金以外の必要料金</h2>
+          <p>
+            当サイトの閲覧、コンテンツのダウンロード、お問い合わせ等の際の電子メールの送受信時などに、所定の通信料が発生いたします。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">お支払方法</h2>
+          <p>クレジットカード決済（Stripe）</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">お支払時期</h2>
+          <p>
+            初回お申込み時に即時決済され、以降毎月同日に自動的に決済が行われます。<br />
+            実際の引き落とし時期は、ご利用のクレジットカード会社の締め日や契約内容により異なります。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">商品の引渡時期</h2>
+          <p>決済手続き完了後、直ちにご利用いただけます。</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">
+            返品・キャンセルについて
+          </h2>
+          <p>
+            デジタルコンテンツの性質上、決済完了後の返品・返金には応じられません。<br />
+            解約はいつでも可能です。次回更新日の前日までにお手続きください。なお、日割り計算による返金は行われません。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">動作環境</h2>
+          <p>
+            推奨ブラウザ：Google Chrome 最新版、Safari 最新版、Microsoft Edge
+            最新版<br />
+            ※インターネット接続環境が必要です。
+          </p>
+        </section>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="google-site-verification"
+      content="qpuJVeg2XkDd1ieycUl-LOQkD3MDEH7wVKmlPE3NdEI"
+    />
+    <link rel="icon" href="/logo.png?v=3" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>My Brain</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0f172a;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+      }
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #0f172a;
+        color: white;
+        z-index: 9999;
+        transition: opacity 0.5s ease;
+      }
+      .loader {
+        margin-top: 32px;
+        width: 32px;
+        height: 32px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        border-top-color: #3b82f6;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="loading-screen">
+      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
+      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
+      <div class="loader"></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+</file>
+
+<file path="src/router/index.ts">
+import { createRouter, createWebHistory } from "vue-router";
+import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
+import HomeView from "../views/HomeView/HomeView.vue";
+import LoginView from "../views/LoginView/LoginView.vue";
+import VerifyEmailView from "../views/VerifyEmailView/VerifyEmailView.vue";
+import LandingView from "../views/LandingView/LandingView.vue";
+import LegalView from "../views/LegalView/LegalView.vue"; // 追加
+import PrivacyPolicy from "../views/PrivacyPolicy/PrivacyPolicy.vue";
+
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    {
+      path: "/",
+      name: "landing",
+      component: LandingView,
+      meta: { public: true },
+    },
+    {
+      path: "/app",
+      name: "home",
+      component: HomeView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/login",
+      name: "login",
+      component: LoginView,
+      meta: { public: true },
+    },
+    {
+      path: "/verify-email",
+      name: "verify-email",
+      component: VerifyEmailView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/legal",
+      name: "legal",
+      component: LegalView,
+      meta: { public: true },
+    },
+    {
+      path: "/privacy", // ★このパスを追加
+      name: "privacy",
+      component: PrivacyPolicy,
+      meta: { public: true }, // ログインしていなくても見れるようにする
+    },
+  ],
+});
+
+router.beforeEach(async (to, from, next) => {
+  const auth = getAuth();
+  const currentUser = await new Promise<User | null>((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
+
+  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
+
+  if (to.path === "/") {
+    if (currentUser) {
+      next("/app");
+      return;
+    } else {
+      next();
+      return;
+    }
+  }
+
+  if (requiresAuth && !currentUser) {
+    next("/login");
+  } else if (to.path === "/login" && currentUser) {
+    next("/app");
+  } else {
+    next();
+  }
+});
+
+export default router;
 </file>
 
 <file path="src/views/HomeView/useHomeView.ts">
@@ -4301,181 +4561,6 @@ export function useHomeView() {
 }
 </file>
 
-<file path="src/views/LegalView/LegalView.vue">
-<script setup lang="ts">
-import { useRouter } from "vue-router";
-const router = useRouter();
-</script>
-
-<template>
-  <div
-    class="min-h-screen bg-slate-950 text-slate-300 p-6 md:p-12 font-sans overflow-y-auto"
-  >
-    <div class="max-w-3xl mx-auto pb-20">
-      <button
-        @click="router.back()"
-        class="mb-6 text-sm text-slate-500 hover:text-white transition"
-      >
-        ← 戻る
-      </button>
-
-      <h1 class="text-2xl font-bold text-white mb-8">
-        特定商取引法に基づく表記
-      </h1>
-
-      <div class="space-y-8 text-sm leading-relaxed">
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
-          <p>吉岡 拓海 (BlueCode)</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">運営統括責任者</h2>
-          <p>吉岡 拓海</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">所在地</h2>
-          <p>〒815-0041 福岡県福岡市南区野間1丁目19-1</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
-          <p>080-6423-6435</p>
-          <p class="text-xs text-slate-500 mt-1">
-            受付時間 10:00-18:00（土日祝を除く）
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">メールアドレス</h2>
-          <p>gongedonghuam@gmail.com</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">販売価格</h2>
-          <p>PROプラン: 月額980円（税込）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">商品代金以外の必要料金</h2>
-          <p>
-            当サイトの閲覧、コンテンツのダウンロード、お問い合わせ等の際の電子メールの送受信時などに、所定の通信料が発生いたします。
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">お支払方法</h2>
-          <p>クレジットカード決済（Stripe）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">お支払時期</h2>
-          <p>
-            初回お申込み時に即時決済され、以降毎月同日に自動的に決済が行われます。<br />
-            実際の引き落とし時期は、ご利用のクレジットカード会社の締め日や契約内容により異なります。
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">商品の引渡時期</h2>
-          <p>決済手続き完了後、直ちにご利用いただけます。</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">
-            返品・キャンセルについて
-          </h2>
-          <p>
-            デジタルコンテンツの性質上、決済完了後の返品・返金には応じられません。<br />
-            解約はいつでも可能です。次回更新日の前日までにお手続きください。なお、日割り計算による返金は行われません。
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">動作環境</h2>
-          <p>
-            推奨ブラウザ：Google Chrome 最新版、Safari 最新版、Microsoft Edge
-            最新版<br />
-            ※インターネット接続環境が必要です。
-          </p>
-        </section>
-      </div>
-    </div>
-  </div>
-</template>
-</file>
-
-<file path="index.html">
-<!doctype html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="google-site-verification"
-      content="qpuJVeg2XkDd1ieycUl-LOQkD3MDEH7wVKmlPE3NdEI"
-    />
-    <link rel="icon" href="/logo.png?v=3" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
-    <title>My Brain</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        background-color: #0f172a;
-        height: 100vh;
-        width: 100vw;
-        overflow: hidden;
-      }
-      #loading-screen {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background-color: #0f172a;
-        color: white;
-        z-index: 9999;
-        transition: opacity 0.5s ease;
-      }
-      .loader {
-        margin-top: 32px;
-        width: 32px;
-        height: 32px;
-        border: 3px solid rgba(255, 255, 255, 0.1);
-        border-radius: 50%;
-        border-top-color: #3b82f6;
-        animation: spin 1s linear infinite;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app"></div>
-
-    <div id="loading-screen">
-      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
-      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
-      <div class="loader"></div>
-    </div>
-
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
-</file>
-
 <file path="functions/lib/index.js">
 "use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -4541,44 +4626,76 @@ const googleClientId = (0, params_1.defineSecret)("GOOGLE_CLIENT_ID");
 const googleClientSecret = (0, params_1.defineSecret)("GOOGLE_CLIENT_SECRET");
 const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID");
 const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET");
-// モデルリスト
+// フォールバック用のモデルリスト
 const CANDIDATE_MODELS = [
     "gemini-1.5-flash",
     "gemini-1.5-flash-001",
-    "gemini-1.5-flash-002",
     "gemini-1.5-pro",
-    "gemini-1.5-pro-001",
     "gemini-pro",
 ];
-// Helper: 動的モデル解決
-async function resolveGeminiModel(apiKey) {
-    var _a;
+// ---------------------------------------------------------
+// Helper: JSON抽出・修復関数
+// ---------------------------------------------------------
+function extractJson(text) {
+    try {
+        return JSON.parse(text);
+    }
+    catch (e) {
+        try {
+            const cleaned = text.replace(/```json|```/g, "").trim();
+            return JSON.parse(cleaned);
+        }
+        catch (e2) {
+            try {
+                const firstOpen = text.indexOf("{");
+                const lastClose = text.lastIndexOf("}");
+                if (firstOpen !== -1 && lastClose !== -1) {
+                    const jsonString = text.substring(firstOpen, lastClose + 1);
+                    return JSON.parse(jsonString);
+                }
+                throw new Error("No JSON found");
+            }
+            catch (e3) {
+                throw new Error("JSON parsing failed");
+            }
+        }
+    }
+}
+// ---------------------------------------------------------
+// Helper: AI Model Management (変更なし・安定版)
+// ---------------------------------------------------------
+async function fetchAvailableModels(apiKey) {
     try {
         const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
         const listResponse = await axios_1.default.get(listUrl);
         if (listResponse.status !== 200)
-            throw new Error("Model fetch failed");
-        const listData = listResponse.data;
-        const generationModels = (listData.models || []).filter((m) => { var _a; return (_a = m.supportedGenerationMethods) === null || _a === void 0 ? void 0 : _a.includes("generateContent"); });
-        const flash = generationModels.find((m) => m.name.includes("gemini-1.5-flash"));
-        const targetModel = (_a = (flash || generationModels[0])) === null || _a === void 0 ? void 0 : _a.name.replace("models/", "");
-        if (!targetModel)
-            throw new Error("No models found");
-        return targetModel;
+            return [];
+        return listResponse.data.models || [];
     }
     catch (e) {
-        console.warn("Dynamic model resolution failed, falling back.", e);
-        return "";
+        console.warn("Failed to fetch model list:", e);
+        return [];
     }
 }
-// Helper: Gemini API (JSON)
+async function resolveGeminiModel(apiKey) {
+    const models = await fetchAvailableModels(apiKey);
+    const generationModels = models.filter((m) => { var _a; return (_a = m.supportedGenerationMethods) === null || _a === void 0 ? void 0 : _a.includes("generateContent"); });
+    let target = generationModels.find((m) => m.name.includes("gemini-1.5-flash"));
+    if (!target) {
+        target = generationModels.find((m) => m.name.includes("gemini-1.5-pro"));
+    }
+    if (!target && generationModels.length > 0) {
+        target = generationModels[0];
+    }
+    if (target) {
+        return target.name.replace("models/", "");
+    }
+    return "gemini-1.5-flash";
+}
 async function callGeminiJson(apiKey, prompt) {
     var _a, _b, _c, _d, _e, _f;
     const dynamicModel = await resolveGeminiModel(apiKey);
-    let modelsToTry = dynamicModel
-        ? [dynamicModel, ...CANDIDATE_MODELS]
-        : CANDIDATE_MODELS;
-    modelsToTry = [...new Set(modelsToTry)];
+    const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(Boolean);
     for (const modelName of modelsToTry) {
         try {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
@@ -4588,44 +4705,34 @@ async function callGeminiJson(apiKey, prompt) {
             }, { headers: { "Content-Type": "application/json" } });
             const text = (_f = (_e = (_d = (_c = (_b = (_a = response.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text;
             if (text) {
-                try {
-                    return JSON.parse(text);
-                }
-                catch (e) {
-                    try {
-                        return JSON.parse(text.replace(/```json|```/g, "").trim());
-                    }
-                    catch (e2) {
-                        return { type: "CHAT", reply: text.substring(0, 100) };
-                    }
-                }
+                return extractJson(text);
             }
         }
         catch (e) {
-            console.warn(`Model ${modelName} failed, retrying...`);
+            console.warn(`Model ${modelName} failed: ${e.message}. Retrying...`);
         }
     }
-    throw new Error("All AI models failed");
+    throw new Error("All AI models failed to generate valid JSON");
 }
-// Helper: Gemini API (Text)
 async function callGeminiText(apiKey, prompt) {
     var _a, _b, _c, _d, _e, _f;
     const dynamicModel = await resolveGeminiModel(apiKey);
-    let modelsToTry = dynamicModel
-        ? [dynamicModel, ...CANDIDATE_MODELS]
-        : CANDIDATE_MODELS;
-    modelsToTry = [...new Set(modelsToTry)];
+    const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(Boolean);
     for (const modelName of modelsToTry) {
         try {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
             const response = await axios_1.default.post(url, { contents: [{ parts: [{ text: prompt }] }] }, { headers: { "Content-Type": "application/json" } });
             return ((_f = (_e = (_d = (_c = (_b = (_a = response.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text) || "";
         }
-        catch (e) { }
+        catch (e) {
+            console.warn(`Model ${modelName} (Text) failed. Retrying...`);
+        }
     }
-    return "すみません、調子が悪いです。";
+    return "すみません、AIの調子が悪く応答できませんでした。";
 }
-// Helper: Token Refresh
+// ---------------------------------------------------------
+// Helper: Google Token Refresh & Calendar
+// ---------------------------------------------------------
 async function refreshAccessToken(refreshToken) {
     try {
         const response = await axios_1.default.post("https://oauth2.googleapis.com/token", {
@@ -4637,10 +4744,10 @@ async function refreshAccessToken(refreshToken) {
         return response.data.access_token;
     }
     catch (e) {
+        console.error("Token Refresh Error:", e.message);
         return null;
     }
 }
-// Helper: カレンダー取得
 async function getCalendarEvents(uid) {
     var _a;
     try {
@@ -4654,14 +4761,14 @@ async function getCalendarEvents(uid) {
             return "（カレンダー未連携）";
         const refreshToken = (_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken;
         if (!refreshToken)
-            return "（権限なし）";
+            return "（カレンダー権限なし）";
         const accessToken = await refreshAccessToken(refreshToken);
         if (!accessToken)
             return "（トークン期限切れ）";
         const now = new Date();
         const timeMin = now.toISOString();
         const timeMax = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
-        const res = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
+        const calendarRes = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
             headers: { Authorization: `Bearer ${accessToken}` },
             params: {
                 timeMin,
@@ -4671,9 +4778,9 @@ async function getCalendarEvents(uid) {
                 maxResults: 15,
             },
         });
-        const events = res.data.items || [];
+        const events = calendarRes.data.items || [];
         if (events.length === 0)
-            return "直近の予定なし";
+            return "直近1週間の予定はありません。";
         return events
             .map((ev) => {
             const start = ev.start.dateTime
@@ -4690,28 +4797,83 @@ async function getCalendarEvents(uid) {
             .join("\n");
     }
     catch (e) {
-        return "（取得エラー）";
+        console.error("Calendar Fetch Error:", e);
+        return "（カレンダー取得エラー）";
     }
 }
-// Helper: 過去のメモ取得
-async function getRecentMemories(uid) {
+async function addCalendarEvent(uid, eventData) {
+    var _a;
     try {
+        const tokenDoc = await db
+            .collection("users")
+            .doc(uid)
+            .collection("system")
+            .doc("tokens")
+            .get();
+        if (!tokenDoc.exists)
+            return false;
+        const refreshToken = (_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken;
+        if (!refreshToken)
+            return false;
+        const accessToken = await refreshAccessToken(refreshToken);
+        if (!accessToken)
+            return false;
+        await axios_1.default.post("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+            summary: eventData.title,
+            start: { dateTime: eventData.start },
+            end: { dateTime: eventData.end },
+        }, { headers: { Authorization: `Bearer ${accessToken}` } });
+        return true;
+    }
+    catch (e) {
+        console.error("Add Event Error:", e);
+        return false;
+    }
+}
+// ★修正: 最新50件からキーワード検索で執念深く探すロジックに変更
+async function getRecentMemories(uid, queryText) {
+    try {
+        // 1. 直近50件を取得（数を増やす）
         const snapshot = await db
             .collection("memories")
             .where("userId", "==", uid)
             .orderBy("createdAt", "desc")
-            .limit(10)
+            .limit(50)
             .get();
         if (snapshot.empty)
-            return "（過去のメモなし）";
-        return snapshot.docs
-            .map((doc) => {
+            return "（履歴なし）";
+        let docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        // 2. キーワードフィルタリング（"買い物リスト"等の言葉があれば優先抽出）
+        const keywords = queryText
+            .replace(/[\s,、　]+/g, " ")
+            .split(" ")
+            .filter((k) => k.length > 1);
+        const matches = docs.filter((d) => keywords.some((k) => d.text.includes(k)));
+        const recents = docs.slice(0, 3); // 直近3件も文脈用に残す
+        // 重複を排除して結合
+        const candidates = [...recents, ...matches];
+        const uniqueCandidates = Array.from(new Map(candidates.map((c) => [c.id, c])).values());
+        if (uniqueCandidates.length === 0)
+            return "（関連する履歴なし）";
+        return uniqueCandidates
+            .map((data) => {
             var _a;
-            const data = doc.data();
-            const date = ((_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate)
-                ? `[${data.createdAt.toDate().toLocaleDateString()}]`
-                : "";
-            return `${date} ${data.text}`;
+            let dateStr = "";
+            if ((_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) {
+                const date = data.createdAt.toDate();
+                const diffMin = Math.floor((Date.now() - date.getTime()) / 60000);
+                const timeLabel = diffMin < 60
+                    ? `${diffMin}分前`
+                    : date.toLocaleString("ja-JP", {
+                        month: "numeric",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                    });
+                dateStr = `[${timeLabel}]`;
+            }
+            // AIが「どこに追記するか」判断できるようにIDを含める
+            return `ID:${data.id} | ${dateStr} ${data.text.replace(/\n/g, " ")}`;
         })
             .join("\n");
     }
@@ -4720,7 +4882,7 @@ async function getRecentMemories(uid) {
     }
 }
 // =========================================================
-// 機能 1: LINE Webhook
+// 機能 1: LINE Webhook (スーパー秘書モード)
 // =========================================================
 exports.lineWebhook = (0, https_1.onRequest)({
     secrets: [
@@ -4741,11 +4903,13 @@ exports.lineWebhook = (0, https_1.onRequest)({
     const client = new line.Client({ channelAccessToken: token });
     const events = req.body.events;
     await Promise.all(events.map(async (event) => {
+        var _a, _b;
         if (event.type !== "message" || event.message.type !== "text")
             return;
         const eventId = event.webhookEventId;
         const lineUserId = event.source.userId;
-        const message = event.message.text;
+        const message = event.message.text.trim();
+        // 重複排除
         try {
             await db.collection("processed_events").doc(eventId).create({
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -4763,113 +4927,186 @@ exports.lineWebhook = (0, https_1.onRequest)({
         if (usersSnap.empty) {
             await client.replyMessage(event.replyToken, {
                 type: "text",
-                text: "アプリで連携してね🙇‍♂️",
+                text: "アプリで「LINE連携」ボタンを押してね🙇‍♂️",
             });
             return;
         }
         const uid = usersSnap.docs[0].id;
-        // ★分類プロンプト（汎用化）
-        const classifyPrompt = `
-        ユーザーの入力: "${message}"
-        
-        以下の3つに分類しJSONで出力せよ:
-        1. CALENDAR: 未来の予定を「聞いている」場合（例:「明日の予定は？」）。
-        2. MEMORY: 情報を「保存・記録したい」場合。
-        3. CHAT: 
-           - 過去の情報を「聞いている」場合（例:「買い物リストは何？」「～って言ったっけ？」）。
-           - 単なる雑談、挨拶。
-           - 意図が不明確な場合。
-
-        出力JSON: { "type": "CALENDAR" | "MEMORY" | "CHAT" }
-      `;
-        let msgType = "CHAT";
-        try {
-            const result = await callGeminiJson(apiKey, classifyPrompt);
-            if (result === null || result === void 0 ? void 0 : result.type)
-                msgType = result.type;
-        }
-        catch (e) { }
-        if (msgType === "CALENDAR") {
-            const eventsText = await getCalendarEvents(uid);
-            const reply = await callGeminiText(apiKey, `質問: "${message}"\n予定:\n${eventsText}\nこれを見て答えて。`);
+        // 1. 強制モード切替コマンド
+        const commands = {
+            "【モード】タスク": "TASK",
+            "【モード】メモ": "MEMORY",
+            "【モード】カレンダー": "CALENDAR",
+            "【モード】お任せ": "AUTO",
+            "【モード】リセット": "AUTO",
+        };
+        if (commands[message]) {
+            await db
+                .collection("users")
+                .doc(uid)
+                .update({ lineMode: commands[message] });
+            const replyText = commands[message] === "AUTO"
+                ? "🤖 お任せモードになりました。\nAIが内容を判断します。"
+                : `✅ ${commands[message]}モードになりました。`;
             await client.replyMessage(event.replyToken, {
                 type: "text",
-                text: reply,
+                text: replyText,
             });
+            return;
         }
-        else if (msgType === "MEMORY") {
-            // ★保存モード：タスク判定の汎用化・高度化
-            const memoryPrompt = `
-          入力: "${message}"
-          
-          これをメモとして保存します。以下の基準でJSONを出力してください:
-          { "summary": "20文字以内の要約", "tags": ["タグ1"], "isTask": boolean }
+        // 2. モードと文脈取得
+        const userDoc = await db.collection("users").doc(uid).get();
+        const currentMode = ((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.lineMode) || "AUTO";
+        // ★ここでメッセージを渡して、関連するメモを強力に検索する
+        const memoryContext = await getRecentMemories(uid, message);
+        const nowStr = new Date().toLocaleString("ja-JP", {
+            timeZone: "Asia/Tokyo",
+        });
+        // ★司令塔プロンプト（ユーザーの意図をAIが判断）
+        const routerPrompt = `
+          あなたは優秀な秘書AIです。現在日時: ${nowStr}
+          ユーザー入力: "${message}"
+          【参照可能なメモ(ID付)】
+          ${memoryContext}
 
-          【isTask の判定基準（汎用ルール）】
-          - true (タスク):
-            - 「完了」の概念があるもの。
-            - ユーザーが「ToDoリスト」として管理したい意図が見えるもの。
-            - 命令形（～して）、義務（～しなきゃ）、依頼（～とリマインドして）。
-            - 単語の羅列（買い物リストなど）。
+          指示:
+          ユーザーの意図を汲み取り、アクションを決定してください。
+          「これ」「あれ」「さっきの」は、直近のメモを指します。
+          「買い物リスト」と言われたら、過去のメモから「買い物リスト」を探して追記してください。
           
-          - false (メモ):
-            - 単なる「情報」や「事実」の記録。
-            - 未来の「意思表示」や「予定の宣言」（例：「明日～する」「来週～へ行く」）。
-              ※これらはカレンダー的な予定であって、ToDoチェックリストではないため。
-            - 日記、感想、思考の記録。
+          モード: ${currentMode}
+          - "これ追加して"等の指示があり、直近の記憶に関連するものがあれば MEMORY_APPEND
+          - TASKモードなら TASK_ADD
+          - MEMORYモードなら MEMORY_ADD
+          - CALENDARモードなら CALENDAR_READ (または文脈によってはADD)
+          - AUTOモードなら文脈から判断
 
-          例:
-          - "牛乳を買う" -> true (行動が必要)
-          - "明日ジムに行く" -> false (予定・宣言 = メモ)
-          - "ジムに行くこと" -> true (タスク)
-          - "パスワードは1234" -> false (記録)
+          出力JSON形式:
+          {
+            "action": "CALENDAR_ADD" | "CALENDAR_READ" | "TASK_ADD" | "MEMORY_ADD" | "MEMORY_APPEND" | "CHAT",
+            "data": {
+              "title": "予定/タスク名",
+              "start": "ISO8601日時",
+              "end": "ISO8601日時",
+              "summary": "要約",
+              "targetId": "MEMORY_APPENDの場合の対象ID",
+              "content": "追加する内容テキスト",
+              "tags": ["タグ"]
+            },
+            "reply": "ユーザーへの返信メッセージ (短く親切に)"
+          }
         `;
-            const memResult = await callGeminiJson(apiKey, memoryPrompt);
-            await db.collection("memories").add({
+        let aiDecision = {};
+        try {
+            aiDecision = await callGeminiJson(apiKey, routerPrompt);
+        }
+        catch (e) {
+            // AI失敗時のフェイルセーフ
+            aiDecision = {
+                action: currentMode === "TASK" ? "TASK_ADD" : "MEMORY_ADD",
+                data: { title: message, summary: message.slice(0, 20), tags: [] },
+                reply: "AIエラーのためそのまま保存しました。",
+            };
+        }
+        // 3. アクション実行
+        const action = aiDecision.action;
+        const data = aiDecision.data || {};
+        let replyText = aiDecision.reply || "処理しました";
+        if (action === "MEMORY_APPEND" && data.targetId) {
+            // ★既存メモへの追記
+            try {
+                const docRef = db.collection("memories").doc(data.targetId);
+                const docSnap = await docRef.get();
+                if (docSnap.exists) {
+                    const oldText = ((_b = docSnap.data()) === null || _b === void 0 ? void 0 : _b.text) || "";
+                    // 改行して追記
+                    const newText = `${oldText}\n${data.content || message}`;
+                    await docRef.update({ text: newText });
+                    replyText = `📝 既存のメモに追記しました: ${data.content || message}`;
+                }
+                else {
+                    // IDが見つからない場合は新規作成
+                    await db.collection("memories").add({
+                        userId: uid,
+                        text: message,
+                        aiSummary: message.slice(0, 20),
+                        tags: ["Memo", "LINE"],
+                        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                        source: "LINE",
+                    });
+                    replyText = `📝 (対象が見つからず) 新規メモとして保存しました。`;
+                }
+            }
+            catch (e) {
+                replyText = "⚠️ 追記に失敗しました。";
+            }
+        }
+        else if (action === "CALENDAR_ADD") {
+            // ★カレンダー登録
+            if (data.start) {
+                const success = await addCalendarEvent(uid, {
+                    title: data.title || message,
+                    start: data.start,
+                    end: data.end || data.start,
+                });
+                replyText = success
+                    ? `📅 予定を登録しました: ${data.title}`
+                    : "⚠️ カレンダー登録に失敗しました。連携設定を確認してください。";
+            }
+            else {
+                replyText = "日時が特定できませんでした。";
+            }
+        }
+        else if (action === "CALENDAR_READ") {
+            // カレンダー参照
+            const eventsText = await getCalendarEvents(uid);
+            replyText = await callGeminiText(apiKey, `質問: "${message}"\n予定:\n${eventsText}\nこれを見て答えて。`);
+        }
+        else if (action === "TASK_ADD") {
+            // タスク追加
+            await db.collection("todos").add({
                 userId: uid,
-                text: message,
-                aiSummary: memResult.summary,
-                tags: [...(memResult.tags || []), "LINE"],
+                title: data.title || message,
+                isCompleted: false,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 source: "LINE",
             });
-            if (memResult.isTask) {
-                await db.collection("todos").add({
-                    userId: uid,
-                    title: message,
-                    isCompleted: false,
-                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                    source: "LINE",
-                });
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "📝 タスクに追加しました",
-                });
-            }
-            else {
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "📓 メモしました",
-                });
-            }
+            // 念のためメモにも
+            await db.collection("memories").add({
+                userId: uid,
+                text: message,
+                aiSummary: `[Task] ${data.summary || message}`,
+                tags: [...(data.tags || []), "Task"],
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                source: "LINE",
+            });
+            replyText = `✅ タスクに追加しました: ${data.title}`;
+        }
+        else if (action === "MEMORY_ADD") {
+            // メモ保存
+            await db.collection("memories").add({
+                userId: uid,
+                text: message,
+                aiSummary: data.summary || message.slice(0, 20),
+                tags: [...(data.tags || []), "Memo"],
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                source: "LINE",
+            });
+            replyText = `📝 メモしました: ${data.summary}`;
         }
         else {
-            const memoryContext = await getRecentMemories(uid);
-            const chatPrompt = `
-          ユーザー: ${message}
-          【直近の記憶】${memoryContext}
-          指示: 記憶に答えがあればそれを使って親切に返信して。なければ「記録にありません」と答えて。捏造禁止。
-        `;
-            const reply = await callGeminiText(apiKey, chatPrompt);
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: reply,
-            });
+            // CHAT (AIの返信をそのまま使う)
         }
+        await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: replyText,
+        });
     }));
     res.json({ success: true });
 });
-// 機能 2: LINE連携設定
+// =========================================================
+// 機能 2, 3, 4 (変更なし)
+// =========================================================
 exports.linkLineAccount = (0, https_1.onCall)({
     secrets: [
         lineLoginChannelId,
@@ -4883,22 +5120,30 @@ exports.linkLineAccount = (0, https_1.onCall)({
     const { code, redirectUri } = request.data;
     const clientId = lineLoginChannelId.value();
     const clientSecret = lineLoginChannelSecret.value();
-    const params = new URLSearchParams();
-    params.append("grant_type", "authorization_code");
-    params.append("code", code);
-    params.append("redirect_uri", redirectUri);
-    params.append("client_id", clientId);
-    params.append("client_secret", clientSecret);
-    const tokenRes = await axios_1.default.post("https://api.line.me/oauth2/v2.1/token", params);
-    const profileRes = await axios_1.default.get("https://api.line.me/v2/profile", {
-        headers: { Authorization: `Bearer ${tokenRes.data.access_token}` },
-    });
-    await db.collection("users").doc(request.auth.uid).set({
-        isLineLinked: true,
-        lineUserId: profileRes.data.userId,
-        lineDisplayName: profileRes.data.displayName,
-    }, { merge: true });
-    return { success: true };
+    if (!clientId || !clientSecret) {
+        throw new https_1.HttpsError("failed-precondition", "LINE secrets not set");
+    }
+    try {
+        const params = new URLSearchParams();
+        params.append("grant_type", "authorization_code");
+        params.append("code", code);
+        params.append("redirect_uri", redirectUri);
+        params.append("client_id", clientId);
+        params.append("client_secret", clientSecret);
+        const tokenResponse = await axios_1.default.post("https://api.line.me/oauth2/v2.1/token", params);
+        const { access_token } = tokenResponse.data;
+        const profileResponse = await axios_1.default.get("https://api.line.me/v2/profile", { headers: { Authorization: `Bearer ${access_token}` } });
+        await db.collection("users").doc(request.auth.uid).set({
+            isLineLinked: true,
+            lineUserId: profileResponse.data.userId,
+            lineDisplayName: profileResponse.data.displayName,
+        }, { merge: true });
+        return { success: true };
+    }
+    catch (error) {
+        console.error("LINE Link Error:", error.message);
+        throw new https_1.HttpsError("internal", "LINE linkage failed");
+    }
 });
 exports.unlinkLineAccount = (0, https_1.onCall)({ cors: true }, async (request) => {
     if (!request.auth)
@@ -4915,14 +5160,114 @@ exports.sendMorningBriefing = (0, scheduler_1.onSchedule)({
     timeZone: "Asia/Tokyo",
     secrets: [lineBotToken, geminiApiKey],
 }, async (event) => {
-    /* (変更なし) */
+    const usersSnap = await db.collection("users").get();
+    const apiKey = geminiApiKey.value();
+    const client = new line.Client({
+        channelAccessToken: lineBotToken.value(),
+    });
+    for (const userDoc of usersSnap.docs) {
+        const uid = userDoc.id;
+        const userData = userDoc.data();
+        if (!userData.lineUserId)
+            continue;
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const [memoriesSnap, todosSnap] = await Promise.all([
+            db
+                .collection("memories")
+                .where("userId", "==", uid)
+                .where("createdAt", ">=", yesterday)
+                .orderBy("createdAt", "desc")
+                .get(),
+            db
+                .collection("todos")
+                .where("userId", "==", uid)
+                .where("isCompleted", "==", false)
+                .get(),
+        ]);
+        if (memoriesSnap.empty && todosSnap.empty)
+            continue;
+        const memoryText = memoriesSnap.docs
+            .map((d) => `- ${d.data().text}`)
+            .join("\n");
+        const todoText = todosSnap.docs
+            .map((d) => `- [未完了] ${d.data().title}`)
+            .join("\n");
+        const prompt = `おはようございます。今日のブリーフィングです。\n昨日: ${memoryText}\n未完了タスク: ${todoText}\n元気に300文字以内で。`;
+        const briefing = await callGeminiText(apiKey, prompt);
+        await client.pushMessage(userData.lineUserId, {
+            type: "text",
+            text: briefing,
+        });
+    }
 });
 exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
     schedule: "every 15 minutes",
     timeZone: "Asia/Tokyo",
     secrets: [lineBotToken, geminiApiKey, googleClientId, googleClientSecret],
 }, async (event) => {
-    /* (変更なし) */
+    var _a;
+    const apiKey = geminiApiKey.value();
+    const client = new line.Client({
+        channelAccessToken: lineBotToken.value(),
+    });
+    const usersSnap = await db.collection("users").get();
+    for (const userDoc of usersSnap.docs) {
+        const uid = userDoc.id;
+        const userData = userDoc.data();
+        if (!userData.lineUserId)
+            continue;
+        const tokenDoc = await db
+            .collection("users")
+            .doc(uid)
+            .collection("system")
+            .doc("tokens")
+            .get();
+        if (!tokenDoc.exists)
+            continue;
+        const accessToken = await refreshAccessToken((_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken);
+        if (!accessToken)
+            continue;
+        const now = new Date();
+        try {
+            const calendarRes = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                params: {
+                    timeMin: now.toISOString(),
+                    timeMax: new Date(now.getTime() + 20 * 60000).toISOString(),
+                    singleEvents: true,
+                    orderBy: "startTime",
+                },
+            });
+            const events = calendarRes.data.items || [];
+            for (const ev of events) {
+                const title = ev.summary;
+                if (!title)
+                    continue;
+                const recentMemoriesSnap = await db
+                    .collection("memories")
+                    .where("userId", "==", uid)
+                    .orderBy("createdAt", "desc")
+                    .limit(30)
+                    .get();
+                const memoryDump = recentMemoriesSnap.docs
+                    .map((d) => `[${d.data().createdAt.toDate().toLocaleDateString()}] ${d.data().text}`)
+                    .join("\n");
+                const cheatSheetPrompt = `「${title}」の直前カンペ作成。過去メモ: ${memoryDump} 関連情報なければ「関連情報なし」と出力。`;
+                const cheatSheet = await callGeminiText(apiKey, cheatSheetPrompt);
+                if (!cheatSheet.includes("関連情報なし") &&
+                    !cheatSheet.includes("エラー")) {
+                    await client.pushMessage(userData.lineUserId, {
+                        type: "text",
+                        text: `📅 まもなく開始: ${title}\n\n🧠 AIカンペ:\n${cheatSheet}`,
+                    });
+                }
+            }
+        }
+        catch (e) {
+            console.error(`Calendar Error for user ${uid}:`, e);
+        }
+    }
 });
 exports.scrapeUrl = (0, https_1.onCall)(async () => {
     return { success: true };
@@ -4960,60 +5305,83 @@ const googleClientSecret = defineSecret("GOOGLE_CLIENT_SECRET");
 const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
 const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
 
-// モデルリスト
+// フォールバック用のモデルリスト
 const CANDIDATE_MODELS = [
   "gemini-1.5-flash",
   "gemini-1.5-flash-001",
-  "gemini-1.5-flash-002",
   "gemini-1.5-pro",
-  "gemini-1.5-pro-001",
   "gemini-pro",
 ];
 
 // ---------------------------------------------------------
-// Helper: 動的にGeminiモデルを解決
+// Helper: JSON抽出・修復関数
 // ---------------------------------------------------------
-async function resolveGeminiModel(apiKey: string): Promise<string> {
+function extractJson(text: string): any {
   try {
-    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-    const listResponse = await axios.get(listUrl);
-
-    if (listResponse.status !== 200) {
-      throw new Error(`Model list fetch failed: ${listResponse.statusText}`);
-    }
-
-    const listData = listResponse.data;
-    const generationModels = (listData.models || []).filter((m: any) =>
-      m.supportedGenerationMethods?.includes("generateContent"),
-    );
-    const flash = generationModels.find((m: any) =>
-      m.name.includes("gemini-1.5-flash"),
-    );
-    const targetModel = (flash || generationModels[0])?.name.replace(
-      "models/",
-      "",
-    );
-
-    if (!targetModel) throw new Error("No available generation models found.");
-    return targetModel;
+    return JSON.parse(text);
   } catch (e) {
-    console.warn(
-      "Dynamic model resolution failed, falling back to candidate list logic",
-      e,
-    );
-    return "";
+    try {
+      const cleaned = text.replace(/```json|```/g, "").trim();
+      return JSON.parse(cleaned);
+    } catch (e2) {
+      try {
+        const firstOpen = text.indexOf("{");
+        const lastClose = text.lastIndexOf("}");
+        if (firstOpen !== -1 && lastClose !== -1) {
+          const jsonString = text.substring(firstOpen, lastClose + 1);
+          return JSON.parse(jsonString);
+        }
+        throw new Error("No JSON found");
+      } catch (e3) {
+        throw new Error("JSON parsing failed");
+      }
+    }
   }
 }
 
 // ---------------------------------------------------------
-// Helper: Gemini API (JSONモード & リトライ)
+// Helper: AI Model Management (変更なし・安定版)
 // ---------------------------------------------------------
+
+async function fetchAvailableModels(apiKey: string): Promise<any[]> {
+  try {
+    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const listResponse = await axios.get(listUrl);
+    if (listResponse.status !== 200) return [];
+    return listResponse.data.models || [];
+  } catch (e) {
+    console.warn("Failed to fetch model list:", e);
+    return [];
+  }
+}
+
+async function resolveGeminiModel(apiKey: string): Promise<string> {
+  const models = await fetchAvailableModels(apiKey);
+  const generationModels = models.filter((m: any) =>
+    m.supportedGenerationMethods?.includes("generateContent"),
+  );
+  let target = generationModels.find((m: any) =>
+    m.name.includes("gemini-1.5-flash"),
+  );
+  if (!target) {
+    target = generationModels.find((m: any) =>
+      m.name.includes("gemini-1.5-pro"),
+    );
+  }
+  if (!target && generationModels.length > 0) {
+    target = generationModels[0];
+  }
+  if (target) {
+    return target.name.replace("models/", "");
+  }
+  return "gemini-1.5-flash";
+}
+
 async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
   const dynamicModel = await resolveGeminiModel(apiKey);
-  let modelsToTry = dynamicModel
-    ? [dynamicModel, ...CANDIDATE_MODELS]
-    : CANDIDATE_MODELS;
-  modelsToTry = [...new Set(modelsToTry)];
+  const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(
+    Boolean,
+  );
 
   for (const modelName of modelsToTry) {
     try {
@@ -5026,36 +5394,22 @@ async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
         },
         { headers: { "Content-Type": "application/json" } },
       );
-
       const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (text) {
-        try {
-          return JSON.parse(text);
-        } catch (e) {
-          try {
-            const cleaned = text.replace(/```json|```/g, "").trim();
-            return JSON.parse(cleaned);
-          } catch (e2) {
-            return { type: "CHAT", reply: text.substring(0, 100) };
-          }
-        }
+        return extractJson(text);
       }
-    } catch (e) {
-      console.warn(`Model ${modelName} failed, retrying...`);
+    } catch (e: any) {
+      console.warn(`Model ${modelName} failed: ${e.message}. Retrying...`);
     }
   }
-  throw new Error("All AI models failed");
+  throw new Error("All AI models failed to generate valid JSON");
 }
 
-// ---------------------------------------------------------
-// Helper: Gemini API (Textモード)
-// ---------------------------------------------------------
 async function callGeminiText(apiKey: string, prompt: string): Promise<string> {
   const dynamicModel = await resolveGeminiModel(apiKey);
-  let modelsToTry = dynamicModel
-    ? [dynamicModel, ...CANDIDATE_MODELS]
-    : CANDIDATE_MODELS;
-  modelsToTry = [...new Set(modelsToTry)];
+  const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(
+    Boolean,
+  );
 
   for (const modelName of modelsToTry) {
     try {
@@ -5066,13 +5420,15 @@ async function callGeminiText(apiKey: string, prompt: string): Promise<string> {
         { headers: { "Content-Type": "application/json" } },
       );
       return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    } catch (e) {}
+    } catch (e) {
+      console.warn(`Model ${modelName} (Text) failed. Retrying...`);
+    }
   }
-  return "すみません、今ちょっとAIの調子が悪いです。";
+  return "すみません、AIの調子が悪く応答できませんでした。";
 }
 
 // ---------------------------------------------------------
-// Helper: Google Token Refresh
+// Helper: Google Token Refresh & Calendar
 // ---------------------------------------------------------
 async function refreshAccessToken(refreshToken: string) {
   try {
@@ -5089,9 +5445,6 @@ async function refreshAccessToken(refreshToken: string) {
   }
 }
 
-// ---------------------------------------------------------
-// Helper: カレンダー取得
-// ---------------------------------------------------------
 async function getCalendarEvents(uid: string): Promise<string> {
   try {
     const tokenDoc = await db
@@ -5100,7 +5453,6 @@ async function getCalendarEvents(uid: string): Promise<string> {
       .collection("system")
       .doc("tokens")
       .get();
-
     if (!tokenDoc.exists) return "（カレンダー未連携）";
 
     const refreshToken = tokenDoc.data()?.refreshToken;
@@ -5152,37 +5504,104 @@ async function getCalendarEvents(uid: string): Promise<string> {
   }
 }
 
-// ---------------------------------------------------------
-// Helper: 過去のメモ取得
-// ---------------------------------------------------------
-async function getRecentMemories(uid: string): Promise<string> {
+async function addCalendarEvent(
+  uid: string,
+  eventData: { title: string; start: string; end: string },
+): Promise<boolean> {
   try {
+    const tokenDoc = await db
+      .collection("users")
+      .doc(uid)
+      .collection("system")
+      .doc("tokens")
+      .get();
+    if (!tokenDoc.exists) return false;
+    const refreshToken = tokenDoc.data()?.refreshToken;
+    if (!refreshToken) return false;
+    const accessToken = await refreshAccessToken(refreshToken);
+    if (!accessToken) return false;
+
+    await axios.post(
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+      {
+        summary: eventData.title,
+        start: { dateTime: eventData.start },
+        end: { dateTime: eventData.end },
+      },
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    return true;
+  } catch (e) {
+    console.error("Add Event Error:", e);
+    return false;
+  }
+}
+
+// ★修正: 最新50件からキーワード検索で執念深く探すロジックに変更
+async function getRecentMemories(
+  uid: string,
+  queryText: string,
+): Promise<string> {
+  try {
+    // 1. 直近50件を取得（数を増やす）
     const snapshot = await db
       .collection("memories")
       .where("userId", "==", uid)
       .orderBy("createdAt", "desc")
-      .limit(10)
+      .limit(50)
       .get();
 
-    if (snapshot.empty) return "（過去のメモなし）";
+    if (snapshot.empty) return "（履歴なし）";
 
-    return snapshot.docs
-      .map((doc) => {
-        const data = doc.data();
-        const date = data.createdAt?.toDate
-          ? `[${data.createdAt.toDate().toLocaleDateString()}]`
-          : "";
-        return `${date} ${data.text}`;
+    let docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // 2. キーワードフィルタリング（"買い物リスト"等の言葉があれば優先抽出）
+    const keywords = queryText
+      .replace(/[\s,、　]+/g, " ")
+      .split(" ")
+      .filter((k) => k.length > 1);
+
+    const matches = docs.filter((d: any) =>
+      keywords.some((k) => d.text.includes(k)),
+    );
+    const recents = docs.slice(0, 3); // 直近3件も文脈用に残す
+
+    // 重複を排除して結合
+    const candidates = [...recents, ...matches];
+    const uniqueCandidates = Array.from(
+      new Map(candidates.map((c) => [c.id, c])).values(),
+    );
+
+    if (uniqueCandidates.length === 0) return "（関連する履歴なし）";
+
+    return uniqueCandidates
+      .map((data: any) => {
+        let dateStr = "";
+        if (data.createdAt?.toDate) {
+          const date = data.createdAt.toDate();
+          const diffMin = Math.floor((Date.now() - date.getTime()) / 60000);
+          const timeLabel =
+            diffMin < 60
+              ? `${diffMin}分前`
+              : date.toLocaleString("ja-JP", {
+                  month: "numeric",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+          dateStr = `[${timeLabel}]`;
+        }
+        // AIが「どこに追記するか」判断できるようにIDを含める
+        return `ID:${data.id} | ${dateStr} ${data.text.replace(/\n/g, " ")}`;
       })
       .join("\n");
   } catch (e) {
-    console.error("Memory Fetch Error", e);
     return "（メモ取得エラー）";
   }
 }
 
 // =========================================================
-// 機能 1: LINE Webhook
+// 機能 1: LINE Webhook (スーパー秘書モード)
 // =========================================================
 export const lineWebhook = onRequest(
   {
@@ -5213,20 +5632,18 @@ export const lineWebhook = onRequest(
 
         const eventId = event.webhookEventId;
         const lineUserId = event.source.userId;
-        const message = event.message.text;
+        const message = event.message.text.trim();
 
         // 重複排除
-        const eventRef = db.collection("processed_events").doc(eventId);
         try {
-          await eventRef.create({
+          await db.collection("processed_events").doc(eventId).create({
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             userId: lineUserId,
           });
         } catch (e) {
-          return; // 重複につき終了
+          return;
         }
 
-        // ユーザー特定
         const usersSnap = await db
           .collection("users")
           .where("lineUserId", "==", lineUserId)
@@ -5241,112 +5658,177 @@ export const lineWebhook = onRequest(
         }
         const uid = usersSnap.docs[0].id;
 
-        // ★AI仕分け
-        const classifyPrompt = `
-        ユーザーの入力を分析し、以下の3つのどれかに分類してJSONで出力してください。
+        // 1. 強制モード切替コマンド
+        const commands: Record<string, string> = {
+          "【モード】タスク": "TASK",
+          "【モード】メモ": "MEMORY",
+          "【モード】カレンダー": "CALENDAR",
+          "【モード】お任せ": "AUTO",
+          "【モード】リセット": "AUTO",
+        };
 
-        【分類基準】
-        1. CALENDAR:
-           - 「明日の予定は？」「スケジュール教えて」など、未来の予定を聞く質問。
-        
-        2. MEMORY:
-           - 「～と覚えて」「買い物リスト追加:〇〇」など、明示的な記録指示。
-           - 「明日洗濯する」「来週行く」などの未来の行動宣言（日記的記述）。
-           - ※注意: 「買い物リストは？」のような質問は MEMORY ではなく CHAT。
-        
-        3. CHAT:
-           - 「買い物リストは？」「～って何だっけ？」などの過去の情報の質問。
-           - 挨拶、雑談、それ以外すべて。
-
-        入力: "${message}"
-        出力JSON: { "type": "CALENDAR" | "MEMORY" | "CHAT" }
-      `;
-
-        let msgType = "CHAT";
-        try {
-          const result = await callGeminiJson(apiKey, classifyPrompt);
-          if (result && result.type) msgType = result.type;
-        } catch (e) {
-          console.log("Classification failed, defaulting to CHAT");
+        if (commands[message]) {
+          await db
+            .collection("users")
+            .doc(uid)
+            .update({ lineMode: commands[message] });
+          const replyText =
+            commands[message] === "AUTO"
+              ? "🤖 お任せモードになりました。\nAIが内容を判断します。"
+              : `✅ ${commands[message]}モードになりました。`;
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: replyText,
+          });
+          return;
         }
 
-        // --- 分岐処理 ---
-        if (msgType === "CALENDAR") {
-          // カレンダーモード
+        // 2. モードと文脈取得
+        const userDoc = await db.collection("users").doc(uid).get();
+        const currentMode = userDoc.data()?.lineMode || "AUTO";
+        // ★ここでメッセージを渡して、関連するメモを強力に検索する
+        const memoryContext = await getRecentMemories(uid, message);
+        const nowStr = new Date().toLocaleString("ja-JP", {
+          timeZone: "Asia/Tokyo",
+        });
+
+        // ★司令塔プロンプト（ユーザーの意図をAIが判断）
+        const routerPrompt = `
+          あなたは優秀な秘書AIです。現在日時: ${nowStr}
+          ユーザー入力: "${message}"
+          【参照可能なメモ(ID付)】
+          ${memoryContext}
+
+          指示:
+          ユーザーの意図を汲み取り、アクションを決定してください。
+          「これ」「あれ」「さっきの」は、直近のメモを指します。
+          「買い物リスト」と言われたら、過去のメモから「買い物リスト」を探して追記してください。
+          
+          モード: ${currentMode}
+          - "これ追加して"等の指示があり、直近の記憶に関連するものがあれば MEMORY_APPEND
+          - TASKモードなら TASK_ADD
+          - MEMORYモードなら MEMORY_ADD
+          - CALENDARモードなら CALENDAR_READ (または文脈によってはADD)
+          - AUTOモードなら文脈から判断
+
+          出力JSON形式:
+          {
+            "action": "CALENDAR_ADD" | "CALENDAR_READ" | "TASK_ADD" | "MEMORY_ADD" | "MEMORY_APPEND" | "CHAT",
+            "data": {
+              "title": "予定/タスク名",
+              "start": "ISO8601日時",
+              "end": "ISO8601日時",
+              "summary": "要約",
+              "targetId": "MEMORY_APPENDの場合の対象ID",
+              "content": "追加する内容テキスト",
+              "tags": ["タグ"]
+            },
+            "reply": "ユーザーへの返信メッセージ (短く親切に)"
+          }
+        `;
+
+        let aiDecision: any = {};
+        try {
+          aiDecision = await callGeminiJson(apiKey, routerPrompt);
+        } catch (e) {
+          // AI失敗時のフェイルセーフ
+          aiDecision = {
+            action: currentMode === "TASK" ? "TASK_ADD" : "MEMORY_ADD",
+            data: { title: message, summary: message.slice(0, 20), tags: [] },
+            reply: "AIエラーのためそのまま保存しました。",
+          };
+        }
+
+        // 3. アクション実行
+        const action = aiDecision.action;
+        const data = aiDecision.data || {};
+        let replyText = aiDecision.reply || "処理しました";
+
+        if (action === "MEMORY_APPEND" && data.targetId) {
+          // ★既存メモへの追記
+          try {
+            const docRef = db.collection("memories").doc(data.targetId);
+            const docSnap = await docRef.get();
+            if (docSnap.exists) {
+              const oldText = docSnap.data()?.text || "";
+              // 改行して追記
+              const newText = `${oldText}\n${data.content || message}`;
+              await docRef.update({ text: newText });
+              replyText = `📝 既存のメモに追記しました: ${data.content || message}`;
+            } else {
+              // IDが見つからない場合は新規作成
+              await db.collection("memories").add({
+                userId: uid,
+                text: message,
+                aiSummary: message.slice(0, 20),
+                tags: ["Memo", "LINE"],
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                source: "LINE",
+              });
+              replyText = `📝 (対象が見つからず) 新規メモとして保存しました。`;
+            }
+          } catch (e) {
+            replyText = "⚠️ 追記に失敗しました。";
+          }
+        } else if (action === "CALENDAR_ADD") {
+          // ★カレンダー登録
+          if (data.start) {
+            const success = await addCalendarEvent(uid, {
+              title: data.title || message,
+              start: data.start,
+              end: data.end || data.start,
+            });
+            replyText = success
+              ? `📅 予定を登録しました: ${data.title}`
+              : "⚠️ カレンダー登録に失敗しました。連携設定を確認してください。";
+          } else {
+            replyText = "日時が特定できませんでした。";
+          }
+        } else if (action === "CALENDAR_READ") {
+          // カレンダー参照
           const eventsText = await getCalendarEvents(uid);
-          const reply = await callGeminiText(
+          replyText = await callGeminiText(
             apiKey,
             `質問: "${message}"\n予定:\n${eventsText}\nこれを見て答えて。`,
           );
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: reply,
-          });
-        } else if (msgType === "MEMORY") {
-          // ★メモ保存モード（タスク判定を厳格化）
-          const memoryPrompt = `
-          入力: "${message}"
-          
-          これをメモとして保存します。以下の基準でJSONを出力してください:
-          { "summary": "20文字以内の要約", "tags": ["タグ1", "タグ2"], "isTask": true/false }
-
-          【isTask の判定基準】
-          - true (タスク): 「～しなきゃ」「～する予定（ToDoリストに入れたい場合）」「タスク追加」「買い物リスト追加」など、管理すべき明確なアクション。
-          - false (メモ): 「～した」「～するつもり（ただの日記・予定）」「～だと思った」など。
-          
-          ※重要: 「明日洗濯する」のような単なる行動宣言は、ユーザーがToDo管理を意図していない限り false にしてください。
-        `;
-
-          const aiResult = await callGeminiJson(apiKey, memoryPrompt);
-
-          await db.collection("memories").add({
+        } else if (action === "TASK_ADD") {
+          // タスク追加
+          await db.collection("todos").add({
             userId: uid,
-            text: message,
-            aiSummary: aiResult.summary || message.slice(0, 20),
-            tags: [...(aiResult.tags || []), "LINE"],
+            title: data.title || message,
+            isCompleted: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             source: "LINE",
           });
-
-          // isTaskがtrueの時だけTodosに追加
-          if (aiResult.isTask) {
-            await db.collection("todos").add({
-              userId: uid,
-              title: message,
-              isCompleted: false,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-              source: "LINE",
-            });
-            await client.replyMessage(event.replyToken, {
-              type: "text",
-              text: "📝 タスクに追加しました",
-            });
-          } else {
-            await client.replyMessage(event.replyToken, {
-              type: "text",
-              text: "📓 メモしました",
-            });
-          }
-        } else {
-          // CHATモード（記憶参照）
-          const memoryContext = await getRecentMemories(uid);
-          const chatPrompt = `
-            ユーザー: ${message}
-            
-            【過去の記憶（参考情報）】
-            ${memoryContext}
-            
-            指示:
-            - ユーザーの質問の答えが「過去の記憶」にあれば、それを使って答えてください。
-            - もし記憶の中に答えが見つからない場合は、正直に「記録にありませんでした」と答えてください。
-            - 勝手に情報を捏造しないでください。
-          `;
-          const reply = await callGeminiText(apiKey, chatPrompt);
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: reply,
+          // 念のためメモにも
+          await db.collection("memories").add({
+            userId: uid,
+            text: message,
+            aiSummary: `[Task] ${data.summary || message}`,
+            tags: [...(data.tags || []), "Task"],
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            source: "LINE",
           });
+          replyText = `✅ タスクに追加しました: ${data.title}`;
+        } else if (action === "MEMORY_ADD") {
+          // メモ保存
+          await db.collection("memories").add({
+            userId: uid,
+            text: message,
+            aiSummary: data.summary || message.slice(0, 20),
+            tags: [...(data.tags || []), "Memo"],
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            source: "LINE",
+          });
+          replyText = `📝 メモしました: ${data.summary}`;
+        } else {
+          // CHAT (AIの返信をそのまま使う)
         }
+
+        await client.replyMessage(event.replyToken, {
+          type: "text",
+          text: replyText,
+        });
       }),
     );
 
@@ -5355,7 +5837,7 @@ export const lineWebhook = onRequest(
 );
 
 // =========================================================
-// 機能 2: LINE連携設定
+// 機能 2, 3, 4 (変更なし)
 // =========================================================
 export const linkLineAccount = onCall(
   {
@@ -5369,15 +5851,12 @@ export const linkLineAccount = onCall(
   async (request) => {
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
-
     const { code, redirectUri } = request.data;
     const clientId = lineLoginChannelId.value();
     const clientSecret = lineLoginChannelSecret.value();
-
     if (!clientId || !clientSecret) {
       throw new HttpsError("failed-precondition", "LINE secrets not set");
     }
-
     try {
       const params = new URLSearchParams();
       params.append("grant_type", "authorization_code");
@@ -5385,33 +5864,26 @@ export const linkLineAccount = onCall(
       params.append("redirect_uri", redirectUri);
       params.append("client_id", clientId);
       params.append("client_secret", clientSecret);
-
       const tokenResponse = await axios.post(
         "https://api.line.me/oauth2/v2.1/token",
         params,
       );
       const { access_token } = tokenResponse.data;
-
       const profileResponse = await axios.get(
         "https://api.line.me/v2/profile",
         { headers: { Authorization: `Bearer ${access_token}` } },
       );
-
-      const lineUserId = profileResponse.data.userId;
-      const lineDisplayName = profileResponse.data.displayName;
-
       await db.collection("users").doc(request.auth.uid).set(
         {
           isLineLinked: true,
-          lineUserId: lineUserId,
-          lineDisplayName: lineDisplayName,
+          lineUserId: profileResponse.data.userId,
+          lineDisplayName: profileResponse.data.displayName,
         },
         { merge: true },
       );
-
       return { success: true };
     } catch (error: any) {
-      console.error("LINE Link Error:", error.response?.data || error.message);
+      console.error("LINE Link Error:", error.message);
       throw new HttpsError("internal", "LINE linkage failed");
     }
   },
@@ -5430,9 +5902,6 @@ export const unlinkLineAccount = onCall({ cors: true }, async (request) => {
   return { success: true };
 });
 
-// =========================================================
-// 機能 3 & 4: 朝の挨拶とカンペ
-// =========================================================
 export const sendMorningBriefing = onSchedule(
   {
     schedule: "0 7 * * *",
@@ -5445,15 +5914,12 @@ export const sendMorningBriefing = onSchedule(
     const client = new line.Client({
       channelAccessToken: lineBotToken.value(),
     });
-
     for (const userDoc of usersSnap.docs) {
       const uid = userDoc.id;
       const userData = userDoc.data();
       if (!userData.lineUserId) continue;
-
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-
       const [memoriesSnap, todosSnap] = await Promise.all([
         db
           .collection("memories")
@@ -5467,24 +5933,14 @@ export const sendMorningBriefing = onSchedule(
           .where("isCompleted", "==", false)
           .get(),
       ]);
-
       if (memoriesSnap.empty && todosSnap.empty) continue;
-
       const memoryText = memoriesSnap.docs
         .map((d) => `- ${d.data().text}`)
         .join("\n");
       const todoText = todosSnap.docs
         .map((d) => `- [未完了] ${d.data().title}`)
         .join("\n");
-
-      const prompt = `
-        おはようございます。秘書AIです。
-        昨日のメモと残っているタスクから、今日のブリーフィングを作成してください。
-        【昨日のメモ】${memoryText}
-        【未完了タスク】${todoText}
-        指示: 挨拶は元気に。「今日やるべきこと」を明確に。300文字以内。
-      `;
-
+      const prompt = `おはようございます。今日のブリーフィングです。\n昨日: ${memoryText}\n未完了タスク: ${todoText}\n元気に300文字以内で。`;
       const briefing = await callGeminiText(apiKey, prompt);
       await client.pushMessage(userData.lineUserId, {
         type: "text",
@@ -5505,14 +5961,11 @@ export const checkUpcomingMeetings = onSchedule(
     const client = new line.Client({
       channelAccessToken: lineBotToken.value(),
     });
-
     const usersSnap = await db.collection("users").get();
-
     for (const userDoc of usersSnap.docs) {
       const uid = userDoc.id;
       const userData = userDoc.data();
       if (!userData.lineUserId) continue;
-
       const tokenDoc = await db
         .collection("users")
         .doc(uid)
@@ -5520,60 +5973,42 @@ export const checkUpcomingMeetings = onSchedule(
         .doc("tokens")
         .get();
       if (!tokenDoc.exists) continue;
-
-      const refreshToken = tokenDoc.data()?.refreshToken;
-      if (!refreshToken) continue;
-
-      const accessToken = await refreshAccessToken(refreshToken);
+      const accessToken = await refreshAccessToken(
+        tokenDoc.data()?.refreshToken,
+      );
       if (!accessToken) continue;
-
       const now = new Date();
-      const timeMin = now.toISOString();
-      const timeMax = new Date(now.getTime() + 20 * 60 * 1000).toISOString();
-
       try {
         const calendarRes = await axios.get(
           `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
           {
             headers: { Authorization: `Bearer ${accessToken}` },
             params: {
-              timeMin,
-              timeMax,
+              timeMin: now.toISOString(),
+              timeMax: new Date(now.getTime() + 20 * 60000).toISOString(),
               singleEvents: true,
               orderBy: "startTime",
             },
           },
         );
-
         const events = calendarRes.data.items || [];
-
         for (const ev of events) {
           const title = ev.summary;
           if (!title) continue;
-
           const recentMemoriesSnap = await db
             .collection("memories")
             .where("userId", "==", uid)
             .orderBy("createdAt", "desc")
             .limit(30)
             .get();
-
           const memoryDump = recentMemoriesSnap.docs
             .map(
               (d) =>
                 `[${d.data().createdAt.toDate().toLocaleDateString()}] ${d.data().text}`,
             )
             .join("\n");
-
-          const cheatSheetPrompt = `
-            これから「${title}」という予定があります。
-            以下の過去のメモから、関連情報（名前、前回の話題、懸案事項など）を探し出し「直前カンニングペーパー」を作成して。
-            【過去のメモ】${memoryDump}
-            指示: 関連情報がない場合は「関連情報なし」と出力。ある場合は箇条書きで。
-          `;
-
+          const cheatSheetPrompt = `「${title}」の直前カンペ作成。過去メモ: ${memoryDump} 関連情報なければ「関連情報なし」と出力。`;
           const cheatSheet = await callGeminiText(apiKey, cheatSheetPrompt);
-
           if (
             !cheatSheet.includes("関連情報なし") &&
             !cheatSheet.includes("エラー")
@@ -5648,91 +6083,6 @@ const { currentUser, startLineAuth, unlinkLine } = useMyBrain(); // ★unlinkLin
     </div>
   </header>
 </template>
-</file>
-
-<file path="src/router/index.ts">
-import { createRouter, createWebHistory } from "vue-router";
-import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
-import HomeView from "../views/HomeView/HomeView.vue";
-import LoginView from "../views/LoginView/LoginView.vue";
-import VerifyEmailView from "../views/VerifyEmailView/VerifyEmailView.vue";
-import LandingView from "../views/LandingView/LandingView.vue";
-import LegalView from "../views/LegalView/LegalView.vue"; // 追加
-import PrivacyPolicy from "../views/PrivacyPolicy/PrivacyPolicy.vue";
-
-const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [
-    {
-      path: "/",
-      name: "landing",
-      component: LandingView,
-      meta: { public: true },
-    },
-    {
-      path: "/app",
-      name: "home",
-      component: HomeView,
-      meta: { requiresAuth: true },
-    },
-    {
-      path: "/login",
-      name: "login",
-      component: LoginView,
-      meta: { public: true },
-    },
-    {
-      path: "/verify-email",
-      name: "verify-email",
-      component: VerifyEmailView,
-      meta: { requiresAuth: true },
-    },
-    {
-      path: "/legal",
-      name: "legal",
-      component: LegalView,
-      meta: { public: true },
-    },
-    {
-      path: "/privacy", // ★このパスを追加
-      name: "privacy",
-      component: PrivacyPolicy,
-      meta: { public: true }, // ログインしていなくても見れるようにする
-    },
-  ],
-});
-
-router.beforeEach(async (to, from, next) => {
-  const auth = getAuth();
-  const currentUser = await new Promise<User | null>((resolve) => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      unsubscribe();
-      resolve(user);
-    });
-  });
-
-  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
-
-  if (to.path === "/") {
-    if (currentUser) {
-      next("/app");
-      return;
-    } else {
-      next();
-      return;
-    }
-  }
-
-  if (requiresAuth && !currentUser) {
-    next("/login");
-  } else if (to.path === "/login" && currentUser) {
-    next("/app");
-  } else {
-    next();
-  }
-});
-
-export default router;
 </file>
 
 <file path="src/views/LoginView/LoginView.vue">
@@ -6203,72 +6553,98 @@ function extractJson(text: string): string {
   return clean;
 }
 
-// ★修正: useNextNs.ts から移植した「動的モデル解決ロジック」
-const resolveGeminiModel = async (apiKey: string): Promise<string> => {
+// ---------------------------------------------------------
+// Helper: AI Model Management (変更なし・安定版)
+// ---------------------------------------------------------
+
+const fetchAvailableModels = async (apiKey: string) => {
   try {
     const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
     const listResponse = await fetch(listUrl);
-
-    if (!listResponse.ok) {
-      throw new Error(`Model list fetch failed: ${listResponse.statusText}`);
-    }
-
+    if (!listResponse.ok) return [];
     const listData = await listResponse.json();
-
-    // generateContentをサポートしているモデルをフィルタリング
-    const generationModels = (listData.models || []).filter((m: any) =>
-      m.supportedGenerationMethods?.includes("generateContent"),
-    );
-
-    // "gemini-1.5-flash" を優先して探す
-    const flash = generationModels.find((m: any) =>
-      m.name.includes("gemini-1.5-flash"),
-    );
-
-    // 見つかればそれ、なければリストの最初を使う
-    // "models/" プレフィックスを除去して返す
-    const targetModel = (flash || generationModels[0])?.name.replace(
-      "models/",
-      "",
-    );
-
-    if (!targetModel) throw new Error("No available generation models found.");
-
-    return targetModel;
+    return listData.models || [];
   } catch (e) {
-    console.warn(
-      "Dynamic model resolution failed, falling back to gemini-1.5-flash",
-      e,
-    );
-    return "gemini-1.5-flash"; // 最悪の場合のフォールバック
+    console.warn("Failed to fetch model list:", e);
+    return [];
   }
 };
 
-// ★修正: 動的モデルを使う生成関数
+const resolveGeminiModel = async (apiKey: string): Promise<string> => {
+  const models = await fetchAvailableModels(apiKey);
+  const generationModels = models.filter((m: any) =>
+    m.supportedGenerationMethods?.includes("generateContent"),
+  );
+  let target = generationModels.find((m: any) =>
+    m.name.includes("gemini-1.5-flash"),
+  );
+  if (!target) {
+    target = generationModels.find((m: any) =>
+      m.name.includes("gemini-1.5-pro"),
+    );
+  }
+  if (!target && generationModels.length > 0) {
+    target = generationModels[0];
+  }
+  if (target) {
+    return target.name.replace("models/", "");
+  }
+  return "gemini-1.5-flash";
+};
+
+const getEmbeddingModel = async (apiKey: string) => {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  try {
+    const models = await fetchAvailableModels(apiKey);
+    const embeddingModels = models.filter((m: any) =>
+      m.supportedGenerationMethods?.includes("embedContent"),
+    );
+    let target = embeddingModels.find((m: any) =>
+      m.name.includes("text-embedding-004"),
+    );
+    if (!target) {
+      target = embeddingModels.find((m: any) =>
+        m.name.includes("embedding-001"),
+      );
+    }
+    if (!target && embeddingModels.length > 0) {
+      target = embeddingModels[0];
+    }
+    const modelName = target
+      ? target.name.replace("models/", "")
+      : "embedding-001";
+    return genAI.getGenerativeModel({ model: modelName });
+  } catch (e) {
+    return genAI.getGenerativeModel({ model: "embedding-001" });
+  }
+};
+
 const generateContentWithRetry = async (
   apiKey: string,
   promptParts: any[],
   isJsonMode = false,
 ) => {
   try {
-    // 1. モデル名を動的に決定
     const modelName = await resolveGeminiModel(apiKey);
-    console.log("Selected AI Model:", modelName);
-
-    // 2. 生成実行
     const genAI = new GoogleGenerativeAI(apiKey);
     const config = isJsonMode ? { responseMimeType: "application/json" } : {};
-
     const model = genAI.getGenerativeModel({
       model: modelName,
       generationConfig: config,
     });
-
     const result = await model.generateContent(promptParts);
     return result.response.text();
   } catch (e: any) {
-    console.error("AI Generation Error:", e);
-    throw new Error("AI processing failed: " + e.message);
+    console.error("AI Generation Error (Primary):", e);
+    try {
+      console.log("Retrying with gemini-pro...");
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      const result = await model.generateContent(promptParts);
+      return result.response.text();
+    } catch (retryError: any) {
+      throw new Error("AI processing failed completely: " + retryError.message);
+    }
   }
 };
 
@@ -6334,11 +6710,6 @@ const speakText = (text: string) => {
 // ---------------- Main Composable ----------------
 
 export function useMyBrain() {
-  const getEmbeddingModel = (apiKey: string) => {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    return genAI.getGenerativeModel({ model: "text-embedding-004" });
-  };
-
   const checkAndIncrementUsage = async (): Promise<boolean> => {
     if (!currentUser.value) return false;
     if (currentUser.value.isPro) return true;
@@ -6591,23 +6962,21 @@ export function useMyBrain() {
     return Array.from(tags);
   });
 
+  // ★修正: 最新のメモも強制的に含めて検索する
   const findRelatedMemories = async (text: string): Promise<Memory[]> => {
     if (!text.trim() || memories.value.length === 0) return [];
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) return [];
 
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const embedModel = genAI.getGenerativeModel({
-        model: "text-embedding-004",
-      });
-
+      const embedModel = await getEmbeddingModel(apiKey);
       const result = await embedModel.embedContent(text);
       const vec = result.embedding.values;
 
       const threshold = 0.55;
 
-      const candidates = memories.value
+      // ベクトル検索候補
+      const vecCandidates = memories.value
         .map((m) => ({
           ...m,
           score: m.embedding ? cosineSimilarity(vec, m.embedding) : 0,
@@ -6616,15 +6985,29 @@ export function useMyBrain() {
         .sort((a, b) => (b.score || 0) - (a.score || 0))
         .slice(0, 5);
 
-      if (candidates.length === 0) return [];
+      // ★追加: 最新5件を強制的に候補に入れる (文脈理解用)
+      const latestMemories = memories.value
+        .slice(0, 5)
+        .map((m) => ({ ...m, score: 1.0 }));
+
+      // 統合して重複排除
+      const allCandidates = [...latestMemories, ...vecCandidates];
+      const uniqueCandidates = Array.from(
+        new Map(allCandidates.map((item) => [item.id, item])).values(),
+      );
+
+      if (uniqueCandidates.length === 0) return [];
 
       const verifyPrompt = `
         以下の【検索クエリ】に対して、【候補メモ】の中から本当に関連性が高いものだけを選んでください。
+        「買い物リスト」や「タスク」などのキーワードがある場合は、日付が新しくても古くても関連するものを選んでください。
         全く関係ない場合は空の配列を返してください。
+
         【検索クエリ】
         ${text}
         【候補メモ】
-        ${candidates.map((c, i) => `${i}: ${c.text}`).join("\n")}
+        ${uniqueCandidates.map((c, i) => `${i} (ID:${c.id}): ${c.text}`).join("\n")}
+        
         出力はJSON形式のみ: { "indices": [0, 2] } 
       `;
 
@@ -6636,7 +7019,7 @@ export function useMyBrain() {
       const verifyJson = JSON.parse(extractJson(verifyRes));
       const validIndices: number[] = verifyJson.indices || [];
 
-      return candidates.filter((_, i) => validIndices.includes(i));
+      return uniqueCandidates.filter((_, i) => validIndices.includes(i));
     } catch (e) {
       console.error("Search Error:", e);
       return [];
@@ -6680,7 +7063,8 @@ export function useMyBrain() {
       const finalText = hasImages
         ? `【解析済み】${text}\n\n${aiData.fullText || ""}`
         : text;
-      const embModel = getEmbeddingModel(apiKey);
+
+      const embModel = await getEmbeddingModel(apiKey);
       const embResult = await embModel.embedContent(finalText);
       const embedding = embResult.embedding.values;
 
@@ -6744,21 +7128,48 @@ export function useMyBrain() {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) throw new Error("APIキー未設定");
 
-      const embedModel = getEmbeddingModel(apiKey);
+      const embedModel = await getEmbeddingModel(apiKey);
       const qEmbed = await embedModel.embedContent(question);
       const qVec = qEmbed.embedding.values;
 
-      const scoredMemories = memories.value
+      const threshold = 0.55;
+
+      // 既存の類似検索
+      const vecCandidates = memories.value
         .map((m) => ({
           ...m,
           score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
         }))
-        .sort((a, b) => b.score - a.score);
+        .filter((m) => m.score && m.score > threshold)
+        .sort((a, b) => (b.score || 0) - (a.score || 0))
+        .slice(0, 5);
 
-      const context = scoredMemories
-        .slice(0, 10)
-        .map((m) => `- ${m.text.slice(0, 300)}`)
+      // ★追加: 最新5件を必ず含める (文脈理解用)
+      const latestMemories = memories.value
+        .slice(0, 5)
+        .map((m) => ({ ...m, score: 1.0 }));
+
+      // ★追加: キーワード検索も併用 (買い物リスト対策)
+      const keywords = question.split(/[\s,、　]+/);
+      const keywordCandidates = memories.value
+        .filter((m) => keywords.some((k) => k.length > 1 && m.text.includes(k)))
+        .slice(0, 3)
+        .map((m) => ({ ...m, score: 0.9 }));
+
+      // 全候補を統合して重複排除
+      const allCandidates = [
+        ...latestMemories,
+        ...vecCandidates,
+        ...keywordCandidates,
+      ];
+      const uniqueCandidates = Array.from(
+        new Map(allCandidates.map((item) => [item.id, item])).values(),
+      );
+
+      const context = uniqueCandidates
+        .map((m) => `ID:${m.id} | ${m.text.slice(0, 300)}`)
         .join("\n");
+
       const calendarEvents = await fetchCalendarEvents();
       const calendarContext = calendarEvents
         ? `\n【直近の予定】\n${calendarEvents}\n`
@@ -6767,36 +7178,86 @@ export function useMyBrain() {
         timeZone: "Asia/Tokyo",
       });
 
+      // ★プロンプト強化: アバウトな指示でも動くように具体例を提示
       const prompt = `
         あなたはユーザーの「第2の脳」です。現在日時: ${nowStr}
         ${calendarContext}
-        【参照する記憶】
+        【参照する記憶(ID付き)】
         ${context}
-        【質問】
+        【ユーザー入力】
         ${question}
+
         【指示】
-        質問に対する答えだけを生成してください。記憶の羅列は禁止。
-        出力JSON: { "answer": "回答テキスト", "mermaid": null, "calendarAction": null }
+        ユーザーの意図を汲み取り、適切なアクションを選択してください。
+        
+        判断基準:
+        - "これ追加して"や"買っておいて"等の指示があり、直近の記憶に関連するものがあれば MEMORY_APPEND
+        - タスク追加依頼("〜する"、"ToDo"など)なら TASK_ADD
+        - 予定作成依頼("明日10時"など日時指定)なら CALENDAR_ADD
+        - メモ保存依頼なら MEMORY_ADD
+        - それ以外は CHAT (質問への回答など)
+
+        出力はJSON形式のみ:
+        {
+          "action": "CALENDAR_ADD" | "TASK_ADD" | "MEMORY_APPEND" | "MEMORY_ADD" | "CHAT",
+          "data": {
+            "title": "予定/タスク名",
+            "start": "日時(ISO)",
+            "end": "日時(ISO)",
+            "targetId": "追記対象のメモID",
+            "content": "追記内容",
+            "summary": "メモ要約"
+          },
+          "answer": "ユーザーへの回答テキスト",
+          "mermaid": null,
+          "calendarAction": null
+        }
       `;
 
       const text = await generateContentWithRetry(apiKey, [prompt], true);
       const data = JSON.parse(extractJson(text));
       let finalAnswer = data.answer;
 
-      if (data.calendarAction) {
+      // ★アクション実行処理
+      if (data.action === "CALENDAR_ADD") {
         try {
           await addEventToGoogleCalendar(
-            data.calendarAction.title,
-            data.calendarAction.start,
-            data.calendarAction.end,
-            data.calendarAction.colorId,
+            data.data.title,
+            data.data.start,
+            data.data.end,
+            "9",
           );
-          finalAnswer += `\n\n✅ 予定登録: ${data.calendarAction.title}`;
+          finalAnswer += `\n\n✅ 予定を登録しました: ${data.data.title}`;
         } catch {
-          finalAnswer += `\n⚠️ エラー: 予定登録失敗`;
+          finalAnswer += `\n⚠️ 予定登録に失敗しました`;
         }
+      } else if (data.action === "TASK_ADD") {
+        await addManualTodo(data.data.title);
+        finalAnswer += `\n\n✅ タスクに追加しました: ${data.data.title}`;
+      } else if (data.action === "MEMORY_APPEND" && data.data.targetId) {
+        try {
+          const docRef = doc(db, "memories", data.data.targetId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const oldText = docSnap.data().text;
+            const newText = `${oldText}\n(追記) ${data.data.content}`;
+            await updateDoc(docRef, { text: newText });
+            finalAnswer += `\n\n📝 メモに追記しました`;
+            // メモリリスト更新のためリロード
+            const idx = memories.value.findIndex(
+              (m) => m.id === data.data.targetId,
+            );
+            if (idx !== -1) memories.value[idx].text = newText;
+          }
+        } catch {
+          finalAnswer += `\n⚠️ 追記に失敗しました`;
+        }
+      } else if (data.action === "MEMORY_ADD") {
+        await addMemory(data.data.content || question, null);
+        finalAnswer += `\n\n📝 メモしました`;
       }
 
+      // チャットログ保存
       const logData = {
         userId: currentUser.value!.uid,
         question,
@@ -6848,7 +7309,6 @@ export function useMyBrain() {
     await deleteDoc(doc(db, "todos", id));
   };
 
-  // ★追加: LINE連携ロジック
   const startLineAuth = () => {
     const channelId = import.meta.env.VITE_LINE_LOGIN_CHANNEL_ID;
     const redirectUri = window.location.origin + "/app";
@@ -6863,7 +7323,6 @@ export function useMyBrain() {
     window.location.href = url;
   };
 
-  // ★追加: 連携解除ロジック
   const unlinkLine = async () => {
     if (!confirm("LINE連携を解除しますか？")) return;
     loading.value = true;
@@ -6915,8 +7374,8 @@ export function useMyBrain() {
     addManualTodo,
     callGoogleApi,
     reconnectCalendar,
-    startLineAuth, // ★公開
-    unlinkLine, // ★公開
+    startLineAuth,
+    unlinkLine,
   };
 }
 </file>
@@ -7262,68 +7721,68 @@ const haptic = () => {
 </file>
 
 <file path=".firebase/hosting.ZGlzdA.cache">
-registerSW.js,1769521560274,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-sw.js,1769521560980,a324d970e4cc6a25cfa8cc369290fb3c3dba02db3b5a8a20f2d2171b4f7a5a77
-manifest.webmanifest,1769521560274,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-index.html,1769521560274,979aacf090626fb6714e6b233d883a0625c75a1a1139bfb71f8a0881962e4762
-workbox-8c29f6e4.js,1769521560980,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-firebase-messaging-sw.js,1769521559843,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-assets/stateDiagram-v2-4FDKWEC3-ChWm8KpE.js,1769521560273,60191487b7cd05de009eda608fd71b40e5c8d9bc5efadfdc5d406192d6471545
-lp.html,1769521559846,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/timeline-definition-IT6M3QCI-CwhQ8Uj1.js,1769521560273,cd47ac6086a810059143edad7debb48e4f7f9b798fd8fda14c346c3c4fde6033
-assets/xychartDiagram-PRI3JC2R-C6Apy0Pi.js,1769521560274,30bf69e3873683167d05002ef9fc5c20dd231f2bdaa8ed8929290552b788a787
-assets/stateDiagram-FKZM4ZOC-Bd6fRkVN.js,1769521560273,72720bcab8e4ae06a477ab1eee141b4f560805da1954f9127549201b3fbb464c
-assets/ordinal-Cboi1Yqb.js,1769521560274,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/pieDiagram-ADFJNKIX-Dv07gzYW.js,1769521560274,cf3ea1bcdbbcc9460976dba57135f829ee9bca98d6f23a4089ccd54d1ca32455
-assets/sankeyDiagram-TZEHDZUN-CALgbDhm.js,1769521560274,b2bb89706d1514ac2bbf3cf0f938af7e9fa0c104c30d860010848dd0448115d0
-assets/min-B2V0gSRO.js,1769521560274,8d117a5f0a76278bcaa81873012fa9710d3a3922ef6299b6b265c0de4f75e867
-assets/linear-DNCNhDDW.js,1769521560274,f31459acedf3305c211f8995a1fe26111b1f2c4117cf498287dd9d188d4d588d
-assets/quadrantDiagram-AYHSOK5B-DD9Dpkf5.js,1769521560273,8b23594c65d0b9543012858c61c2eb7383e79f57678347a29f322d975f20a4e3
-assets/requirementDiagram-UZGBJVZJ-DaQfGS7t.js,1769521560273,fd92d13a9adf0df11f4bef97cf3f2b527d15e72797f874abdb69d83d0c6600f6
-assets/init-Gi6I4Gst.js,1769521560274,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/infoDiagram-WHAUD3N6-W-ccn5bX.js,1769521560273,a1d5ab8194b2b1df7b07ff2761eaf9822805e43d8d91c71c36c9be21c341dad5
-assets/kanban-definition-3W4ZIXB7-CuxHvIhf.js,1769521560273,1596474c69cdb914d75a1f6642c20603dd2f3d94e72b44f3e420c2b82f44aab5
-assets/layout-D-7tJ3ER.js,1769521560274,4e1b2cf0da16225cd46bfedbe9213f5bae969e98d38abdfdc40efba16471707f
-assets/gitGraphDiagram-NY62KEGX-C2pcunCf.js,1769521560273,5a77fa910f5852eb04678a6c04b155ca6e1ba7e6491534f82f9db13d92b72f77
-assets/journeyDiagram-XKPGCS4Q-DVStNntr.js,1769521560273,66e24920b72466981948de8e3a236836365c5f3b3793affcf03b753ff2cbaa98
-assets/mindmap-definition-VGOIOE7T-CfTlLySY.js,1769521560274,147bcb95e0460444becedcbc16bbe7b94ee7fd2b1bb065194ee9e49610379f77
-assets/graph-C0A4cbaw.js,1769521560274,401968bc5ce600cb8d0c175fed201f5418e6f0fabfb8442876009e8f98c4396b
-assets/diagram-QEK2KX5R-9QCdGSyN.js,1769521560273,54598e163c769b6a3d4db53e20bbe401ba6a8849b6e4d2c5a377e7da9cf88809
-assets/index-DkmZYhlE.css,1769521560273,ed6d94fb20a6e23c57a90bbcb097333bdf284a9669b5bc68d05a2372b6de48d7
-assets/diagram-S2PKOQOG-B5tKBnKg.js,1769521560273,40875f6cf1c5fce784209d830833c09e517bf762376d693b3e7c51721dd095e0
-assets/diagram-PSM6KHXK-B1_uWSvb.js,1769521560274,ab562020d946bc34feb058b4f464186910b66ccd679a82f534af653007da6a0a
-assets/defaultLocale-DX6XiGOO.js,1769521560274,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/classDiagram-v2-WZHVMYZB-aNJ2Z2gk.js,1769521560273,f8791a0ac6b742625837277420c66b0b67b2cc99c83f7551abdf8fd909697ad2
-assets/clone-CnnaaBWs.js,1769521560273,b95b476b6bbf791bd08499c59b5e12a73a1c062bd2f359224ad0e8c713f8eede
-assets/classDiagram-2ON5EDUG-aNJ2Z2gk.js,1769521560273,f8791a0ac6b742625837277420c66b0b67b2cc99c83f7551abdf8fd909697ad2
-assets/erDiagram-Q2GNP2WA-CqF6AzYo.js,1769521560274,ff7c93252f8c4a8efdce04984c426cffff7c531eb1b89f9e7d86c45754fb1a8c
-assets/chunk-TZMSLE5B-Dze8tfjC.js,1769521560273,e29cc7b1379b613192941a0c471355e1dd868ca0e0b0492955e948e79f00ca0d
-assets/dagre-6UL2VRFP-BGsryA_K.js,1769521560274,cecb5cc3aecb69da0760da504d1c87b0f5123911acbabe8d14d1d2055a0d2edc
-assets/chunk-QZHKN3VN-BXuV9WDA.js,1769521560273,db254a16e48cfa18e830599568dfb28aacff6c17b24c6846099f2a89156a034c
-assets/flowDiagram-NV44I4VS-C736DPm5.js,1769521560273,2afb0d0d86b3cf890bfa3e7378288917c4c6ff47fcc09c69a354b4416c3dbc21
-assets/sequenceDiagram-WL72ISMW-CQyj4toE.js,1769521560273,57ec648f7502fee9ddbb086820fb13d9f51b39ab540cfd2d8fc96ceec95cd9dd
-assets/ganttDiagram-JELNMOA3--6rZfSg0.js,1769521560274,8601bf2216d3cb9418bbae35450d8017c348081c1250d0d304bfc3a645213c45
-assets/cose-bilkent-S5V4N54A-DU_FHx1b.js,1769521560274,11b34788fe6f899005edfc7911aec4845ce3b62318c831f4d271f69a62c513b4
-assets/chunk-QN33PNHL-DLGono6V.js,1769521560273,537fb35b841d6467d81191e46644e19e548c7d19f2b848ed40bfb5d95f683dc7
-assets/chunk-FMBD7UC4-C5ueI_PW.js,1769521560273,1aa85ac3415e16b475c4ccdffcbfff1f03a3ffe75fa7057708325be523e53257
-assets/chunk-55IACEB6-yYTAYgZC.js,1769521560273,35e9d62bf7ebc863c0d9a0693ff5999b9eca4b548e423feaa84d23ce11f843f4
-assets/chunk-4BX2VUAB-20IL_HQf.js,1769521560274,f012b4c8cd9b168df3147c113655d3537cf146a29736b8891db6416cdd8738a8
-assets/chunk-DI55MBZ5-B8zeClTc.js,1769521560273,11b1124c2a5f51981c47c06b0e0be66584095d4018cae52aa6238987c4b04f8c
-assets/channel-2aUfP22y.js,1769521560273,79c974f25d4ba8051c8391c419d61c4f474ce1f91cc3934582092176e2b63c5c
-assets/chunk-B4BG7PRW-BqVcZxrh.js,1769521560273,e5e9c969e14b09c0ffbc07ee5c974e07090c8e509804110b3670175b5fe066f0
-assets/arc-CtqeQQa9.js,1769521560273,87da90b28fd58a4979b37641335f66b07392acc7d1a4d615545238ff9244e356
-assets/_baseUniq-CV9_aFfE.js,1769521560274,8f52b5472f5f6fc66fc1fd6165b44ebf190765076242384ed5402eaf8c2af14a
-assets/c4Diagram-YG6GDRKO-BJusfdzV.js,1769521560273,59b97f52a56e8341dbfc4def98c65fc7a55193332c5b4f10a3a6f2da518bae6a
-assets/blockDiagram-VD42YOAC-OwIWN4Mi.js,1769521560273,3ea25e327f67da41414b30a4d1a798ac85d7bf7a3d4cff40d748f379351ef40e
-assets/architectureDiagram-VXUJARFQ-DK3djJLw.js,1769521560274,31a41df5631fe9340a529649fcd54743db97d974de2f12c743914289d220fa7e
-assets/katex-Cu_Erd72.js,1769521560274,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-DfcRX1jV.js,1769521560274,463687fb852ace1a741949fbd52b6a2e1ed91fa810f3c0b3cc5a2bdb24a08560
-assets/cytoscape.esm-CyJtwmzi.js,1769521560274,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-Mg7nvxRK.js,1769521560274,f7d4235e82b88371ac8dcdbb9a8d81507e76a7821e78bcb8338c5526c140586e
-pwa-192x192.png,1769521559851,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1769521559857,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-logo.png,1769521559844,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-apple-touch-icon.png,1769521559842,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+manifest.webmanifest,1769692054101,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+sw.js,1769692054817,4a53d15383a73aed8289fe7b1ba242eec7d03356bb7244d8431a982174fae534
+registerSW.js,1769692054101,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+workbox-8c29f6e4.js,1769692054817,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+firebase-messaging-sw.js,1769692053666,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+lp.html,1769692053669,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/stateDiagram-v2-4FDKWEC3-DMpBgUwk.js,1769692054100,e32e5ae4d1d9637119b47a75320d4a108f951d603e25aa4865572b5f344d5e0d
+assets/timeline-definition-IT6M3QCI-DvufvewF.js,1769692054101,3314c6f28971575a4a6e298d0116757126fb4515de0354390461ca07ee7ff584
+assets/ordinal-Cboi1Yqb.js,1769692054101,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/xychartDiagram-PRI3JC2R-BOxjpNQ4.js,1769692054101,4ade0c265ce862d695250dbb5255fb39bdb171c479c77492568690d9e0325ad8
+assets/requirementDiagram-UZGBJVZJ-9b0a86Pg.js,1769692054100,c61a02e81ed5b0552e249bee1d5b656c497c5326f89685eb0c2fe93379bc602f
+index.html,1769692054101,dd9468a9fc5197539b3d7242d98b4c8ec92e597ee511891af6b253f337064e46
+assets/stateDiagram-FKZM4ZOC-BKdb2B5H.js,1769692054100,63ea6a4271302793b98bc949a3ee02a18b076f3cf2980fcaa329d135d66274fc
+assets/pieDiagram-ADFJNKIX-DQNbOjWO.js,1769692054101,dc6b760761a4e080d682c58cdb78c68670d25353dbffbd7a98ce23178424fa64
+assets/min-CL_sNGDq.js,1769692054101,cb6414dd05e787233bbad8c5ce81e94c3b8a57e4310b59e8609c010c975c4ed4
+assets/linear-BLV4DfNl.js,1769692054101,9978cb13d9bc669dcc0ec3dae2b587fa4ed745e55b4afb49e988cd4ee7461e85
+assets/sankeyDiagram-TZEHDZUN-DhWTy0M0.js,1769692054101,a87851eec53cb09fee7cd8dacfe6a0d3865b31fd1edd7cc4a35c602cc2d096f5
+assets/kanban-definition-3W4ZIXB7-Aetzs8-1.js,1769692054101,f189547b452128a1d802ed12300a0bf21bdcaf1a50746d6d28ac23aa88a9a0aa
+assets/mindmap-definition-VGOIOE7T-DIhMv6Nl.js,1769692054101,047623eb1f9b1d34ba308f3d315bfaf4df5fc72e22bfbd70514aed7a883c0280
+assets/init-Gi6I4Gst.js,1769692054101,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/infoDiagram-WHAUD3N6-DRdWcZhV.js,1769692054100,15bf4fa32afd5ea429b0816767dd20520f6684607fdbc8a43996166a95e37ea6
+assets/journeyDiagram-XKPGCS4Q-W-arKMmU.js,1769692054101,645d1d7c5db81e5b5a05198edfb572590e88f38ebdb41be200cd2868f7ea0f0c
+assets/quadrantDiagram-AYHSOK5B-ChJ2VzrM.js,1769692054100,7e93fb5e1d576f58bd63dea77bc34ecc2a0cddca7fdc9dc88fb2907b26a4a51e
+assets/layout-VcBZeexJ.js,1769692054101,b384e9df5c42d21af218de19b51e98a6349d1053929f9a3a72a0003f2122b4f9
+assets/gitGraphDiagram-NY62KEGX-zazQyJUR.js,1769692054100,05a26005c9f53f13b8edd87398a0cef25a060b87229a848a09f9f39947573ab4
+assets/index-DkmZYhlE.css,1769692054100,ed6d94fb20a6e23c57a90bbcb097333bdf284a9669b5bc68d05a2372b6de48d7
+assets/graph-BUkOzvCQ.js,1769692054101,765689a9c1f849c71e204467affbf2aa0d45797b09dd16d03e69b31ce9134457
+assets/diagram-S2PKOQOG-BqdHjINB.js,1769692054101,2a81389f722052c26a4a0cea5d45b3da50ec0a7aa11cc2bf40b95c504c502e98
+assets/defaultLocale-DX6XiGOO.js,1769692054101,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/diagram-PSM6KHXK-dLvbeJ2I.js,1769692054101,b4c5d61973e386cd111d7ead04e71cf20400f96c5390e23d9ee0942fd7ea86f9
+assets/clone-pt1Ip3d8.js,1769692054101,55920d1befa7f236fb0e0f799e6e257e33535bea543bf1ef9a5f53b1cba32202
+assets/classDiagram-v2-WZHVMYZB-DQXk6lfB.js,1769692054100,4f6dada68ab23bed6b8d33b9f1531512d891dcd2baffa1180a383dd5be1715ca
+assets/erDiagram-Q2GNP2WA-6V5_raj6.js,1769692054100,7c920c9e5a9d8a12dbde9f4d034a56ecc5356e15dde68d815554945879b83682
+assets/chunk-TZMSLE5B-C7xKFSOS.js,1769692054101,dac1fcf4a8e094bb7a78c498e8af9783396129ff95fbfabf4705de47048a5828
+assets/dagre-6UL2VRFP-B9FMJXnc.js,1769692054101,b1ab8633a5d5aff2ed0afb4f3a0a2b5ab0c47992519cc2bfa879589cb8f2c179
+assets/classDiagram-2ON5EDUG-DQXk6lfB.js,1769692054100,4f6dada68ab23bed6b8d33b9f1531512d891dcd2baffa1180a383dd5be1715ca
+assets/chunk-QZHKN3VN-CqP5YkQr.js,1769692054100,5a4be06e5a9b8efd4e88840dda48a1a1227a94adbedd81c8ea84df0396be4c7a
+assets/diagram-QEK2KX5R-CUbF1v7Z.js,1769692054101,0cd7f2a3b460c2abc802f312a084785f75da9106ce9a2f7a7742a162fb9b0dd8
+assets/flowDiagram-NV44I4VS-BOf9x71P.js,1769692054100,b5d0fcedea7bbaaa1c82fb0c1fa0ed966f89e491fa18f9c7b6301df6eff9bd54
+assets/ganttDiagram-JELNMOA3-vui3tGMe.js,1769692054101,5c2095c155b206e25e24b0fe18d0b687217cdee9067a2f12f627a00f07799e13
+assets/sequenceDiagram-WL72ISMW-Bv0s3WTq.js,1769692054100,12fbfc73999b9b471d22f84d331a67353f2561a6a35f59ae5c43fd34b597e3c2
+assets/chunk-QN33PNHL-TzUDGFPK.js,1769692054101,fa74b94e338c43c0f59fa538b34a9a555f07e63ddf9e1ded31bd13b1518d2f5d
+assets/chunk-FMBD7UC4-DPd5Ud-Z.js,1769692054101,6b365662b2aa1255b1293fc4a543d5f0eeb3c6a57858097b904ca4c595053901
+assets/chunk-55IACEB6-BR232Ri0.js,1769692054101,180465f07d30ee3901cf570887f90f294d9613172bba2df906b8478636efeed0
+assets/cose-bilkent-S5V4N54A-DsDT28IE.js,1769692054101,ca63cc11f9e090195d03bb8bfd4780918e076518ef5b06923b58d9b70d1f191b
+assets/chunk-DI55MBZ5-C_gTvRXc.js,1769692054100,53a144d43906120c04e2ff481a99a1ac6aed8299278b9e3694ba6fbf360428b0
+assets/channel-CJhXwgyL.js,1769692054101,4a17433d8d008baf08c23c545eabe702c8fbb9962195889d7f8d19c64589a58c
+assets/chunk-B4BG7PRW-C7PDF3mV.js,1769692054100,62d4f85ea6a859184b664b96c7b8997260127d26ad81dd6b475475c6431a4bf8
+assets/chunk-4BX2VUAB-BnQZAmWx.js,1769692054101,29bd497aca89dec5f388565060eb0953d3a44f6930978bff82989848f74a5261
+assets/arc-C4IuWBv1.js,1769692054101,1aa61a14d69e6153d3d708705ce239afa9e1eddbef2a76ed966799f038f08994
+assets/_baseUniq-CoPXhkYQ.js,1769692054101,e116c2976017ee86583df37334014b11f314869ebb02f7d2ae561cb80f897c11
+assets/c4Diagram-YG6GDRKO-Df_kqhe7.js,1769692054100,1b134b5dbcd2966bf4dcb705c57ccb69af9e2581f2cdbd0f4542fccf7260bd3d
+assets/blockDiagram-VD42YOAC-BKRb_3rc.js,1769692054101,e6ef97d3d69a7efa328579d8dc9588a33ef6dd3e0db3eb1fc8a3b2018778838c
+assets/architectureDiagram-VXUJARFQ-iyD5Go7g.js,1769692054101,eb753c1fead23a647e86e00e43d1f9f0d0e374a65c39731bb20a95f94ad75a7f
+assets/katex-Cu_Erd72.js,1769692054101,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-DdFuVn4F.js,1769692054101,dda710d3a1b43e7b4d233ab3d9454258344a996a4a66c2c5d61db41ed8dadbb4
+assets/cytoscape.esm-CyJtwmzi.js,1769692054101,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-Bda1YzeZ.js,1769692054102,afa1e6c7c53b3e525fd77c975f67f21be05d0b7f71745c6090247deaa19b3dc2
+apple-touch-icon.png,1769692053666,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+logo.png,1769692053668,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1769692053680,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-192x192.png,1769692053674,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>

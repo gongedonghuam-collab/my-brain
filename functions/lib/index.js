@@ -66,45 +66,72 @@ const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SE
 const CANDIDATE_MODELS = [
     "gemini-1.5-flash",
     "gemini-1.5-flash-001",
-    "gemini-1.5-flash-002",
     "gemini-1.5-pro",
-    "gemini-1.5-pro-001",
     "gemini-pro",
 ];
 // ---------------------------------------------------------
-// Helper: 動的にGeminiモデルを解決
+// Helper: JSON抽出・修復関数
 // ---------------------------------------------------------
-async function resolveGeminiModel(apiKey) {
-    var _a;
+function extractJson(text) {
     try {
-        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-        const listResponse = await axios_1.default.get(listUrl);
-        if (listResponse.status !== 200) {
-            throw new Error(`Model list fetch failed: ${listResponse.statusText}`);
-        }
-        const listData = listResponse.data;
-        const generationModels = (listData.models || []).filter((m) => { var _a; return (_a = m.supportedGenerationMethods) === null || _a === void 0 ? void 0 : _a.includes("generateContent"); });
-        const flash = generationModels.find((m) => m.name.includes("gemini-1.5-flash"));
-        const targetModel = (_a = (flash || generationModels[0])) === null || _a === void 0 ? void 0 : _a.name.replace("models/", "");
-        if (!targetModel)
-            throw new Error("No available generation models found.");
-        return targetModel;
+        return JSON.parse(text);
     }
     catch (e) {
-        console.warn("Dynamic model resolution failed, falling back to candidate list logic", e);
-        return "";
+        try {
+            const cleaned = text.replace(/```json|```/g, "").trim();
+            return JSON.parse(cleaned);
+        }
+        catch (e2) {
+            try {
+                const firstOpen = text.indexOf("{");
+                const lastClose = text.lastIndexOf("}");
+                if (firstOpen !== -1 && lastClose !== -1) {
+                    const jsonString = text.substring(firstOpen, lastClose + 1);
+                    return JSON.parse(jsonString);
+                }
+                throw new Error("No JSON found");
+            }
+            catch (e3) {
+                throw new Error("JSON parsing failed");
+            }
+        }
     }
 }
 // ---------------------------------------------------------
-// Helper: Gemini API (JSONモード & リトライ)
+// Helper: AI Model Management (変更なし・安定版)
 // ---------------------------------------------------------
+async function fetchAvailableModels(apiKey) {
+    try {
+        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+        const listResponse = await axios_1.default.get(listUrl);
+        if (listResponse.status !== 200)
+            return [];
+        return listResponse.data.models || [];
+    }
+    catch (e) {
+        console.warn("Failed to fetch model list:", e);
+        return [];
+    }
+}
+async function resolveGeminiModel(apiKey) {
+    const models = await fetchAvailableModels(apiKey);
+    const generationModels = models.filter((m) => { var _a; return (_a = m.supportedGenerationMethods) === null || _a === void 0 ? void 0 : _a.includes("generateContent"); });
+    let target = generationModels.find((m) => m.name.includes("gemini-1.5-flash"));
+    if (!target) {
+        target = generationModels.find((m) => m.name.includes("gemini-1.5-pro"));
+    }
+    if (!target && generationModels.length > 0) {
+        target = generationModels[0];
+    }
+    if (target) {
+        return target.name.replace("models/", "");
+    }
+    return "gemini-1.5-flash";
+}
 async function callGeminiJson(apiKey, prompt) {
     var _a, _b, _c, _d, _e, _f;
     const dynamicModel = await resolveGeminiModel(apiKey);
-    let modelsToTry = dynamicModel
-        ? [dynamicModel, ...CANDIDATE_MODELS]
-        : CANDIDATE_MODELS;
-    modelsToTry = [...new Set(modelsToTry)];
+    const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(Boolean);
     for (const modelName of modelsToTry) {
         try {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
@@ -114,48 +141,33 @@ async function callGeminiJson(apiKey, prompt) {
             }, { headers: { "Content-Type": "application/json" } });
             const text = (_f = (_e = (_d = (_c = (_b = (_a = response.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text;
             if (text) {
-                try {
-                    return JSON.parse(text);
-                }
-                catch (e) {
-                    try {
-                        const cleaned = text.replace(/```json|```/g, "").trim();
-                        return JSON.parse(cleaned);
-                    }
-                    catch (e2) {
-                        return { type: "CHAT", reply: text.substring(0, 100) };
-                    }
-                }
+                return extractJson(text);
             }
         }
         catch (e) {
-            console.warn(`Model ${modelName} failed, retrying...`);
+            console.warn(`Model ${modelName} failed: ${e.message}. Retrying...`);
         }
     }
-    throw new Error("All AI models failed");
+    throw new Error("All AI models failed to generate valid JSON");
 }
-// ---------------------------------------------------------
-// Helper: Gemini API (Textモード)
-// ---------------------------------------------------------
 async function callGeminiText(apiKey, prompt) {
     var _a, _b, _c, _d, _e, _f;
     const dynamicModel = await resolveGeminiModel(apiKey);
-    let modelsToTry = dynamicModel
-        ? [dynamicModel, ...CANDIDATE_MODELS]
-        : CANDIDATE_MODELS;
-    modelsToTry = [...new Set(modelsToTry)];
+    const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(Boolean);
     for (const modelName of modelsToTry) {
         try {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
             const response = await axios_1.default.post(url, { contents: [{ parts: [{ text: prompt }] }] }, { headers: { "Content-Type": "application/json" } });
             return ((_f = (_e = (_d = (_c = (_b = (_a = response.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text) || "";
         }
-        catch (e) { }
+        catch (e) {
+            console.warn(`Model ${modelName} (Text) failed. Retrying...`);
+        }
     }
-    return "すみません、今ちょっとAIの調子が悪いです。";
+    return "すみません、AIの調子が悪く応答できませんでした。";
 }
 // ---------------------------------------------------------
-// Helper: Google Token Refresh
+// Helper: Google Token Refresh & Calendar
 // ---------------------------------------------------------
 async function refreshAccessToken(refreshToken) {
     try {
@@ -172,9 +184,6 @@ async function refreshAccessToken(refreshToken) {
         return null;
     }
 }
-// ---------------------------------------------------------
-// Helper: カレンダー取得
-// ---------------------------------------------------------
 async function getCalendarEvents(uid) {
     var _a;
     try {
@@ -228,37 +237,88 @@ async function getCalendarEvents(uid) {
         return "（カレンダー取得エラー）";
     }
 }
-// ---------------------------------------------------------
-// Helper: 過去のメモ取得
-// ---------------------------------------------------------
-async function getRecentMemories(uid) {
+async function addCalendarEvent(uid, eventData) {
+    var _a;
     try {
+        const tokenDoc = await db
+            .collection("users")
+            .doc(uid)
+            .collection("system")
+            .doc("tokens")
+            .get();
+        if (!tokenDoc.exists)
+            return false;
+        const refreshToken = (_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken;
+        if (!refreshToken)
+            return false;
+        const accessToken = await refreshAccessToken(refreshToken);
+        if (!accessToken)
+            return false;
+        await axios_1.default.post("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+            summary: eventData.title,
+            start: { dateTime: eventData.start },
+            end: { dateTime: eventData.end },
+        }, { headers: { Authorization: `Bearer ${accessToken}` } });
+        return true;
+    }
+    catch (e) {
+        console.error("Add Event Error:", e);
+        return false;
+    }
+}
+// ★修正: 最新50件からキーワード検索で執念深く探すロジックに変更
+async function getRecentMemories(uid, queryText) {
+    try {
+        // 1. 直近50件を取得（数を増やす）
         const snapshot = await db
             .collection("memories")
             .where("userId", "==", uid)
             .orderBy("createdAt", "desc")
-            .limit(10)
+            .limit(50)
             .get();
         if (snapshot.empty)
-            return "（過去のメモなし）";
-        return snapshot.docs
-            .map((doc) => {
+            return "（履歴なし）";
+        let docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        // 2. キーワードフィルタリング（"買い物リスト"等の言葉があれば優先抽出）
+        const keywords = queryText
+            .replace(/[\s,、　]+/g, " ")
+            .split(" ")
+            .filter((k) => k.length > 1);
+        const matches = docs.filter((d) => keywords.some((k) => d.text.includes(k)));
+        const recents = docs.slice(0, 3); // 直近3件も文脈用に残す
+        // 重複を排除して結合
+        const candidates = [...recents, ...matches];
+        const uniqueCandidates = Array.from(new Map(candidates.map((c) => [c.id, c])).values());
+        if (uniqueCandidates.length === 0)
+            return "（関連する履歴なし）";
+        return uniqueCandidates
+            .map((data) => {
             var _a;
-            const data = doc.data();
-            const date = ((_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate)
-                ? `[${data.createdAt.toDate().toLocaleDateString()}]`
-                : "";
-            return `${date} ${data.text}`;
+            let dateStr = "";
+            if ((_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) {
+                const date = data.createdAt.toDate();
+                const diffMin = Math.floor((Date.now() - date.getTime()) / 60000);
+                const timeLabel = diffMin < 60
+                    ? `${diffMin}分前`
+                    : date.toLocaleString("ja-JP", {
+                        month: "numeric",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                    });
+                dateStr = `[${timeLabel}]`;
+            }
+            // AIが「どこに追記するか」判断できるようにIDを含める
+            return `ID:${data.id} | ${dateStr} ${data.text.replace(/\n/g, " ")}`;
         })
             .join("\n");
     }
     catch (e) {
-        console.error("Memory Fetch Error", e);
         return "（メモ取得エラー）";
     }
 }
 // =========================================================
-// 機能 1: LINE Webhook (リッチメニュー対応版 - 修正済み)
+// 機能 1: LINE Webhook (スーパー秘書モード)
 // =========================================================
 exports.lineWebhook = (0, https_1.onRequest)({
     secrets: [
@@ -279,24 +339,22 @@ exports.lineWebhook = (0, https_1.onRequest)({
     const client = new line.Client({ channelAccessToken: token });
     const events = req.body.events;
     await Promise.all(events.map(async (event) => {
-        var _a;
+        var _a, _b;
         if (event.type !== "message" || event.message.type !== "text")
             return;
         const eventId = event.webhookEventId;
         const lineUserId = event.source.userId;
-        const message = event.message.text.trim(); // 空白削除
+        const message = event.message.text.trim();
         // 重複排除
-        const eventRef = db.collection("processed_events").doc(eventId);
         try {
-            await eventRef.create({
+            await db.collection("processed_events").doc(eventId).create({
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 userId: lineUserId,
             });
         }
         catch (e) {
-            return; // 重複につき終了
+            return;
         }
-        // ユーザー特定
         const usersSnap = await db
             .collection("users")
             .where("lineUserId", "==", lineUserId)
@@ -310,182 +368,180 @@ exports.lineWebhook = (0, https_1.onRequest)({
             return;
         }
         const uid = usersSnap.docs[0].id;
-        // ★★★ 修正ポイント: モード切替判定を最優先で行う ★★★
-        // AI処理や他の判定に入る前に、この文字列が来たら即座にモードを変えてリターンする
-        if (message === "【モード】タスク") {
-            await db.collection("users").doc(uid).update({ lineMode: "TASK" });
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: "✅ タスクモードになりました。\n入力した内容はすべてToDoリストに追加されます。",
-            });
-            return;
-        }
-        if (message === "【モード】メモ") {
-            await db.collection("users").doc(uid).update({ lineMode: "MEMORY" });
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: "📝 メモモードになりました。\n入力した内容はすべてメモとして保存されます。",
-            });
-            return;
-        }
-        if (message === "【モード】カレンダー") {
+        // 1. 強制モード切替コマンド
+        const commands = {
+            "【モード】タスク": "TASK",
+            "【モード】メモ": "MEMORY",
+            "【モード】カレンダー": "CALENDAR",
+            "【モード】お任せ": "AUTO",
+            "【モード】リセット": "AUTO",
+        };
+        if (commands[message]) {
             await db
                 .collection("users")
                 .doc(uid)
-                .update({ lineMode: "CALENDAR" });
+                .update({ lineMode: commands[message] });
+            const replyText = commands[message] === "AUTO"
+                ? "🤖 お任せモードになりました。\nAIが内容を判断します。"
+                : `✅ ${commands[message]}モードになりました。`;
             await client.replyMessage(event.replyToken, {
                 type: "text",
-                text: "📅 カレンダーモードになりました。\n「明日」「来週」などと入力すると予定を答えます。",
+                text: replyText,
             });
             return;
         }
-        if (message === "【モード】お任せ" ||
-            message === "【モード】リセット") {
-            await db.collection("users").doc(uid).update({ lineMode: "AUTO" });
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: "🤖 お任せモードになりました。\nAIが内容を判断します。",
-            });
-            return;
-        }
-        // --- 以下、通常のメッセージ処理 ---
-        // 1. 現在のモードを取得
+        // 2. モードと文脈取得
         const userDoc = await db.collection("users").doc(uid).get();
         const currentMode = ((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.lineMode) || "AUTO";
-        let msgType = "CHAT";
-        // モードによる強制判定
-        if (currentMode === "TASK") {
-            msgType = "FORCE_TASK";
+        // ★ここでメッセージを渡して、関連するメモを強力に検索する
+        const memoryContext = await getRecentMemories(uid, message);
+        const nowStr = new Date().toLocaleString("ja-JP", {
+            timeZone: "Asia/Tokyo",
+        });
+        // ★司令塔プロンプト（ユーザーの意図をAIが判断）
+        const routerPrompt = `
+          あなたは優秀な秘書AIです。現在日時: ${nowStr}
+          ユーザー入力: "${message}"
+          【参照可能なメモ(ID付)】
+          ${memoryContext}
+
+          指示:
+          ユーザーの意図を汲み取り、アクションを決定してください。
+          「これ」「あれ」「さっきの」は、直近のメモを指します。
+          「買い物リスト」と言われたら、過去のメモから「買い物リスト」を探して追記してください。
+          
+          モード: ${currentMode}
+          - "これ追加して"等の指示があり、直近の記憶に関連するものがあれば MEMORY_APPEND
+          - TASKモードなら TASK_ADD
+          - MEMORYモードなら MEMORY_ADD
+          - CALENDARモードなら CALENDAR_READ (または文脈によってはADD)
+          - AUTOモードなら文脈から判断
+
+          出力JSON形式:
+          {
+            "action": "CALENDAR_ADD" | "CALENDAR_READ" | "TASK_ADD" | "MEMORY_ADD" | "MEMORY_APPEND" | "CHAT",
+            "data": {
+              "title": "予定/タスク名",
+              "start": "ISO8601日時",
+              "end": "ISO8601日時",
+              "summary": "要約",
+              "targetId": "MEMORY_APPENDの場合の対象ID",
+              "content": "追加する内容テキスト",
+              "tags": ["タグ"]
+            },
+            "reply": "ユーザーへの返信メッセージ (短く親切に)"
+          }
+        `;
+        let aiDecision = {};
+        try {
+            aiDecision = await callGeminiJson(apiKey, routerPrompt);
         }
-        else if (currentMode === "MEMORY") {
-            msgType = "FORCE_MEMORY";
+        catch (e) {
+            // AI失敗時のフェイルセーフ
+            aiDecision = {
+                action: currentMode === "TASK" ? "TASK_ADD" : "MEMORY_ADD",
+                data: { title: message, summary: message.slice(0, 20), tags: [] },
+                reply: "AIエラーのためそのまま保存しました。",
+            };
         }
-        else if (currentMode === "CALENDAR") {
-            msgType = "CALENDAR";
-        }
-        else {
-            // ★ AUTOモード: 従来のAI仕分け
-            const classifyPrompt = `
-            ユーザーの入力を分類してJSONで出力せよ:
-            入力: "${message}"
-            分類基準:
-            - CALENDAR: 予定を聞く質問
-            - MEMORY: 記録・保存の指示
-            - CHAT: その他、質問、雑談
-            出力: { "type": "CALENDAR" | "MEMORY" | "CHAT" }
-          `;
+        // 3. アクション実行
+        const action = aiDecision.action;
+        const data = aiDecision.data || {};
+        let replyText = aiDecision.reply || "処理しました";
+        if (action === "MEMORY_APPEND" && data.targetId) {
+            // ★既存メモへの追記
             try {
-                const result = await callGeminiJson(apiKey, classifyPrompt);
-                if (result && result.type)
-                    msgType = result.type;
+                const docRef = db.collection("memories").doc(data.targetId);
+                const docSnap = await docRef.get();
+                if (docSnap.exists) {
+                    const oldText = ((_b = docSnap.data()) === null || _b === void 0 ? void 0 : _b.text) || "";
+                    // 改行して追記
+                    const newText = `${oldText}\n${data.content || message}`;
+                    await docRef.update({ text: newText });
+                    replyText = `📝 既存のメモに追記しました: ${data.content || message}`;
+                }
+                else {
+                    // IDが見つからない場合は新規作成
+                    await db.collection("memories").add({
+                        userId: uid,
+                        text: message,
+                        aiSummary: message.slice(0, 20),
+                        tags: ["Memo", "LINE"],
+                        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                        source: "LINE",
+                    });
+                    replyText = `📝 (対象が見つからず) 新規メモとして保存しました。`;
+                }
             }
-            catch (e) { }
+            catch (e) {
+                replyText = "⚠️ 追記に失敗しました。";
+            }
         }
-        // ★ 3. モードごとの処理実行
-        if (msgType === "FORCE_TASK") {
-            // 強制タスク保存
-            // 要約とタグ生成だけAIにやらせる（処理はタスク固定）
-            const tagResult = await callGeminiJson(apiKey, `テキスト: "${message}"\nJSON出力: { "summary": "20文字要約", "tags": [] }`);
-            await db.collection("memories").add({
-                userId: uid,
-                text: message,
-                aiSummary: tagResult.summary || message.slice(0, 20),
-                tags: [...(tagResult.tags || []), "LINE", "Task"],
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                source: "LINE",
-            });
+        else if (action === "CALENDAR_ADD") {
+            // ★カレンダー登録
+            if (data.start) {
+                const success = await addCalendarEvent(uid, {
+                    title: data.title || message,
+                    start: data.start,
+                    end: data.end || data.start,
+                });
+                replyText = success
+                    ? `📅 予定を登録しました: ${data.title}`
+                    : "⚠️ カレンダー登録に失敗しました。連携設定を確認してください。";
+            }
+            else {
+                replyText = "日時が特定できませんでした。";
+            }
+        }
+        else if (action === "CALENDAR_READ") {
+            // カレンダー参照
+            const eventsText = await getCalendarEvents(uid);
+            replyText = await callGeminiText(apiKey, `質問: "${message}"\n予定:\n${eventsText}\nこれを見て答えて。`);
+        }
+        else if (action === "TASK_ADD") {
+            // タスク追加
             await db.collection("todos").add({
                 userId: uid,
-                title: message,
+                title: data.title || message,
                 isCompleted: false,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 source: "LINE",
             });
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: "✅ タスクに追加しました",
-            });
-        }
-        else if (msgType === "FORCE_MEMORY") {
-            // 強制メモ保存
-            const tagResult = await callGeminiJson(apiKey, `テキスト: "${message}"\nJSON出力: { "summary": "20文字要約", "tags": [] }`);
+            // 念のためメモにも
             await db.collection("memories").add({
                 userId: uid,
                 text: message,
-                aiSummary: tagResult.summary || message.slice(0, 20),
-                tags: [...(tagResult.tags || []), "LINE", "Memo"],
+                aiSummary: `[Task] ${data.summary || message}`,
+                tags: [...(data.tags || []), "Task"],
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 source: "LINE",
             });
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: "📝 メモしました",
-            });
+            replyText = `✅ タスクに追加しました: ${data.title}`;
         }
-        else if (msgType === "CALENDAR") {
-            // カレンダー参照
-            const eventsText = await getCalendarEvents(uid);
-            const reply = await callGeminiText(apiKey, `質問: "${message}"\n予定:\n${eventsText}\nこれを見て答えて。`);
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: reply,
-            });
-        }
-        else if (msgType === "MEMORY") {
-            // AUTOモード時のメモ判定（AIに詳細を任せる）
-            const memoryPrompt = `
-            入力: "${message}"
-            これを保存します。JSON出力: { "summary": "20文字要約", "tags": [], "isTask": boolean }
-            isTask判定: "ToDo"や"〜しなきゃ"や"買う"等のアクションはtrue。単なる記録や予定宣言はfalse。
-          `;
-            const memResult = await callGeminiJson(apiKey, memoryPrompt);
+        else if (action === "MEMORY_ADD") {
+            // メモ保存
             await db.collection("memories").add({
                 userId: uid,
                 text: message,
-                aiSummary: memResult.summary,
-                tags: [...(memResult.tags || []), "LINE"],
+                aiSummary: data.summary || message.slice(0, 20),
+                tags: [...(data.tags || []), "Memo"],
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 source: "LINE",
             });
-            if (memResult.isTask) {
-                await db.collection("todos").add({
-                    userId: uid,
-                    title: message,
-                    isCompleted: false,
-                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                    source: "LINE",
-                });
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "📝 タスクに追加しました",
-                });
-            }
-            else {
-                await client.replyMessage(event.replyToken, {
-                    type: "text",
-                    text: "📓 メモしました",
-                });
-            }
+            replyText = `📝 メモしました: ${data.summary}`;
         }
         else {
-            // CHATモード (AUTO) - 記憶参照付き
-            const memoryContext = await getRecentMemories(uid);
-            const chatPrompt = `
-            ユーザー: ${message}
-            【直近の記憶】${memoryContext}
-            指示: 記憶に答えがあればそれを使って親切に返信して。なければ「記録にありません」と答えて。
-          `;
-            const reply = await callGeminiText(apiKey, chatPrompt);
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: reply,
-            });
+            // CHAT (AIの返信をそのまま使う)
         }
+        await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: replyText,
+        });
     }));
     res.json({ success: true });
 });
 // =========================================================
-// 機能 2: LINE連携設定
+// 機能 2, 3, 4 (変更なし)
 // =========================================================
 exports.linkLineAccount = (0, https_1.onCall)({
     secrets: [
@@ -495,7 +551,6 @@ exports.linkLineAccount = (0, https_1.onCall)({
         lineBotSecret,
     ],
 }, async (request) => {
-    var _a;
     if (!request.auth)
         throw new https_1.HttpsError("unauthenticated", "Login required");
     const { code, redirectUri } = request.data;
@@ -514,17 +569,15 @@ exports.linkLineAccount = (0, https_1.onCall)({
         const tokenResponse = await axios_1.default.post("https://api.line.me/oauth2/v2.1/token", params);
         const { access_token } = tokenResponse.data;
         const profileResponse = await axios_1.default.get("https://api.line.me/v2/profile", { headers: { Authorization: `Bearer ${access_token}` } });
-        const lineUserId = profileResponse.data.userId;
-        const lineDisplayName = profileResponse.data.displayName;
         await db.collection("users").doc(request.auth.uid).set({
             isLineLinked: true,
-            lineUserId: lineUserId,
-            lineDisplayName: lineDisplayName,
+            lineUserId: profileResponse.data.userId,
+            lineDisplayName: profileResponse.data.displayName,
         }, { merge: true });
         return { success: true };
     }
     catch (error) {
-        console.error("LINE Link Error:", ((_a = error.response) === null || _a === void 0 ? void 0 : _a.data) || error.message);
+        console.error("LINE Link Error:", error.message);
         throw new https_1.HttpsError("internal", "LINE linkage failed");
     }
 });
@@ -538,9 +591,6 @@ exports.unlinkLineAccount = (0, https_1.onCall)({ cors: true }, async (request) 
     }, { merge: true });
     return { success: true };
 });
-// =========================================================
-// 機能 3 & 4: 朝の挨拶とカンペ
-// =========================================================
 exports.sendMorningBriefing = (0, scheduler_1.onSchedule)({
     schedule: "0 7 * * *",
     timeZone: "Asia/Tokyo",
@@ -579,13 +629,7 @@ exports.sendMorningBriefing = (0, scheduler_1.onSchedule)({
         const todoText = todosSnap.docs
             .map((d) => `- [未完了] ${d.data().title}`)
             .join("\n");
-        const prompt = `
-        おはようございます。秘書AIです。
-        昨日のメモと残っているタスクから、今日のブリーフィングを作成してください。
-        【昨日のメモ】${memoryText}
-        【未完了タスク】${todoText}
-        指示: 挨拶は元気に。「今日やるべきこと」を明確に。300文字以内。
-      `;
+        const prompt = `おはようございます。今日のブリーフィングです。\n昨日: ${memoryText}\n未完了タスク: ${todoText}\n元気に300文字以内で。`;
         const briefing = await callGeminiText(apiKey, prompt);
         await client.pushMessage(userData.lineUserId, {
             type: "text",
@@ -617,21 +661,16 @@ exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
             .get();
         if (!tokenDoc.exists)
             continue;
-        const refreshToken = (_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken;
-        if (!refreshToken)
-            continue;
-        const accessToken = await refreshAccessToken(refreshToken);
+        const accessToken = await refreshAccessToken((_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken);
         if (!accessToken)
             continue;
         const now = new Date();
-        const timeMin = now.toISOString();
-        const timeMax = new Date(now.getTime() + 20 * 60 * 1000).toISOString();
         try {
             const calendarRes = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
                 headers: { Authorization: `Bearer ${accessToken}` },
                 params: {
-                    timeMin,
-                    timeMax,
+                    timeMin: now.toISOString(),
+                    timeMax: new Date(now.getTime() + 20 * 60000).toISOString(),
                     singleEvents: true,
                     orderBy: "startTime",
                 },
@@ -650,12 +689,7 @@ exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
                 const memoryDump = recentMemoriesSnap.docs
                     .map((d) => `[${d.data().createdAt.toDate().toLocaleDateString()}] ${d.data().text}`)
                     .join("\n");
-                const cheatSheetPrompt = `
-            これから「${title}」という予定があります。
-            以下の過去のメモから、関連情報（名前、前回の話題、懸案事項など）を探し出し「直前カンニングペーパー」を作成して。
-            【過去のメモ】${memoryDump}
-            指示: 関連情報がない場合は「関連情報なし」と出力。ある場合は箇条書きで。
-          `;
+                const cheatSheetPrompt = `「${title}」の直前カンペ作成。過去メモ: ${memoryDump} 関連情報なければ「関連情報なし」と出力。`;
                 const cheatSheet = await callGeminiText(apiKey, cheatSheetPrompt);
                 if (!cheatSheet.includes("関連情報なし") &&
                     !cheatSheet.includes("エラー")) {
