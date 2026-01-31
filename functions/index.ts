@@ -28,130 +28,87 @@ const googleClientSecret = defineSecret("GOOGLE_CLIENT_SECRET");
 const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
 const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
 
-// フォールバック用のモデルリスト
-const CANDIDATE_MODELS = [
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-001",
-  "gemini-1.5-pro",
-  "gemini-pro",
-];
+// モデル固定（安定性重視）
+const TARGET_MODEL = "gemini-1.5-flash";
 
 // ---------------------------------------------------------
-// Helper: JSON抽出・修復関数
+// Helper: JSON抽出
 // ---------------------------------------------------------
 function extractJson(text: string): any {
   try {
     return JSON.parse(text);
   } catch (e) {
     try {
-      const cleaned = text.replace(/```json|```/g, "").trim();
+      const cleaned = text
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
       return JSON.parse(cleaned);
     } catch (e2) {
       try {
-        const firstOpen = text.indexOf("{");
-        const lastClose = text.lastIndexOf("}");
-        if (firstOpen !== -1 && lastClose !== -1) {
-          const jsonString = text.substring(firstOpen, lastClose + 1);
-          return JSON.parse(jsonString);
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          return JSON.parse(jsonMatch[0]);
         }
-        throw new Error("No JSON found");
+        console.warn("No JSON found, falling back to chat.");
+        return { action: "CHAT", reply: text };
       } catch (e3) {
-        throw new Error("JSON parsing failed");
+        console.error("JSON Parse Error:", text);
+        return { action: "CHAT", reply: text };
       }
     }
   }
 }
 
 // ---------------------------------------------------------
-// Helper: AI Model Management (変更なし・安定版)
+// Helper: IDクリーニング
 // ---------------------------------------------------------
-
-async function fetchAvailableModels(apiKey: string): Promise<any[]> {
-  try {
-    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-    const listResponse = await axios.get(listUrl);
-    if (listResponse.status !== 200) return [];
-    return listResponse.data.models || [];
-  } catch (e) {
-    console.warn("Failed to fetch model list:", e);
-    return [];
-  }
+function cleanId(id: string): string {
+  if (!id || typeof id !== "string") return "";
+  return id.replace(/<<<|>>>|ID:/gi, "").trim();
 }
 
-async function resolveGeminiModel(apiKey: string): Promise<string> {
-  const models = await fetchAvailableModels(apiKey);
-  const generationModels = models.filter((m: any) =>
-    m.supportedGenerationMethods?.includes("generateContent"),
-  );
-  let target = generationModels.find((m: any) =>
-    m.name.includes("gemini-1.5-flash"),
-  );
-  if (!target) {
-    target = generationModels.find((m: any) =>
-      m.name.includes("gemini-1.5-pro"),
-    );
-  }
-  if (!target && generationModels.length > 0) {
-    target = generationModels[0];
-  }
-  if (target) {
-    return target.name.replace("models/", "");
-  }
-  return "gemini-1.5-flash";
-}
-
+// ---------------------------------------------------------
+// Helper: AI Call
+// ---------------------------------------------------------
 async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
-  const dynamicModel = await resolveGeminiModel(apiKey);
-  const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(
-    Boolean,
-  );
-
-  for (const modelName of modelsToTry) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-      const response = await axios.post(
-        url,
-        {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json" },
-        },
-        { headers: { "Content-Type": "application/json" } },
-      );
-      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (text) {
-        return extractJson(text);
-      }
-    } catch (e: any) {
-      console.warn(`Model ${modelName} failed: ${e.message}. Retrying...`);
-    }
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${TARGET_MODEL}:generateContent?key=${apiKey}`;
+    const response = await axios.post(
+      url,
+      { contents: [{ parts: [{ text: prompt }] }] },
+      { headers: { "Content-Type": "application/json" } },
+    );
+    const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (text) return extractJson(text);
+  } catch (e: any) {
+    console.error(`Gemini JSON Error:`, e.message);
+    return { action: "CHAT", reply: "エラーが発生しました。" };
   }
-  throw new Error("All AI models failed to generate valid JSON");
+  return { action: "CHAT", reply: "応答がありませんでした。" };
 }
 
 async function callGeminiText(apiKey: string, prompt: string): Promise<string> {
-  const dynamicModel = await resolveGeminiModel(apiKey);
-  const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(
-    Boolean,
-  );
-
-  for (const modelName of modelsToTry) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-      const response = await axios.post(
-        url,
-        { contents: [{ parts: [{ text: prompt }] }] },
-        { headers: { "Content-Type": "application/json" } },
-      );
-      return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    } catch (e) {
-      console.warn(`Model ${modelName} (Text) failed. Retrying...`);
-    }
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${TARGET_MODEL}:generateContent?key=${apiKey}`;
+    const response = await axios.post(
+      url,
+      { contents: [{ parts: [{ text: prompt }] }] },
+      { headers: { "Content-Type": "application/json" } },
+    );
+    let text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    return text
+      .replace(/^```.*\n/gm, "")
+      .replace(/```/g, "")
+      .trim();
+  } catch (e: any) {
+    console.error(`Gemini Text Error:`, e.message);
+    return "";
   }
-  return "すみません、AIの調子が悪く応答できませんでした。";
 }
 
 // ---------------------------------------------------------
-// Helper: Google Token Refresh & Calendar
+// Helper: Google Token Refresh
 // ---------------------------------------------------------
 async function refreshAccessToken(refreshToken: string) {
   try {
@@ -163,11 +120,13 @@ async function refreshAccessToken(refreshToken: string) {
     });
     return response.data.access_token;
   } catch (e: any) {
-    console.error("Token Refresh Error:", e.message);
     return null;
   }
 }
 
+// ---------------------------------------------------------
+// Helper: Calendar & Todo
+// ---------------------------------------------------------
 async function getCalendarEvents(uid: string): Promise<string> {
   try {
     const tokenDoc = await db
@@ -177,19 +136,15 @@ async function getCalendarEvents(uid: string): Promise<string> {
       .doc("tokens")
       .get();
     if (!tokenDoc.exists) return "（カレンダー未連携）";
-
     const refreshToken = tokenDoc.data()?.refreshToken;
-    if (!refreshToken) return "（カレンダー権限なし）";
-
+    if (!refreshToken) return "（権限なし）";
     const accessToken = await refreshAccessToken(refreshToken);
-    if (!accessToken) return "（トークン期限切れ）";
-
+    if (!accessToken) return "（トークン切れ）";
     const now = new Date();
     const timeMin = now.toISOString();
     const timeMax = new Date(
-      now.getTime() + 7 * 24 * 60 * 60 * 1000,
+      now.getTime() + 14 * 24 * 60 * 60 * 1000,
     ).toISOString();
-
     const calendarRes = await axios.get(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
       {
@@ -199,14 +154,12 @@ async function getCalendarEvents(uid: string): Promise<string> {
           timeMax,
           singleEvents: true,
           orderBy: "startTime",
-          maxResults: 15,
+          maxResults: 20,
         },
       },
     );
-
     const events = calendarRes.data.items || [];
-    if (events.length === 0) return "直近1週間の予定はありません。";
-
+    if (events.length === 0) return "直近の予定はありません。";
     return events
       .map((ev: any) => {
         const start = ev.start.dateTime
@@ -222,8 +175,7 @@ async function getCalendarEvents(uid: string): Promise<string> {
       })
       .join("\n");
   } catch (e) {
-    console.error("Calendar Fetch Error:", e);
-    return "（カレンダー取得エラー）";
+    return "（取得エラー）";
   }
 }
 
@@ -240,10 +192,8 @@ async function addCalendarEvent(
       .get();
     if (!tokenDoc.exists) return false;
     const refreshToken = tokenDoc.data()?.refreshToken;
-    if (!refreshToken) return false;
     const accessToken = await refreshAccessToken(refreshToken);
     if (!accessToken) return false;
-
     await axios.post(
       "https://www.googleapis.com/calendar/v3/calendars/primary/events",
       {
@@ -255,76 +205,100 @@ async function addCalendarEvent(
     );
     return true;
   } catch (e) {
-    console.error("Add Event Error:", e);
     return false;
   }
 }
 
-// ★修正: 最新50件からキーワード検索で執念深く探すロジックに変更
+async function deleteCalendarEvent(
+  uid: string,
+  query: string,
+): Promise<string> {
+  try {
+    const tokenDoc = await db
+      .collection("users")
+      .doc(uid)
+      .collection("system")
+      .doc("tokens")
+      .get();
+    if (!tokenDoc.exists) return "連携されていません";
+    const accessToken = await refreshAccessToken(tokenDoc.data()?.refreshToken);
+    if (!accessToken) return "認証エラー";
+    const searchRes = await axios.get(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        params: { q: query, maxResults: 5, singleEvents: true },
+      },
+    );
+    const events = searchRes.data.items || [];
+    if (events.length === 0) return "該当する予定が見つかりませんでした。";
+    const target = events[0];
+    await axios.delete(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${target.id}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    return `「${target.summary}」を削除しました。`;
+  } catch (e) {
+    return "削除に失敗しました。";
+  }
+}
+
+async function deleteTodoByTitle(uid: string, title: string): Promise<string> {
+  const todosRef = db.collection("todos");
+  const snap = await todosRef
+    .where("userId", "==", uid)
+    .where("isCompleted", "==", false)
+    .orderBy("createdAt", "desc")
+    .limit(30)
+    .get();
+  const targetDoc = snap.docs.find((doc) => doc.data().title.includes(title));
+  if (targetDoc) {
+    await targetDoc.ref.delete();
+    return `タスク「${targetDoc.data().title}」を削除しました。`;
+  }
+  return "タスクが見つかりませんでした。";
+}
+
+// ---------------------------------------------------------
+// Helper: Memory Context
+// ---------------------------------------------------------
 async function getRecentMemories(
   uid: string,
   queryText: string,
 ): Promise<string> {
   try {
-    // 1. 直近50件を取得（数を増やす）
     const snapshot = await db
       .collection("memories")
       .where("userId", "==", uid)
       .orderBy("createdAt", "desc")
       .limit(50)
       .get();
-
     if (snapshot.empty) return "（履歴なし）";
 
     let docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-    // 2. キーワードフィルタリング（"買い物リスト"等の言葉があれば優先抽出）
     const keywords = queryText
       .replace(/[\s,、　]+/g, " ")
       .split(" ")
       .filter((k) => k.length > 1);
-
     const matches = docs.filter((d: any) =>
       keywords.some((k) => d.text.includes(k)),
     );
-    const recents = docs.slice(0, 3); // 直近3件も文脈用に残す
-
-    // 重複を排除して結合
+    const recents = docs.slice(0, 5);
     const candidates = [...recents, ...matches];
     const uniqueCandidates = Array.from(
       new Map(candidates.map((c) => [c.id, c])).values(),
     );
 
-    if (uniqueCandidates.length === 0) return "（関連する履歴なし）";
-
     return uniqueCandidates
-      .map((data: any) => {
-        let dateStr = "";
-        if (data.createdAt?.toDate) {
-          const date = data.createdAt.toDate();
-          const diffMin = Math.floor((Date.now() - date.getTime()) / 60000);
-          const timeLabel =
-            diffMin < 60
-              ? `${diffMin}分前`
-              : date.toLocaleString("ja-JP", {
-                  month: "numeric",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
-          dateStr = `[${timeLabel}]`;
-        }
-        // AIが「どこに追記するか」判断できるようにIDを含める
-        return `ID:${data.id} | ${dateStr} ${data.text.replace(/\n/g, " ")}`;
-      })
+      .map((data: any) => `<<<${data.id}>>> ${data.text.replace(/\n/g, " ")}`)
       .join("\n");
   } catch (e) {
-    return "（メモ取得エラー）";
+    return "（取得エラー）";
   }
 }
 
 // =========================================================
-// 機能 1: LINE Webhook (スーパー秘書モード)
+// LINE Webhook (Context Aware)
 // =========================================================
 export const lineWebhook = onRequest(
   {
@@ -340,7 +314,6 @@ export const lineWebhook = onRequest(
   async (req, res) => {
     const token = lineBotToken.value();
     const apiKey = geminiApiKey.value();
-
     if (!token || !apiKey) {
       res.status(500).send("Config Error");
       return;
@@ -357,7 +330,6 @@ export const lineWebhook = onRequest(
         const lineUserId = event.source.userId;
         const message = event.message.text.trim();
 
-        // 重複排除
         try {
           await db.collection("processed_events").doc(eventId).create({
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -375,13 +347,34 @@ export const lineWebhook = onRequest(
         if (usersSnap.empty) {
           await client.replyMessage(event.replyToken, {
             type: "text",
-            text: "アプリで「LINE連携」ボタンを押してね🙇‍♂️",
+            text: "アプリで「LINE連携」ボタンを押してください。",
           });
           return;
         }
         const uid = usersSnap.docs[0].id;
 
-        // 1. 強制モード切替コマンド
+        // ★ここが移植ポイント: バックエンドでも「直前のID」を覚える！
+        const contextRef = db
+          .collection("users")
+          .doc(uid)
+          .collection("system")
+          .doc("user_context");
+        const contextSnap = await contextRef.get();
+        const lastMemoryId = contextSnap.exists
+          ? contextSnap.data()?.lastMemoryId
+          : null;
+
+        // ★さらに重要: 覚えているIDの中身も取得してAIに見せる
+        let activeMemoryContent = "";
+        if (lastMemoryId) {
+          const memRef = db.collection("memories").doc(lastMemoryId);
+          const memSnap = await memRef.get();
+          if (memSnap.exists) {
+            activeMemoryContent = `【直前に操作・参照していたメモ】\nID: <<<${lastMemoryId}>>>\n内容: ${memSnap.data()?.text}`;
+          }
+        }
+
+        // 1. 強制モード
         const commands: Record<string, string> = {
           "【モード】タスク": "TASK",
           "【モード】メモ": "MEMORY",
@@ -389,163 +382,164 @@ export const lineWebhook = onRequest(
           "【モード】お任せ": "AUTO",
           "【モード】リセット": "AUTO",
         };
-
         if (commands[message]) {
           await db
             .collection("users")
             .doc(uid)
             .update({ lineMode: commands[message] });
-          const replyText =
-            commands[message] === "AUTO"
-              ? "🤖 お任せモードになりました。\nAIが内容を判断します。"
-              : `✅ ${commands[message]}モードになりました。`;
           await client.replyMessage(event.replyToken, {
             type: "text",
-            text: replyText,
+            text: `✅ ${commands[message]}モードになりました。`,
           });
           return;
         }
 
-        // 2. モードと文脈取得
-        const userDoc = await db.collection("users").doc(uid).get();
-        const currentMode = userDoc.data()?.lineMode || "AUTO";
-        // ★ここでメッセージを渡して、関連するメモを強力に検索する
+        // 2. コンテキスト取得
         const memoryContext = await getRecentMemories(uid, message);
         const nowStr = new Date().toLocaleString("ja-JP", {
           timeZone: "Asia/Tokyo",
         });
 
-        // ★司令塔プロンプト（ユーザーの意図をAIが判断）
+        // 3. 司令塔プロンプト (Context Aware)
         const routerPrompt = `
-          あなたは優秀な秘書AIです。現在日時: ${nowStr}
-          ユーザー入力: "${message}"
-          【参照可能なメモ(ID付)】
-          ${memoryContext}
+        現在日時: ${nowStr}
+        ユーザー入力: "${message}"
 
-          指示:
-          ユーザーの意図を汲み取り、アクションを決定してください。
-          「これ」「あれ」「さっきの」は、直近のメモを指します。
-          「買い物リスト」と言われたら、過去のメモから「買い物リスト」を探して追記してください。
-          
-          モード: ${currentMode}
-          - "これ追加して"等の指示があり、直近の記憶に関連するものがあれば MEMORY_APPEND
-          - TASKモードなら TASK_ADD
-          - MEMORYモードなら MEMORY_ADD
-          - CALENDARモードなら CALENDAR_READ (または文脈によってはADD)
-          - AUTOモードなら文脈から判断
+        ${activeMemoryContent ? activeMemoryContent : "直前のメモ参照なし"}
 
-          出力JSON形式:
-          {
-            "action": "CALENDAR_ADD" | "CALENDAR_READ" | "TASK_ADD" | "MEMORY_ADD" | "MEMORY_APPEND" | "CHAT",
-            "data": {
-              "title": "予定/タスク名",
-              "start": "ISO8601日時",
-              "end": "ISO8601日時",
-              "summary": "要約",
-              "targetId": "MEMORY_APPENDの場合の対象ID",
-              "content": "追加する内容テキスト",
-              "tags": ["タグ"]
-            },
-            "reply": "ユーザーへの返信メッセージ (短く親切に)"
-          }
-        `;
+        【その他参照可能なメモ】(IDは<<< >>>で囲われています)
+        ${memoryContext}
 
-        let aiDecision: any = {};
-        try {
-          aiDecision = await callGeminiJson(apiKey, routerPrompt);
-        } catch (e) {
-          // AI失敗時のフェイルセーフ
-          aiDecision = {
-            action: currentMode === "TASK" ? "TASK_ADD" : "MEMORY_ADD",
-            data: { title: message, summary: message.slice(0, 20), tags: [] },
-            reply: "AIエラーのためそのまま保存しました。",
-          };
+        指示:
+        ユーザーの意図を汲み取り、以下のJSON形式のみを出力してください。
+        
+        ★重要: 「これ」「あれ」「さっきの」「リストから」などの指示語がある場合は、【直前に操作・参照していたメモ】を最優先で対象にしてください。
+
+        ★アクション判断基準:
+        1. 【メモ編集・部分削除】 "〇〇を消して" "リストから〇〇を削除" "〇〇を変更して"
+           -> "MEMORY_EDIT"
+           - targetId: 対象ID (「これ」なら直前のID)
+           - instruction: 具体的な編集指示（例：「『牛乳』の行を削除」「『13時』を『14時』に変更」）
+        
+        2. 【メモ追記】 "これ追加して" "〇〇も買っておいて"
+           -> "MEMORY_APPEND"
+           - targetId: 対象ID (「これ」なら直前のID)
+           - content: 追加する内容
+
+        3. 【タスク削除】 "タスク消して" "タスク完了" -> "TASK_DELETE"
+        4. 【予定削除】 "予定消して" "キャンセル" -> "CALENDAR_DELETE"
+        5. 【予定追加】 日時指定がある場合 -> "CALENDAR_ADD"
+        6. 【メモ保存】 上記以外 -> "MEMORY_ADD"
+        7. 【会話】 挨拶や質問 -> "CHAT"
+
+        出力JSON形式:
+        {
+          "action": "ACTION_NAME",
+          "targetId": "ID文字列 (<<<と>>>は除く)",
+          "instruction": "編集指示の内容",
+          "content": "追記・保存する内容",
+          "reply": "ユーザーへの短い返信"
         }
+      `;
 
-        // 3. アクション実行
-        const action = aiDecision.action;
-        const data = aiDecision.data || {};
-        let replyText = aiDecision.reply || "処理しました";
+        // 4. アクション決定
+        const aiDecision = await callGeminiJson(apiKey, routerPrompt);
 
-        if (action === "MEMORY_APPEND" && data.targetId) {
-          // ★既存メモへの追記
+        const action = aiDecision.action || "CHAT";
+        const data = aiDecision.data || aiDecision;
+
+        // AIがIDを出さない場合でも、直前のIDがあればそれを使う（フォールバック）
+        const rawTargetId = data.targetId;
+        const targetId =
+          cleanId(rawTargetId) ||
+          (action === "MEMORY_EDIT" || action === "MEMORY_APPEND"
+            ? lastMemoryId
+            : null);
+
+        const instruction = data.instruction;
+        const content = data.content || message;
+        let replyText = data.reply || "処理しました";
+
+        // 次回のために覚えるID
+        let nextMemoryId = targetId || lastMemoryId;
+
+        // 5. アクション実行
+        if (action === "MEMORY_EDIT" && targetId && instruction) {
           try {
-            const docRef = db.collection("memories").doc(data.targetId);
+            const docRef = db.collection("memories").doc(targetId);
+            const docSnap = await docRef.get();
+            if (docSnap.exists) {
+              const currentText = docSnap.data()?.text || "";
+              const editPrompt = `あなたはテキストエディタです。以下のテキストを指示通りに修正し、修正後の**全文のみ**を出力してください。\n\n【元テキスト】\n${currentText}\n\n【指示】\n${instruction}`;
+              const newText = await callGeminiText(apiKey, editPrompt);
+              if (newText) {
+                await docRef.update({ text: newText.trim() });
+                replyText = `📝 更新しました。\n\n${newText.trim()}`;
+                nextMemoryId = targetId; // 操作成功したので覚える
+              } else {
+                replyText = "⚠️ 更新内容が空でした。";
+              }
+            } else {
+              replyText = "⚠️ 指定されたメモが見つかりませんでした。";
+            }
+          } catch {
+            replyText = "⚠️ 更新に失敗しました。";
+          }
+        } else if (action === "MEMORY_APPEND" && targetId) {
+          try {
+            const docRef = db.collection("memories").doc(targetId);
             const docSnap = await docRef.get();
             if (docSnap.exists) {
               const oldText = docSnap.data()?.text || "";
-              // 改行して追記
-              const newText = `${oldText}\n${data.content || message}`;
+              const newText = `${oldText}\n${content}`;
               await docRef.update({ text: newText });
-              replyText = `📝 既存のメモに追記しました: ${data.content || message}`;
+              replyText = `📝 追記しました: ${content}`;
+              nextMemoryId = targetId;
             } else {
-              // IDが見つからない場合は新規作成
-              await db.collection("memories").add({
-                userId: uid,
-                text: message,
-                aiSummary: message.slice(0, 20),
-                tags: ["Memo", "LINE"],
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                source: "LINE",
-              });
-              replyText = `📝 (対象が見つからず) 新規メモとして保存しました。`;
+              replyText = `⚠️ 追記先のメモが見つかりませんでした。`;
             }
-          } catch (e) {
+          } catch {
             replyText = "⚠️ 追記に失敗しました。";
           }
+        } else if (action === "TASK_DELETE") {
+          replyText = await deleteTodoByTitle(uid, content);
+        } else if (action === "CALENDAR_DELETE") {
+          replyText = await deleteCalendarEvent(uid, content);
         } else if (action === "CALENDAR_ADD") {
-          // ★カレンダー登録
           if (data.start) {
-            const success = await addCalendarEvent(uid, {
-              title: data.title || message,
-              start: data.start,
-              end: data.end || data.start,
-            });
-            replyText = success
-              ? `📅 予定を登録しました: ${data.title}`
-              : "⚠️ カレンダー登録に失敗しました。連携設定を確認してください。";
+            await addCalendarEvent(uid, data);
+            replyText = `📅 予定を登録しました: ${content}`;
           } else {
-            replyText = "日時が特定できませんでした。";
+            replyText = "📅 予定の追加はWebアプリから行うと確実です。";
           }
-        } else if (action === "CALENDAR_READ") {
-          // カレンダー参照
-          const eventsText = await getCalendarEvents(uid);
-          replyText = await callGeminiText(
-            apiKey,
-            `質問: "${message}"\n予定:\n${eventsText}\nこれを見て答えて。`,
-          );
         } else if (action === "TASK_ADD") {
-          // タスク追加
           await db.collection("todos").add({
             userId: uid,
-            title: data.title || message,
+            title: content,
             isCompleted: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             source: "LINE",
           });
-          // 念のためメモにも
-          await db.collection("memories").add({
-            userId: uid,
-            text: message,
-            aiSummary: `[Task] ${data.summary || message}`,
-            tags: [...(data.tags || []), "Task"],
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            source: "LINE",
-          });
-          replyText = `✅ タスクに追加しました: ${data.title}`;
+          replyText = `✅ タスク追加: ${content}`;
         } else if (action === "MEMORY_ADD") {
-          // メモ保存
-          await db.collection("memories").add({
+          const ref = await db.collection("memories").add({
             userId: uid,
-            text: message,
-            aiSummary: data.summary || message.slice(0, 20),
-            tags: [...(data.tags || []), "Memo"],
+            text: content,
+            aiSummary: content.slice(0, 20),
+            tags: ["Memo", "LINE"],
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             source: "LINE",
           });
-          replyText = `📝 メモしました: ${data.summary}`;
-        } else {
-          // CHAT (AIの返信をそのまま使う)
+          replyText = `📝 メモしました`;
+          nextMemoryId = ref.id; // 新規作成したIDを覚える
+        } else if (action === "CHAT") {
+          // 会話であっても、参照されたIDがあれば覚える
+          if (targetId) nextMemoryId = targetId;
+        }
+
+        // ★IDをコンテキストに保存（次回用）
+        if (nextMemoryId) {
+          await contextRef.set({ lastMemoryId: nextMemoryId }, { merge: true });
         }
 
         await client.replyMessage(event.replyToken, {
@@ -559,9 +553,7 @@ export const lineWebhook = onRequest(
   },
 );
 
-// =========================================================
-// 機能 2, 3, 4 (変更なし)
-// =========================================================
+// その他機能
 export const linkLineAccount = onCall(
   {
     secrets: [
@@ -575,53 +567,43 @@ export const linkLineAccount = onCall(
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
     const { code, redirectUri } = request.data;
-    const clientId = lineLoginChannelId.value();
-    const clientSecret = lineLoginChannelSecret.value();
-    if (!clientId || !clientSecret) {
-      throw new HttpsError("failed-precondition", "LINE secrets not set");
-    }
     try {
       const params = new URLSearchParams();
       params.append("grant_type", "authorization_code");
       params.append("code", code);
       params.append("redirect_uri", redirectUri);
-      params.append("client_id", clientId);
-      params.append("client_secret", clientSecret);
-      const tokenResponse = await axios.post(
+      params.append("client_id", lineLoginChannelId.value());
+      params.append("client_secret", lineLoginChannelSecret.value());
+      const tokenRes = await axios.post(
         "https://api.line.me/oauth2/v2.1/token",
         params,
       );
-      const { access_token } = tokenResponse.data;
-      const profileResponse = await axios.get(
-        "https://api.line.me/v2/profile",
-        { headers: { Authorization: `Bearer ${access_token}` } },
-      );
-      await db.collection("users").doc(request.auth.uid).set(
-        {
-          isLineLinked: true,
-          lineUserId: profileResponse.data.userId,
-          lineDisplayName: profileResponse.data.displayName,
-        },
-        { merge: true },
-      );
+      const profileRes = await axios.get("https://api.line.me/v2/profile", {
+        headers: { Authorization: `Bearer ${tokenRes.data.access_token}` },
+      });
+      await db
+        .collection("users")
+        .doc(request.auth.uid)
+        .set(
+          { isLineLinked: true, lineUserId: profileRes.data.userId },
+          { merge: true },
+        );
       return { success: true };
-    } catch (error: any) {
-      console.error("LINE Link Error:", error.message);
-      throw new HttpsError("internal", "LINE linkage failed");
+    } catch (e: any) {
+      throw new HttpsError("internal", e.message);
     }
   },
 );
 
 export const unlinkLineAccount = onCall({ cors: true }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
-  await db.collection("users").doc(request.auth.uid).set(
-    {
-      isLineLinked: false,
-      lineUserId: admin.firestore.FieldValue.delete(),
-      lineDisplayName: admin.firestore.FieldValue.delete(),
-    },
-    { merge: true },
-  );
+  await db
+    .collection("users")
+    .doc(request.auth.uid)
+    .set(
+      { isLineLinked: false, lineUserId: admin.firestore.FieldValue.delete() },
+      { merge: true },
+    );
   return { success: true };
 });
 

@@ -4561,1476 +4561,6 @@ export function useHomeView() {
 }
 </file>
 
-<file path="functions/lib/index.js">
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.scrapeUrl = exports.checkUpcomingMeetings = exports.sendMorningBriefing = exports.unlinkLineAccount = exports.linkLineAccount = exports.lineWebhook = void 0;
-const https_1 = require("firebase-functions/v2/https");
-const scheduler_1 = require("firebase-functions/v2/scheduler");
-const v2_1 = require("firebase-functions/v2");
-const params_1 = require("firebase-functions/params");
-const admin = __importStar(require("firebase-admin"));
-const axios_1 = __importDefault(require("axios"));
-const line = __importStar(require("@line/bot-sdk"));
-if (admin.apps.length === 0) {
-    admin.initializeApp();
-}
-const db = admin.firestore();
-// メモリ設定
-(0, v2_1.setGlobalOptions)({
-    region: "asia-northeast1",
-    memory: "1GiB",
-    timeoutSeconds: 60,
-});
-// Secrets
-const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN");
-const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET");
-const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
-const googleClientId = (0, params_1.defineSecret)("GOOGLE_CLIENT_ID");
-const googleClientSecret = (0, params_1.defineSecret)("GOOGLE_CLIENT_SECRET");
-const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID");
-const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET");
-// フォールバック用のモデルリスト
-const CANDIDATE_MODELS = [
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-001",
-    "gemini-1.5-pro",
-    "gemini-pro",
-];
-// ---------------------------------------------------------
-// Helper: JSON抽出・修復関数
-// ---------------------------------------------------------
-function extractJson(text) {
-    try {
-        return JSON.parse(text);
-    }
-    catch (e) {
-        try {
-            const cleaned = text.replace(/```json|```/g, "").trim();
-            return JSON.parse(cleaned);
-        }
-        catch (e2) {
-            try {
-                const firstOpen = text.indexOf("{");
-                const lastClose = text.lastIndexOf("}");
-                if (firstOpen !== -1 && lastClose !== -1) {
-                    const jsonString = text.substring(firstOpen, lastClose + 1);
-                    return JSON.parse(jsonString);
-                }
-                throw new Error("No JSON found");
-            }
-            catch (e3) {
-                throw new Error("JSON parsing failed");
-            }
-        }
-    }
-}
-// ---------------------------------------------------------
-// Helper: AI Model Management (変更なし・安定版)
-// ---------------------------------------------------------
-async function fetchAvailableModels(apiKey) {
-    try {
-        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-        const listResponse = await axios_1.default.get(listUrl);
-        if (listResponse.status !== 200)
-            return [];
-        return listResponse.data.models || [];
-    }
-    catch (e) {
-        console.warn("Failed to fetch model list:", e);
-        return [];
-    }
-}
-async function resolveGeminiModel(apiKey) {
-    const models = await fetchAvailableModels(apiKey);
-    const generationModels = models.filter((m) => { var _a; return (_a = m.supportedGenerationMethods) === null || _a === void 0 ? void 0 : _a.includes("generateContent"); });
-    let target = generationModels.find((m) => m.name.includes("gemini-1.5-flash"));
-    if (!target) {
-        target = generationModels.find((m) => m.name.includes("gemini-1.5-pro"));
-    }
-    if (!target && generationModels.length > 0) {
-        target = generationModels[0];
-    }
-    if (target) {
-        return target.name.replace("models/", "");
-    }
-    return "gemini-1.5-flash";
-}
-async function callGeminiJson(apiKey, prompt) {
-    var _a, _b, _c, _d, _e, _f;
-    const dynamicModel = await resolveGeminiModel(apiKey);
-    const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(Boolean);
-    for (const modelName of modelsToTry) {
-        try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-            const response = await axios_1.default.post(url, {
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" },
-            }, { headers: { "Content-Type": "application/json" } });
-            const text = (_f = (_e = (_d = (_c = (_b = (_a = response.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text;
-            if (text) {
-                return extractJson(text);
-            }
-        }
-        catch (e) {
-            console.warn(`Model ${modelName} failed: ${e.message}. Retrying...`);
-        }
-    }
-    throw new Error("All AI models failed to generate valid JSON");
-}
-async function callGeminiText(apiKey, prompt) {
-    var _a, _b, _c, _d, _e, _f;
-    const dynamicModel = await resolveGeminiModel(apiKey);
-    const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(Boolean);
-    for (const modelName of modelsToTry) {
-        try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-            const response = await axios_1.default.post(url, { contents: [{ parts: [{ text: prompt }] }] }, { headers: { "Content-Type": "application/json" } });
-            return ((_f = (_e = (_d = (_c = (_b = (_a = response.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text) || "";
-        }
-        catch (e) {
-            console.warn(`Model ${modelName} (Text) failed. Retrying...`);
-        }
-    }
-    return "すみません、AIの調子が悪く応答できませんでした。";
-}
-// ---------------------------------------------------------
-// Helper: Google Token Refresh & Calendar
-// ---------------------------------------------------------
-async function refreshAccessToken(refreshToken) {
-    try {
-        const response = await axios_1.default.post("https://oauth2.googleapis.com/token", {
-            client_id: googleClientId.value(),
-            client_secret: googleClientSecret.value(),
-            refresh_token: refreshToken,
-            grant_type: "refresh_token",
-        });
-        return response.data.access_token;
-    }
-    catch (e) {
-        console.error("Token Refresh Error:", e.message);
-        return null;
-    }
-}
-async function getCalendarEvents(uid) {
-    var _a;
-    try {
-        const tokenDoc = await db
-            .collection("users")
-            .doc(uid)
-            .collection("system")
-            .doc("tokens")
-            .get();
-        if (!tokenDoc.exists)
-            return "（カレンダー未連携）";
-        const refreshToken = (_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken;
-        if (!refreshToken)
-            return "（カレンダー権限なし）";
-        const accessToken = await refreshAccessToken(refreshToken);
-        if (!accessToken)
-            return "（トークン期限切れ）";
-        const now = new Date();
-        const timeMin = now.toISOString();
-        const timeMax = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
-        const calendarRes = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            params: {
-                timeMin,
-                timeMax,
-                singleEvents: true,
-                orderBy: "startTime",
-                maxResults: 15,
-            },
-        });
-        const events = calendarRes.data.items || [];
-        if (events.length === 0)
-            return "直近1週間の予定はありません。";
-        return events
-            .map((ev) => {
-            const start = ev.start.dateTime
-                ? new Date(ev.start.dateTime).toLocaleString("ja-JP", {
-                    timeZone: "Asia/Tokyo",
-                    month: "numeric",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                })
-                : `[終日] ${ev.start.date}`;
-            return `・${start}: ${ev.summary}`;
-        })
-            .join("\n");
-    }
-    catch (e) {
-        console.error("Calendar Fetch Error:", e);
-        return "（カレンダー取得エラー）";
-    }
-}
-async function addCalendarEvent(uid, eventData) {
-    var _a;
-    try {
-        const tokenDoc = await db
-            .collection("users")
-            .doc(uid)
-            .collection("system")
-            .doc("tokens")
-            .get();
-        if (!tokenDoc.exists)
-            return false;
-        const refreshToken = (_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken;
-        if (!refreshToken)
-            return false;
-        const accessToken = await refreshAccessToken(refreshToken);
-        if (!accessToken)
-            return false;
-        await axios_1.default.post("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
-            summary: eventData.title,
-            start: { dateTime: eventData.start },
-            end: { dateTime: eventData.end },
-        }, { headers: { Authorization: `Bearer ${accessToken}` } });
-        return true;
-    }
-    catch (e) {
-        console.error("Add Event Error:", e);
-        return false;
-    }
-}
-// ★修正: 最新50件からキーワード検索で執念深く探すロジックに変更
-async function getRecentMemories(uid, queryText) {
-    try {
-        // 1. 直近50件を取得（数を増やす）
-        const snapshot = await db
-            .collection("memories")
-            .where("userId", "==", uid)
-            .orderBy("createdAt", "desc")
-            .limit(50)
-            .get();
-        if (snapshot.empty)
-            return "（履歴なし）";
-        let docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        // 2. キーワードフィルタリング（"買い物リスト"等の言葉があれば優先抽出）
-        const keywords = queryText
-            .replace(/[\s,、　]+/g, " ")
-            .split(" ")
-            .filter((k) => k.length > 1);
-        const matches = docs.filter((d) => keywords.some((k) => d.text.includes(k)));
-        const recents = docs.slice(0, 3); // 直近3件も文脈用に残す
-        // 重複を排除して結合
-        const candidates = [...recents, ...matches];
-        const uniqueCandidates = Array.from(new Map(candidates.map((c) => [c.id, c])).values());
-        if (uniqueCandidates.length === 0)
-            return "（関連する履歴なし）";
-        return uniqueCandidates
-            .map((data) => {
-            var _a;
-            let dateStr = "";
-            if ((_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) {
-                const date = data.createdAt.toDate();
-                const diffMin = Math.floor((Date.now() - date.getTime()) / 60000);
-                const timeLabel = diffMin < 60
-                    ? `${diffMin}分前`
-                    : date.toLocaleString("ja-JP", {
-                        month: "numeric",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                    });
-                dateStr = `[${timeLabel}]`;
-            }
-            // AIが「どこに追記するか」判断できるようにIDを含める
-            return `ID:${data.id} | ${dateStr} ${data.text.replace(/\n/g, " ")}`;
-        })
-            .join("\n");
-    }
-    catch (e) {
-        return "（メモ取得エラー）";
-    }
-}
-// =========================================================
-// 機能 1: LINE Webhook (スーパー秘書モード)
-// =========================================================
-exports.lineWebhook = (0, https_1.onRequest)({
-    secrets: [
-        lineBotToken,
-        lineBotSecret,
-        geminiApiKey,
-        googleClientId,
-        googleClientSecret,
-    ],
-    cors: true,
-}, async (req, res) => {
-    const token = lineBotToken.value();
-    const apiKey = geminiApiKey.value();
-    if (!token || !apiKey) {
-        res.status(500).send("Config Error");
-        return;
-    }
-    const client = new line.Client({ channelAccessToken: token });
-    const events = req.body.events;
-    await Promise.all(events.map(async (event) => {
-        var _a, _b;
-        if (event.type !== "message" || event.message.type !== "text")
-            return;
-        const eventId = event.webhookEventId;
-        const lineUserId = event.source.userId;
-        const message = event.message.text.trim();
-        // 重複排除
-        try {
-            await db.collection("processed_events").doc(eventId).create({
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                userId: lineUserId,
-            });
-        }
-        catch (e) {
-            return;
-        }
-        const usersSnap = await db
-            .collection("users")
-            .where("lineUserId", "==", lineUserId)
-            .limit(1)
-            .get();
-        if (usersSnap.empty) {
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: "アプリで「LINE連携」ボタンを押してね🙇‍♂️",
-            });
-            return;
-        }
-        const uid = usersSnap.docs[0].id;
-        // 1. 強制モード切替コマンド
-        const commands = {
-            "【モード】タスク": "TASK",
-            "【モード】メモ": "MEMORY",
-            "【モード】カレンダー": "CALENDAR",
-            "【モード】お任せ": "AUTO",
-            "【モード】リセット": "AUTO",
-        };
-        if (commands[message]) {
-            await db
-                .collection("users")
-                .doc(uid)
-                .update({ lineMode: commands[message] });
-            const replyText = commands[message] === "AUTO"
-                ? "🤖 お任せモードになりました。\nAIが内容を判断します。"
-                : `✅ ${commands[message]}モードになりました。`;
-            await client.replyMessage(event.replyToken, {
-                type: "text",
-                text: replyText,
-            });
-            return;
-        }
-        // 2. モードと文脈取得
-        const userDoc = await db.collection("users").doc(uid).get();
-        const currentMode = ((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.lineMode) || "AUTO";
-        // ★ここでメッセージを渡して、関連するメモを強力に検索する
-        const memoryContext = await getRecentMemories(uid, message);
-        const nowStr = new Date().toLocaleString("ja-JP", {
-            timeZone: "Asia/Tokyo",
-        });
-        // ★司令塔プロンプト（ユーザーの意図をAIが判断）
-        const routerPrompt = `
-          あなたは優秀な秘書AIです。現在日時: ${nowStr}
-          ユーザー入力: "${message}"
-          【参照可能なメモ(ID付)】
-          ${memoryContext}
-
-          指示:
-          ユーザーの意図を汲み取り、アクションを決定してください。
-          「これ」「あれ」「さっきの」は、直近のメモを指します。
-          「買い物リスト」と言われたら、過去のメモから「買い物リスト」を探して追記してください。
-          
-          モード: ${currentMode}
-          - "これ追加して"等の指示があり、直近の記憶に関連するものがあれば MEMORY_APPEND
-          - TASKモードなら TASK_ADD
-          - MEMORYモードなら MEMORY_ADD
-          - CALENDARモードなら CALENDAR_READ (または文脈によってはADD)
-          - AUTOモードなら文脈から判断
-
-          出力JSON形式:
-          {
-            "action": "CALENDAR_ADD" | "CALENDAR_READ" | "TASK_ADD" | "MEMORY_ADD" | "MEMORY_APPEND" | "CHAT",
-            "data": {
-              "title": "予定/タスク名",
-              "start": "ISO8601日時",
-              "end": "ISO8601日時",
-              "summary": "要約",
-              "targetId": "MEMORY_APPENDの場合の対象ID",
-              "content": "追加する内容テキスト",
-              "tags": ["タグ"]
-            },
-            "reply": "ユーザーへの返信メッセージ (短く親切に)"
-          }
-        `;
-        let aiDecision = {};
-        try {
-            aiDecision = await callGeminiJson(apiKey, routerPrompt);
-        }
-        catch (e) {
-            // AI失敗時のフェイルセーフ
-            aiDecision = {
-                action: currentMode === "TASK" ? "TASK_ADD" : "MEMORY_ADD",
-                data: { title: message, summary: message.slice(0, 20), tags: [] },
-                reply: "AIエラーのためそのまま保存しました。",
-            };
-        }
-        // 3. アクション実行
-        const action = aiDecision.action;
-        const data = aiDecision.data || {};
-        let replyText = aiDecision.reply || "処理しました";
-        if (action === "MEMORY_APPEND" && data.targetId) {
-            // ★既存メモへの追記
-            try {
-                const docRef = db.collection("memories").doc(data.targetId);
-                const docSnap = await docRef.get();
-                if (docSnap.exists) {
-                    const oldText = ((_b = docSnap.data()) === null || _b === void 0 ? void 0 : _b.text) || "";
-                    // 改行して追記
-                    const newText = `${oldText}\n${data.content || message}`;
-                    await docRef.update({ text: newText });
-                    replyText = `📝 既存のメモに追記しました: ${data.content || message}`;
-                }
-                else {
-                    // IDが見つからない場合は新規作成
-                    await db.collection("memories").add({
-                        userId: uid,
-                        text: message,
-                        aiSummary: message.slice(0, 20),
-                        tags: ["Memo", "LINE"],
-                        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                        source: "LINE",
-                    });
-                    replyText = `📝 (対象が見つからず) 新規メモとして保存しました。`;
-                }
-            }
-            catch (e) {
-                replyText = "⚠️ 追記に失敗しました。";
-            }
-        }
-        else if (action === "CALENDAR_ADD") {
-            // ★カレンダー登録
-            if (data.start) {
-                const success = await addCalendarEvent(uid, {
-                    title: data.title || message,
-                    start: data.start,
-                    end: data.end || data.start,
-                });
-                replyText = success
-                    ? `📅 予定を登録しました: ${data.title}`
-                    : "⚠️ カレンダー登録に失敗しました。連携設定を確認してください。";
-            }
-            else {
-                replyText = "日時が特定できませんでした。";
-            }
-        }
-        else if (action === "CALENDAR_READ") {
-            // カレンダー参照
-            const eventsText = await getCalendarEvents(uid);
-            replyText = await callGeminiText(apiKey, `質問: "${message}"\n予定:\n${eventsText}\nこれを見て答えて。`);
-        }
-        else if (action === "TASK_ADD") {
-            // タスク追加
-            await db.collection("todos").add({
-                userId: uid,
-                title: data.title || message,
-                isCompleted: false,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                source: "LINE",
-            });
-            // 念のためメモにも
-            await db.collection("memories").add({
-                userId: uid,
-                text: message,
-                aiSummary: `[Task] ${data.summary || message}`,
-                tags: [...(data.tags || []), "Task"],
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                source: "LINE",
-            });
-            replyText = `✅ タスクに追加しました: ${data.title}`;
-        }
-        else if (action === "MEMORY_ADD") {
-            // メモ保存
-            await db.collection("memories").add({
-                userId: uid,
-                text: message,
-                aiSummary: data.summary || message.slice(0, 20),
-                tags: [...(data.tags || []), "Memo"],
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                source: "LINE",
-            });
-            replyText = `📝 メモしました: ${data.summary}`;
-        }
-        else {
-            // CHAT (AIの返信をそのまま使う)
-        }
-        await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: replyText,
-        });
-    }));
-    res.json({ success: true });
-});
-// =========================================================
-// 機能 2, 3, 4 (変更なし)
-// =========================================================
-exports.linkLineAccount = (0, https_1.onCall)({
-    secrets: [
-        lineLoginChannelId,
-        lineLoginChannelSecret,
-        lineBotToken,
-        lineBotSecret,
-    ],
-}, async (request) => {
-    if (!request.auth)
-        throw new https_1.HttpsError("unauthenticated", "Login required");
-    const { code, redirectUri } = request.data;
-    const clientId = lineLoginChannelId.value();
-    const clientSecret = lineLoginChannelSecret.value();
-    if (!clientId || !clientSecret) {
-        throw new https_1.HttpsError("failed-precondition", "LINE secrets not set");
-    }
-    try {
-        const params = new URLSearchParams();
-        params.append("grant_type", "authorization_code");
-        params.append("code", code);
-        params.append("redirect_uri", redirectUri);
-        params.append("client_id", clientId);
-        params.append("client_secret", clientSecret);
-        const tokenResponse = await axios_1.default.post("https://api.line.me/oauth2/v2.1/token", params);
-        const { access_token } = tokenResponse.data;
-        const profileResponse = await axios_1.default.get("https://api.line.me/v2/profile", { headers: { Authorization: `Bearer ${access_token}` } });
-        await db.collection("users").doc(request.auth.uid).set({
-            isLineLinked: true,
-            lineUserId: profileResponse.data.userId,
-            lineDisplayName: profileResponse.data.displayName,
-        }, { merge: true });
-        return { success: true };
-    }
-    catch (error) {
-        console.error("LINE Link Error:", error.message);
-        throw new https_1.HttpsError("internal", "LINE linkage failed");
-    }
-});
-exports.unlinkLineAccount = (0, https_1.onCall)({ cors: true }, async (request) => {
-    if (!request.auth)
-        throw new https_1.HttpsError("unauthenticated", "Login required");
-    await db.collection("users").doc(request.auth.uid).set({
-        isLineLinked: false,
-        lineUserId: admin.firestore.FieldValue.delete(),
-        lineDisplayName: admin.firestore.FieldValue.delete(),
-    }, { merge: true });
-    return { success: true };
-});
-exports.sendMorningBriefing = (0, scheduler_1.onSchedule)({
-    schedule: "0 7 * * *",
-    timeZone: "Asia/Tokyo",
-    secrets: [lineBotToken, geminiApiKey],
-}, async (event) => {
-    const usersSnap = await db.collection("users").get();
-    const apiKey = geminiApiKey.value();
-    const client = new line.Client({
-        channelAccessToken: lineBotToken.value(),
-    });
-    for (const userDoc of usersSnap.docs) {
-        const uid = userDoc.id;
-        const userData = userDoc.data();
-        if (!userData.lineUserId)
-            continue;
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const [memoriesSnap, todosSnap] = await Promise.all([
-            db
-                .collection("memories")
-                .where("userId", "==", uid)
-                .where("createdAt", ">=", yesterday)
-                .orderBy("createdAt", "desc")
-                .get(),
-            db
-                .collection("todos")
-                .where("userId", "==", uid)
-                .where("isCompleted", "==", false)
-                .get(),
-        ]);
-        if (memoriesSnap.empty && todosSnap.empty)
-            continue;
-        const memoryText = memoriesSnap.docs
-            .map((d) => `- ${d.data().text}`)
-            .join("\n");
-        const todoText = todosSnap.docs
-            .map((d) => `- [未完了] ${d.data().title}`)
-            .join("\n");
-        const prompt = `おはようございます。今日のブリーフィングです。\n昨日: ${memoryText}\n未完了タスク: ${todoText}\n元気に300文字以内で。`;
-        const briefing = await callGeminiText(apiKey, prompt);
-        await client.pushMessage(userData.lineUserId, {
-            type: "text",
-            text: briefing,
-        });
-    }
-});
-exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
-    schedule: "every 15 minutes",
-    timeZone: "Asia/Tokyo",
-    secrets: [lineBotToken, geminiApiKey, googleClientId, googleClientSecret],
-}, async (event) => {
-    var _a;
-    const apiKey = geminiApiKey.value();
-    const client = new line.Client({
-        channelAccessToken: lineBotToken.value(),
-    });
-    const usersSnap = await db.collection("users").get();
-    for (const userDoc of usersSnap.docs) {
-        const uid = userDoc.id;
-        const userData = userDoc.data();
-        if (!userData.lineUserId)
-            continue;
-        const tokenDoc = await db
-            .collection("users")
-            .doc(uid)
-            .collection("system")
-            .doc("tokens")
-            .get();
-        if (!tokenDoc.exists)
-            continue;
-        const accessToken = await refreshAccessToken((_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken);
-        if (!accessToken)
-            continue;
-        const now = new Date();
-        try {
-            const calendarRes = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
-                headers: { Authorization: `Bearer ${accessToken}` },
-                params: {
-                    timeMin: now.toISOString(),
-                    timeMax: new Date(now.getTime() + 20 * 60000).toISOString(),
-                    singleEvents: true,
-                    orderBy: "startTime",
-                },
-            });
-            const events = calendarRes.data.items || [];
-            for (const ev of events) {
-                const title = ev.summary;
-                if (!title)
-                    continue;
-                const recentMemoriesSnap = await db
-                    .collection("memories")
-                    .where("userId", "==", uid)
-                    .orderBy("createdAt", "desc")
-                    .limit(30)
-                    .get();
-                const memoryDump = recentMemoriesSnap.docs
-                    .map((d) => `[${d.data().createdAt.toDate().toLocaleDateString()}] ${d.data().text}`)
-                    .join("\n");
-                const cheatSheetPrompt = `「${title}」の直前カンペ作成。過去メモ: ${memoryDump} 関連情報なければ「関連情報なし」と出力。`;
-                const cheatSheet = await callGeminiText(apiKey, cheatSheetPrompt);
-                if (!cheatSheet.includes("関連情報なし") &&
-                    !cheatSheet.includes("エラー")) {
-                    await client.pushMessage(userData.lineUserId, {
-                        type: "text",
-                        text: `📅 まもなく開始: ${title}\n\n🧠 AIカンペ:\n${cheatSheet}`,
-                    });
-                }
-            }
-        }
-        catch (e) {
-            console.error(`Calendar Error for user ${uid}:`, e);
-        }
-    }
-});
-exports.scrapeUrl = (0, https_1.onCall)(async () => {
-    return { success: true };
-});
-</file>
-
-<file path="functions/index.ts">
-import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
-import { onSchedule } from "firebase-functions/v2/scheduler";
-import { setGlobalOptions } from "firebase-functions/v2";
-import { defineSecret } from "firebase-functions/params";
-import * as admin from "firebase-admin";
-import axios from "axios";
-import * as line from "@line/bot-sdk";
-
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-}
-
-const db = admin.firestore();
-
-// メモリ設定
-setGlobalOptions({
-  region: "asia-northeast1",
-  memory: "1GiB",
-  timeoutSeconds: 60,
-});
-
-// Secrets
-const lineBotToken = defineSecret("LINE_BOT_TOKEN");
-const lineBotSecret = defineSecret("LINE_BOT_SECRET");
-const geminiApiKey = defineSecret("GEMINI_API_KEY");
-const googleClientId = defineSecret("GOOGLE_CLIENT_ID");
-const googleClientSecret = defineSecret("GOOGLE_CLIENT_SECRET");
-const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
-const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
-
-// フォールバック用のモデルリスト
-const CANDIDATE_MODELS = [
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-001",
-  "gemini-1.5-pro",
-  "gemini-pro",
-];
-
-// ---------------------------------------------------------
-// Helper: JSON抽出・修復関数
-// ---------------------------------------------------------
-function extractJson(text: string): any {
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    try {
-      const cleaned = text.replace(/```json|```/g, "").trim();
-      return JSON.parse(cleaned);
-    } catch (e2) {
-      try {
-        const firstOpen = text.indexOf("{");
-        const lastClose = text.lastIndexOf("}");
-        if (firstOpen !== -1 && lastClose !== -1) {
-          const jsonString = text.substring(firstOpen, lastClose + 1);
-          return JSON.parse(jsonString);
-        }
-        throw new Error("No JSON found");
-      } catch (e3) {
-        throw new Error("JSON parsing failed");
-      }
-    }
-  }
-}
-
-// ---------------------------------------------------------
-// Helper: AI Model Management (変更なし・安定版)
-// ---------------------------------------------------------
-
-async function fetchAvailableModels(apiKey: string): Promise<any[]> {
-  try {
-    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-    const listResponse = await axios.get(listUrl);
-    if (listResponse.status !== 200) return [];
-    return listResponse.data.models || [];
-  } catch (e) {
-    console.warn("Failed to fetch model list:", e);
-    return [];
-  }
-}
-
-async function resolveGeminiModel(apiKey: string): Promise<string> {
-  const models = await fetchAvailableModels(apiKey);
-  const generationModels = models.filter((m: any) =>
-    m.supportedGenerationMethods?.includes("generateContent"),
-  );
-  let target = generationModels.find((m: any) =>
-    m.name.includes("gemini-1.5-flash"),
-  );
-  if (!target) {
-    target = generationModels.find((m: any) =>
-      m.name.includes("gemini-1.5-pro"),
-    );
-  }
-  if (!target && generationModels.length > 0) {
-    target = generationModels[0];
-  }
-  if (target) {
-    return target.name.replace("models/", "");
-  }
-  return "gemini-1.5-flash";
-}
-
-async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
-  const dynamicModel = await resolveGeminiModel(apiKey);
-  const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(
-    Boolean,
-  );
-
-  for (const modelName of modelsToTry) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-      const response = await axios.post(
-        url,
-        {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json" },
-        },
-        { headers: { "Content-Type": "application/json" } },
-      );
-      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (text) {
-        return extractJson(text);
-      }
-    } catch (e: any) {
-      console.warn(`Model ${modelName} failed: ${e.message}. Retrying...`);
-    }
-  }
-  throw new Error("All AI models failed to generate valid JSON");
-}
-
-async function callGeminiText(apiKey: string, prompt: string): Promise<string> {
-  const dynamicModel = await resolveGeminiModel(apiKey);
-  const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(
-    Boolean,
-  );
-
-  for (const modelName of modelsToTry) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-      const response = await axios.post(
-        url,
-        { contents: [{ parts: [{ text: prompt }] }] },
-        { headers: { "Content-Type": "application/json" } },
-      );
-      return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    } catch (e) {
-      console.warn(`Model ${modelName} (Text) failed. Retrying...`);
-    }
-  }
-  return "すみません、AIの調子が悪く応答できませんでした。";
-}
-
-// ---------------------------------------------------------
-// Helper: Google Token Refresh & Calendar
-// ---------------------------------------------------------
-async function refreshAccessToken(refreshToken: string) {
-  try {
-    const response = await axios.post("https://oauth2.googleapis.com/token", {
-      client_id: googleClientId.value(),
-      client_secret: googleClientSecret.value(),
-      refresh_token: refreshToken,
-      grant_type: "refresh_token",
-    });
-    return response.data.access_token;
-  } catch (e: any) {
-    console.error("Token Refresh Error:", e.message);
-    return null;
-  }
-}
-
-async function getCalendarEvents(uid: string): Promise<string> {
-  try {
-    const tokenDoc = await db
-      .collection("users")
-      .doc(uid)
-      .collection("system")
-      .doc("tokens")
-      .get();
-    if (!tokenDoc.exists) return "（カレンダー未連携）";
-
-    const refreshToken = tokenDoc.data()?.refreshToken;
-    if (!refreshToken) return "（カレンダー権限なし）";
-
-    const accessToken = await refreshAccessToken(refreshToken);
-    if (!accessToken) return "（トークン期限切れ）";
-
-    const now = new Date();
-    const timeMin = now.toISOString();
-    const timeMax = new Date(
-      now.getTime() + 7 * 24 * 60 * 60 * 1000,
-    ).toISOString();
-
-    const calendarRes = await axios.get(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        params: {
-          timeMin,
-          timeMax,
-          singleEvents: true,
-          orderBy: "startTime",
-          maxResults: 15,
-        },
-      },
-    );
-
-    const events = calendarRes.data.items || [];
-    if (events.length === 0) return "直近1週間の予定はありません。";
-
-    return events
-      .map((ev: any) => {
-        const start = ev.start.dateTime
-          ? new Date(ev.start.dateTime).toLocaleString("ja-JP", {
-              timeZone: "Asia/Tokyo",
-              month: "numeric",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : `[終日] ${ev.start.date}`;
-        return `・${start}: ${ev.summary}`;
-      })
-      .join("\n");
-  } catch (e) {
-    console.error("Calendar Fetch Error:", e);
-    return "（カレンダー取得エラー）";
-  }
-}
-
-async function addCalendarEvent(
-  uid: string,
-  eventData: { title: string; start: string; end: string },
-): Promise<boolean> {
-  try {
-    const tokenDoc = await db
-      .collection("users")
-      .doc(uid)
-      .collection("system")
-      .doc("tokens")
-      .get();
-    if (!tokenDoc.exists) return false;
-    const refreshToken = tokenDoc.data()?.refreshToken;
-    if (!refreshToken) return false;
-    const accessToken = await refreshAccessToken(refreshToken);
-    if (!accessToken) return false;
-
-    await axios.post(
-      "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-      {
-        summary: eventData.title,
-        start: { dateTime: eventData.start },
-        end: { dateTime: eventData.end },
-      },
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
-    return true;
-  } catch (e) {
-    console.error("Add Event Error:", e);
-    return false;
-  }
-}
-
-// ★修正: 最新50件からキーワード検索で執念深く探すロジックに変更
-async function getRecentMemories(
-  uid: string,
-  queryText: string,
-): Promise<string> {
-  try {
-    // 1. 直近50件を取得（数を増やす）
-    const snapshot = await db
-      .collection("memories")
-      .where("userId", "==", uid)
-      .orderBy("createdAt", "desc")
-      .limit(50)
-      .get();
-
-    if (snapshot.empty) return "（履歴なし）";
-
-    let docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-    // 2. キーワードフィルタリング（"買い物リスト"等の言葉があれば優先抽出）
-    const keywords = queryText
-      .replace(/[\s,、　]+/g, " ")
-      .split(" ")
-      .filter((k) => k.length > 1);
-
-    const matches = docs.filter((d: any) =>
-      keywords.some((k) => d.text.includes(k)),
-    );
-    const recents = docs.slice(0, 3); // 直近3件も文脈用に残す
-
-    // 重複を排除して結合
-    const candidates = [...recents, ...matches];
-    const uniqueCandidates = Array.from(
-      new Map(candidates.map((c) => [c.id, c])).values(),
-    );
-
-    if (uniqueCandidates.length === 0) return "（関連する履歴なし）";
-
-    return uniqueCandidates
-      .map((data: any) => {
-        let dateStr = "";
-        if (data.createdAt?.toDate) {
-          const date = data.createdAt.toDate();
-          const diffMin = Math.floor((Date.now() - date.getTime()) / 60000);
-          const timeLabel =
-            diffMin < 60
-              ? `${diffMin}分前`
-              : date.toLocaleString("ja-JP", {
-                  month: "numeric",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
-          dateStr = `[${timeLabel}]`;
-        }
-        // AIが「どこに追記するか」判断できるようにIDを含める
-        return `ID:${data.id} | ${dateStr} ${data.text.replace(/\n/g, " ")}`;
-      })
-      .join("\n");
-  } catch (e) {
-    return "（メモ取得エラー）";
-  }
-}
-
-// =========================================================
-// 機能 1: LINE Webhook (スーパー秘書モード)
-// =========================================================
-export const lineWebhook = onRequest(
-  {
-    secrets: [
-      lineBotToken,
-      lineBotSecret,
-      geminiApiKey,
-      googleClientId,
-      googleClientSecret,
-    ],
-    cors: true,
-  },
-  async (req, res) => {
-    const token = lineBotToken.value();
-    const apiKey = geminiApiKey.value();
-
-    if (!token || !apiKey) {
-      res.status(500).send("Config Error");
-      return;
-    }
-
-    const client = new line.Client({ channelAccessToken: token });
-    const events = req.body.events;
-
-    await Promise.all(
-      events.map(async (event: any) => {
-        if (event.type !== "message" || event.message.type !== "text") return;
-
-        const eventId = event.webhookEventId;
-        const lineUserId = event.source.userId;
-        const message = event.message.text.trim();
-
-        // 重複排除
-        try {
-          await db.collection("processed_events").doc(eventId).create({
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            userId: lineUserId,
-          });
-        } catch (e) {
-          return;
-        }
-
-        const usersSnap = await db
-          .collection("users")
-          .where("lineUserId", "==", lineUserId)
-          .limit(1)
-          .get();
-        if (usersSnap.empty) {
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: "アプリで「LINE連携」ボタンを押してね🙇‍♂️",
-          });
-          return;
-        }
-        const uid = usersSnap.docs[0].id;
-
-        // 1. 強制モード切替コマンド
-        const commands: Record<string, string> = {
-          "【モード】タスク": "TASK",
-          "【モード】メモ": "MEMORY",
-          "【モード】カレンダー": "CALENDAR",
-          "【モード】お任せ": "AUTO",
-          "【モード】リセット": "AUTO",
-        };
-
-        if (commands[message]) {
-          await db
-            .collection("users")
-            .doc(uid)
-            .update({ lineMode: commands[message] });
-          const replyText =
-            commands[message] === "AUTO"
-              ? "🤖 お任せモードになりました。\nAIが内容を判断します。"
-              : `✅ ${commands[message]}モードになりました。`;
-          await client.replyMessage(event.replyToken, {
-            type: "text",
-            text: replyText,
-          });
-          return;
-        }
-
-        // 2. モードと文脈取得
-        const userDoc = await db.collection("users").doc(uid).get();
-        const currentMode = userDoc.data()?.lineMode || "AUTO";
-        // ★ここでメッセージを渡して、関連するメモを強力に検索する
-        const memoryContext = await getRecentMemories(uid, message);
-        const nowStr = new Date().toLocaleString("ja-JP", {
-          timeZone: "Asia/Tokyo",
-        });
-
-        // ★司令塔プロンプト（ユーザーの意図をAIが判断）
-        const routerPrompt = `
-          あなたは優秀な秘書AIです。現在日時: ${nowStr}
-          ユーザー入力: "${message}"
-          【参照可能なメモ(ID付)】
-          ${memoryContext}
-
-          指示:
-          ユーザーの意図を汲み取り、アクションを決定してください。
-          「これ」「あれ」「さっきの」は、直近のメモを指します。
-          「買い物リスト」と言われたら、過去のメモから「買い物リスト」を探して追記してください。
-          
-          モード: ${currentMode}
-          - "これ追加して"等の指示があり、直近の記憶に関連するものがあれば MEMORY_APPEND
-          - TASKモードなら TASK_ADD
-          - MEMORYモードなら MEMORY_ADD
-          - CALENDARモードなら CALENDAR_READ (または文脈によってはADD)
-          - AUTOモードなら文脈から判断
-
-          出力JSON形式:
-          {
-            "action": "CALENDAR_ADD" | "CALENDAR_READ" | "TASK_ADD" | "MEMORY_ADD" | "MEMORY_APPEND" | "CHAT",
-            "data": {
-              "title": "予定/タスク名",
-              "start": "ISO8601日時",
-              "end": "ISO8601日時",
-              "summary": "要約",
-              "targetId": "MEMORY_APPENDの場合の対象ID",
-              "content": "追加する内容テキスト",
-              "tags": ["タグ"]
-            },
-            "reply": "ユーザーへの返信メッセージ (短く親切に)"
-          }
-        `;
-
-        let aiDecision: any = {};
-        try {
-          aiDecision = await callGeminiJson(apiKey, routerPrompt);
-        } catch (e) {
-          // AI失敗時のフェイルセーフ
-          aiDecision = {
-            action: currentMode === "TASK" ? "TASK_ADD" : "MEMORY_ADD",
-            data: { title: message, summary: message.slice(0, 20), tags: [] },
-            reply: "AIエラーのためそのまま保存しました。",
-          };
-        }
-
-        // 3. アクション実行
-        const action = aiDecision.action;
-        const data = aiDecision.data || {};
-        let replyText = aiDecision.reply || "処理しました";
-
-        if (action === "MEMORY_APPEND" && data.targetId) {
-          // ★既存メモへの追記
-          try {
-            const docRef = db.collection("memories").doc(data.targetId);
-            const docSnap = await docRef.get();
-            if (docSnap.exists) {
-              const oldText = docSnap.data()?.text || "";
-              // 改行して追記
-              const newText = `${oldText}\n${data.content || message}`;
-              await docRef.update({ text: newText });
-              replyText = `📝 既存のメモに追記しました: ${data.content || message}`;
-            } else {
-              // IDが見つからない場合は新規作成
-              await db.collection("memories").add({
-                userId: uid,
-                text: message,
-                aiSummary: message.slice(0, 20),
-                tags: ["Memo", "LINE"],
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                source: "LINE",
-              });
-              replyText = `📝 (対象が見つからず) 新規メモとして保存しました。`;
-            }
-          } catch (e) {
-            replyText = "⚠️ 追記に失敗しました。";
-          }
-        } else if (action === "CALENDAR_ADD") {
-          // ★カレンダー登録
-          if (data.start) {
-            const success = await addCalendarEvent(uid, {
-              title: data.title || message,
-              start: data.start,
-              end: data.end || data.start,
-            });
-            replyText = success
-              ? `📅 予定を登録しました: ${data.title}`
-              : "⚠️ カレンダー登録に失敗しました。連携設定を確認してください。";
-          } else {
-            replyText = "日時が特定できませんでした。";
-          }
-        } else if (action === "CALENDAR_READ") {
-          // カレンダー参照
-          const eventsText = await getCalendarEvents(uid);
-          replyText = await callGeminiText(
-            apiKey,
-            `質問: "${message}"\n予定:\n${eventsText}\nこれを見て答えて。`,
-          );
-        } else if (action === "TASK_ADD") {
-          // タスク追加
-          await db.collection("todos").add({
-            userId: uid,
-            title: data.title || message,
-            isCompleted: false,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            source: "LINE",
-          });
-          // 念のためメモにも
-          await db.collection("memories").add({
-            userId: uid,
-            text: message,
-            aiSummary: `[Task] ${data.summary || message}`,
-            tags: [...(data.tags || []), "Task"],
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            source: "LINE",
-          });
-          replyText = `✅ タスクに追加しました: ${data.title}`;
-        } else if (action === "MEMORY_ADD") {
-          // メモ保存
-          await db.collection("memories").add({
-            userId: uid,
-            text: message,
-            aiSummary: data.summary || message.slice(0, 20),
-            tags: [...(data.tags || []), "Memo"],
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            source: "LINE",
-          });
-          replyText = `📝 メモしました: ${data.summary}`;
-        } else {
-          // CHAT (AIの返信をそのまま使う)
-        }
-
-        await client.replyMessage(event.replyToken, {
-          type: "text",
-          text: replyText,
-        });
-      }),
-    );
-
-    res.json({ success: true });
-  },
-);
-
-// =========================================================
-// 機能 2, 3, 4 (変更なし)
-// =========================================================
-export const linkLineAccount = onCall(
-  {
-    secrets: [
-      lineLoginChannelId,
-      lineLoginChannelSecret,
-      lineBotToken,
-      lineBotSecret,
-    ],
-  },
-  async (request) => {
-    if (!request.auth)
-      throw new HttpsError("unauthenticated", "Login required");
-    const { code, redirectUri } = request.data;
-    const clientId = lineLoginChannelId.value();
-    const clientSecret = lineLoginChannelSecret.value();
-    if (!clientId || !clientSecret) {
-      throw new HttpsError("failed-precondition", "LINE secrets not set");
-    }
-    try {
-      const params = new URLSearchParams();
-      params.append("grant_type", "authorization_code");
-      params.append("code", code);
-      params.append("redirect_uri", redirectUri);
-      params.append("client_id", clientId);
-      params.append("client_secret", clientSecret);
-      const tokenResponse = await axios.post(
-        "https://api.line.me/oauth2/v2.1/token",
-        params,
-      );
-      const { access_token } = tokenResponse.data;
-      const profileResponse = await axios.get(
-        "https://api.line.me/v2/profile",
-        { headers: { Authorization: `Bearer ${access_token}` } },
-      );
-      await db.collection("users").doc(request.auth.uid).set(
-        {
-          isLineLinked: true,
-          lineUserId: profileResponse.data.userId,
-          lineDisplayName: profileResponse.data.displayName,
-        },
-        { merge: true },
-      );
-      return { success: true };
-    } catch (error: any) {
-      console.error("LINE Link Error:", error.message);
-      throw new HttpsError("internal", "LINE linkage failed");
-    }
-  },
-);
-
-export const unlinkLineAccount = onCall({ cors: true }, async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
-  await db.collection("users").doc(request.auth.uid).set(
-    {
-      isLineLinked: false,
-      lineUserId: admin.firestore.FieldValue.delete(),
-      lineDisplayName: admin.firestore.FieldValue.delete(),
-    },
-    { merge: true },
-  );
-  return { success: true };
-});
-
-export const sendMorningBriefing = onSchedule(
-  {
-    schedule: "0 7 * * *",
-    timeZone: "Asia/Tokyo",
-    secrets: [lineBotToken, geminiApiKey],
-  },
-  async (event) => {
-    const usersSnap = await db.collection("users").get();
-    const apiKey = geminiApiKey.value();
-    const client = new line.Client({
-      channelAccessToken: lineBotToken.value(),
-    });
-    for (const userDoc of usersSnap.docs) {
-      const uid = userDoc.id;
-      const userData = userDoc.data();
-      if (!userData.lineUserId) continue;
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const [memoriesSnap, todosSnap] = await Promise.all([
-        db
-          .collection("memories")
-          .where("userId", "==", uid)
-          .where("createdAt", ">=", yesterday)
-          .orderBy("createdAt", "desc")
-          .get(),
-        db
-          .collection("todos")
-          .where("userId", "==", uid)
-          .where("isCompleted", "==", false)
-          .get(),
-      ]);
-      if (memoriesSnap.empty && todosSnap.empty) continue;
-      const memoryText = memoriesSnap.docs
-        .map((d) => `- ${d.data().text}`)
-        .join("\n");
-      const todoText = todosSnap.docs
-        .map((d) => `- [未完了] ${d.data().title}`)
-        .join("\n");
-      const prompt = `おはようございます。今日のブリーフィングです。\n昨日: ${memoryText}\n未完了タスク: ${todoText}\n元気に300文字以内で。`;
-      const briefing = await callGeminiText(apiKey, prompt);
-      await client.pushMessage(userData.lineUserId, {
-        type: "text",
-        text: briefing,
-      });
-    }
-  },
-);
-
-export const checkUpcomingMeetings = onSchedule(
-  {
-    schedule: "every 15 minutes",
-    timeZone: "Asia/Tokyo",
-    secrets: [lineBotToken, geminiApiKey, googleClientId, googleClientSecret],
-  },
-  async (event) => {
-    const apiKey = geminiApiKey.value();
-    const client = new line.Client({
-      channelAccessToken: lineBotToken.value(),
-    });
-    const usersSnap = await db.collection("users").get();
-    for (const userDoc of usersSnap.docs) {
-      const uid = userDoc.id;
-      const userData = userDoc.data();
-      if (!userData.lineUserId) continue;
-      const tokenDoc = await db
-        .collection("users")
-        .doc(uid)
-        .collection("system")
-        .doc("tokens")
-        .get();
-      if (!tokenDoc.exists) continue;
-      const accessToken = await refreshAccessToken(
-        tokenDoc.data()?.refreshToken,
-      );
-      if (!accessToken) continue;
-      const now = new Date();
-      try {
-        const calendarRes = await axios.get(
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
-          {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            params: {
-              timeMin: now.toISOString(),
-              timeMax: new Date(now.getTime() + 20 * 60000).toISOString(),
-              singleEvents: true,
-              orderBy: "startTime",
-            },
-          },
-        );
-        const events = calendarRes.data.items || [];
-        for (const ev of events) {
-          const title = ev.summary;
-          if (!title) continue;
-          const recentMemoriesSnap = await db
-            .collection("memories")
-            .where("userId", "==", uid)
-            .orderBy("createdAt", "desc")
-            .limit(30)
-            .get();
-          const memoryDump = recentMemoriesSnap.docs
-            .map(
-              (d) =>
-                `[${d.data().createdAt.toDate().toLocaleDateString()}] ${d.data().text}`,
-            )
-            .join("\n");
-          const cheatSheetPrompt = `「${title}」の直前カンペ作成。過去メモ: ${memoryDump} 関連情報なければ「関連情報なし」と出力。`;
-          const cheatSheet = await callGeminiText(apiKey, cheatSheetPrompt);
-          if (
-            !cheatSheet.includes("関連情報なし") &&
-            !cheatSheet.includes("エラー")
-          ) {
-            await client.pushMessage(userData.lineUserId, {
-              type: "text",
-              text: `📅 まもなく開始: ${title}\n\n🧠 AIカンペ:\n${cheatSheet}`,
-            });
-          }
-        }
-      } catch (e) {
-        console.error(`Calendar Error for user ${uid}:`, e);
-      }
-    }
-  },
-);
-
-export const scrapeUrl = onCall(async () => {
-  return { success: true };
-});
-</file>
-
 <file path="src/components/AppHeader/AppHeader.vue">
 <script setup lang="ts">
 import { useAppHeader } from "./useAppHeader";
@@ -6220,6 +4750,1531 @@ const handleGoogleLogin = async () => {
     </div>
   </div>
 </template>
+</file>
+
+<file path="functions/lib/index.js">
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.scrapeUrl = exports.checkUpcomingMeetings = exports.sendMorningBriefing = exports.unlinkLineAccount = exports.linkLineAccount = exports.lineWebhook = void 0;
+const https_1 = require("firebase-functions/v2/https");
+const scheduler_1 = require("firebase-functions/v2/scheduler");
+const v2_1 = require("firebase-functions/v2");
+const params_1 = require("firebase-functions/params");
+const admin = __importStar(require("firebase-admin"));
+const axios_1 = __importDefault(require("axios"));
+const line = __importStar(require("@line/bot-sdk"));
+if (admin.apps.length === 0) {
+    admin.initializeApp();
+}
+const db = admin.firestore();
+// メモリ設定
+(0, v2_1.setGlobalOptions)({
+    region: "asia-northeast1",
+    memory: "1GiB",
+    timeoutSeconds: 60,
+});
+// Secrets
+const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN");
+const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET");
+const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
+const googleClientId = (0, params_1.defineSecret)("GOOGLE_CLIENT_ID");
+const googleClientSecret = (0, params_1.defineSecret)("GOOGLE_CLIENT_SECRET");
+const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID");
+const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET");
+const CANDIDATE_MODELS = [
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-001",
+    "gemini-1.5-pro",
+    "gemini-pro",
+];
+// ---------------------------------------------------------
+// Helper: JSON抽出（最強版）
+// ---------------------------------------------------------
+function extractJson(text) {
+    try {
+        // 1. そのままパース
+        return JSON.parse(text);
+    }
+    catch (e) {
+        try {
+            // 2. Markdown記法や余計な文字を削除
+            const cleaned = text
+                .replace(/```json/g, "")
+                .replace(/```/g, "")
+                .trim();
+            return JSON.parse(cleaned);
+        }
+        catch (e2) {
+            try {
+                // 3. 正規表現で { ... } の部分だけを無理やり抽出
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    return JSON.parse(jsonMatch[0]);
+                }
+                // JSONが見つからない場合はエラーを投げるのではなく、チャットとして扱うためのオブジェクトを返す
+                console.warn("No JSON found in response, falling back to chat.");
+                return { action: "CHAT", reply: text };
+            }
+            catch (e3) {
+                console.error("JSON Parse Error. Raw text:", text);
+                // エラー時はデフォルト動作（チャット）に倒す
+                return { action: "CHAT", reply: text };
+            }
+        }
+    }
+}
+// ---------------------------------------------------------
+// Helper: IDクリーニング
+// ---------------------------------------------------------
+function cleanId(id) {
+    if (!id || typeof id !== "string")
+        return "";
+    return id.replace(/<<<|>>>|ID:/g, "").trim();
+}
+// ---------------------------------------------------------
+// Helper: AI Model Management
+// ---------------------------------------------------------
+async function fetchAvailableModels(apiKey) {
+    try {
+        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+        const listResponse = await axios_1.default.get(listUrl);
+        if (listResponse.status !== 200)
+            return [];
+        return listResponse.data.models || [];
+    }
+    catch (e) {
+        return [];
+    }
+}
+async function resolveGeminiModel(apiKey) {
+    const models = await fetchAvailableModels(apiKey);
+    const generationModels = models.filter((m) => { var _a; return (_a = m.supportedGenerationMethods) === null || _a === void 0 ? void 0 : _a.includes("generateContent"); });
+    let target = generationModels.find((m) => m.name.includes("gemini-1.5-flash"));
+    if (!target)
+        target = generationModels.find((m) => m.name.includes("gemini-1.5-pro"));
+    if (!target && generationModels.length > 0)
+        target = generationModels[0];
+    if (target)
+        return target.name.replace("models/", "");
+    return "gemini-1.5-flash";
+}
+async function callGeminiJson(apiKey, prompt) {
+    var _a, _b, _c, _d, _e, _f;
+    const dynamicModel = await resolveGeminiModel(apiKey);
+    const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(Boolean);
+    for (const modelName of modelsToTry) {
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+            // responseMimeType: "application/json" を削除して互換性を向上
+            const response = await axios_1.default.post(url, {
+                contents: [{ parts: [{ text: prompt }] }],
+            }, { headers: { "Content-Type": "application/json" } });
+            const text = (_f = (_e = (_d = (_c = (_b = (_a = response.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text;
+            if (text)
+                return extractJson(text);
+        }
+        catch (e) {
+            console.warn(`Model ${modelName} failed. Retrying...`);
+        }
+    }
+    // 全モデル失敗時はエラーメッセージを返す
+    return {
+        action: "CHAT",
+        reply: "申し訳ありません。AIサーバーが混雑しており応答できませんでした。",
+    };
+}
+async function callGeminiText(apiKey, prompt) {
+    var _a, _b, _c, _d, _e, _f;
+    const dynamicModel = await resolveGeminiModel(apiKey);
+    const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(Boolean);
+    for (const modelName of modelsToTry) {
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+            const response = await axios_1.default.post(url, { contents: [{ parts: [{ text: prompt }] }] }, { headers: { "Content-Type": "application/json" } });
+            return ((_f = (_e = (_d = (_c = (_b = (_a = response.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text) || "";
+        }
+        catch (e) {
+            console.warn(`Model ${modelName} failed. Retrying...`);
+        }
+    }
+    return "AI応答エラー";
+}
+// ---------------------------------------------------------
+// Helper: Google Token Refresh
+// ---------------------------------------------------------
+async function refreshAccessToken(refreshToken) {
+    try {
+        const response = await axios_1.default.post("https://oauth2.googleapis.com/token", {
+            client_id: googleClientId.value(),
+            client_secret: googleClientSecret.value(),
+            refresh_token: refreshToken,
+            grant_type: "refresh_token",
+        });
+        return response.data.access_token;
+    }
+    catch (e) {
+        return null;
+    }
+}
+// ---------------------------------------------------------
+// Helper: Calendar Operations
+// ---------------------------------------------------------
+async function getCalendarEvents(uid) {
+    var _a;
+    try {
+        const tokenDoc = await db
+            .collection("users")
+            .doc(uid)
+            .collection("system")
+            .doc("tokens")
+            .get();
+        if (!tokenDoc.exists)
+            return "（カレンダー未連携）";
+        const refreshToken = (_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken;
+        if (!refreshToken)
+            return "（権限なし）";
+        const accessToken = await refreshAccessToken(refreshToken);
+        if (!accessToken)
+            return "（トークン切れ）";
+        const now = new Date();
+        const timeMin = now.toISOString();
+        const timeMax = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+        const calendarRes = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            params: {
+                timeMin,
+                timeMax,
+                singleEvents: true,
+                orderBy: "startTime",
+                maxResults: 20,
+            },
+        });
+        const events = calendarRes.data.items || [];
+        if (events.length === 0)
+            return "直近の予定はありません。";
+        return events
+            .map((ev) => {
+            const start = ev.start.dateTime
+                ? new Date(ev.start.dateTime).toLocaleString("ja-JP", {
+                    timeZone: "Asia/Tokyo",
+                    month: "numeric",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                })
+                : `[終日] ${ev.start.date}`;
+            return `・${start}: ${ev.summary}`;
+        })
+            .join("\n");
+    }
+    catch (e) {
+        return "（取得エラー）";
+    }
+}
+async function addCalendarEvent(uid, eventData) {
+    var _a;
+    try {
+        const tokenDoc = await db
+            .collection("users")
+            .doc(uid)
+            .collection("system")
+            .doc("tokens")
+            .get();
+        if (!tokenDoc.exists)
+            return false;
+        const refreshToken = (_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken;
+        const accessToken = await refreshAccessToken(refreshToken);
+        if (!accessToken)
+            return false;
+        await axios_1.default.post("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+            summary: eventData.title,
+            start: { dateTime: eventData.start },
+            end: { dateTime: eventData.end },
+        }, { headers: { Authorization: `Bearer ${accessToken}` } });
+        return true;
+    }
+    catch (e) {
+        return false;
+    }
+}
+async function deleteCalendarEvent(uid, query) {
+    var _a;
+    try {
+        const tokenDoc = await db
+            .collection("users")
+            .doc(uid)
+            .collection("system")
+            .doc("tokens")
+            .get();
+        if (!tokenDoc.exists)
+            return "連携されていません";
+        const accessToken = await refreshAccessToken((_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken);
+        if (!accessToken)
+            return "認証エラー";
+        const searchRes = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            params: { q: query, maxResults: 5, singleEvents: true },
+        });
+        const events = searchRes.data.items || [];
+        if (events.length === 0)
+            return "該当する予定が見つかりませんでした。";
+        const target = events[0];
+        await axios_1.default.delete(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${target.id}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+        return `「${target.summary}」を削除しました。`;
+    }
+    catch (e) {
+        return "削除に失敗しました。";
+    }
+}
+// ---------------------------------------------------------
+// Helper: Todo Operations
+// ---------------------------------------------------------
+async function deleteTodoByTitle(uid, title) {
+    const todosRef = db.collection("todos");
+    const snap = await todosRef
+        .where("userId", "==", uid)
+        .where("isCompleted", "==", false)
+        .orderBy("createdAt", "desc")
+        .limit(30)
+        .get();
+    let targetDoc = null;
+    for (const doc of snap.docs) {
+        if (doc.data().title.includes(title)) {
+            targetDoc = doc;
+            break;
+        }
+    }
+    if (targetDoc) {
+        await targetDoc.ref.delete();
+        return `タスク「${targetDoc.data().title}」を削除しました。`;
+    }
+    return "タスクが見つかりませんでした。";
+}
+// ---------------------------------------------------------
+// Helper: Memory Operations
+// ---------------------------------------------------------
+async function getRecentMemories(uid, queryText) {
+    try {
+        const snapshot = await db
+            .collection("memories")
+            .where("userId", "==", uid)
+            .orderBy("createdAt", "desc")
+            .limit(100)
+            .get();
+        if (snapshot.empty)
+            return "（履歴なし）";
+        let docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const keywords = queryText
+            .replace(/[\s,、　]+/g, " ")
+            .split(" ")
+            .filter((k) => k.length > 1);
+        const matches = docs.filter((d) => keywords.some((k) => d.text.includes(k)));
+        const recents = docs.slice(0, 5);
+        const candidates = [...recents, ...matches];
+        const uniqueCandidates = Array.from(new Map(candidates.map((c) => [c.id, c])).values());
+        if (uniqueCandidates.length === 0)
+            return "（関連なし）";
+        return uniqueCandidates
+            .map((data) => {
+            // AIがIDを認識しやすいように <<<ID>>> で囲む
+            return `<<<${data.id}>>> ${data.text.replace(/\n/g, " ")}`;
+        })
+            .join("\n");
+    }
+    catch (e) {
+        return "（取得エラー）";
+    }
+}
+// =========================================================
+// LINE Webhook
+// =========================================================
+exports.lineWebhook = (0, https_1.onRequest)({
+    secrets: [
+        lineBotToken,
+        lineBotSecret,
+        geminiApiKey,
+        googleClientId,
+        googleClientSecret,
+    ],
+    cors: true,
+}, async (req, res) => {
+    const token = lineBotToken.value();
+    const apiKey = geminiApiKey.value();
+    if (!token || !apiKey) {
+        res.status(500).send("Config Error");
+        return;
+    }
+    const client = new line.Client({ channelAccessToken: token });
+    const events = req.body.events;
+    await Promise.all(events.map(async (event) => {
+        var _a, _b, _c, _d, _e, _f, _g;
+        if (event.type !== "message" || event.message.type !== "text")
+            return;
+        const eventId = event.webhookEventId;
+        const lineUserId = event.source.userId;
+        const message = event.message.text.trim();
+        try {
+            await db.collection("processed_events").doc(eventId).create({
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                userId: lineUserId,
+            });
+        }
+        catch (e) {
+            return;
+        }
+        const usersSnap = await db
+            .collection("users")
+            .where("lineUserId", "==", lineUserId)
+            .limit(1)
+            .get();
+        if (usersSnap.empty) {
+            await client.replyMessage(event.replyToken, {
+                type: "text",
+                text: "アプリで「LINE連携」ボタンを押してください。",
+            });
+            return;
+        }
+        const uid = usersSnap.docs[0].id;
+        // 1. 強制モード
+        const commands = {
+            "【モード】タスク": "TASK",
+            "【モード】メモ": "MEMORY",
+            "【モード】カレンダー": "CALENDAR",
+            "【モード】お任せ": "AUTO",
+            "【モード】リセット": "AUTO",
+        };
+        if (commands[message]) {
+            await db
+                .collection("users")
+                .doc(uid)
+                .update({ lineMode: commands[message] });
+            await client.replyMessage(event.replyToken, {
+                type: "text",
+                text: `✅ ${commands[message]}モードになりました。`,
+            });
+            return;
+        }
+        // 2. コンテキスト取得
+        const memoryContext = await getRecentMemories(uid, message);
+        const nowStr = new Date().toLocaleString("ja-JP", {
+            timeZone: "Asia/Tokyo",
+        });
+        // 3. 司令塔プロンプト
+        const routerPrompt = `
+        現在日時: ${nowStr}
+        ユーザー入力: "${message}"
+        【参照可能なメモ】(IDは<<< >>>で囲われています)
+        ${memoryContext}
+
+        指示:
+        ユーザーの意図を汲み取り、以下のJSON形式のみを出力してください。
+        
+        ★アクション判断基準:
+        1. 【メモ編集・部分削除】 "〇〇を消して" "リストから〇〇を削除" "〇〇を変更して"
+           -> "MEMORY_EDIT"
+           - targetId: 【参照可能なメモ】の中から対象ID (<<< >>>の中身) を特定
+           - instruction: 具体的な編集指示（例：「『牛乳』の行を削除」「『13時』を『14時』に変更」）
+        
+        2. 【メモ追記】 "これ追加して" "〇〇も買っておいて"
+           -> "MEMORY_APPEND"
+           - targetId: 対象ID
+           - content: 追加する内容
+
+        3. 【タスク削除】 "タスク消して" "タスク完了"
+           -> "TASK_DELETE"
+
+        4. 【予定削除】 "予定消して" "キャンセル"
+           -> "CALENDAR_DELETE"
+
+        5. 【予定追加】 日時指定がある場合
+           -> "CALENDAR_ADD"
+
+        6. 【メモ保存】 上記以外で、単なる記録の場合
+           -> "MEMORY_ADD"
+
+        7. 【会話】 挨拶や質問
+           -> "CHAT"
+
+        出力JSON形式:
+        {
+          "action": "ACTION_NAME",
+          "targetId": "ID文字列 (<<<と>>>は除く)",
+          "instruction": "編集指示の内容",
+          "content": "追記・保存する内容",
+          "reply": "ユーザーへの短い返信"
+        }
+      `;
+        // 4. アクション決定
+        const aiDecision = await callGeminiJson(apiKey, routerPrompt);
+        const action = aiDecision.action || "CHAT";
+        const rawTargetId = aiDecision.targetId || ((_a = aiDecision.data) === null || _a === void 0 ? void 0 : _a.targetId);
+        const targetId = cleanId(rawTargetId);
+        const instruction = aiDecision.instruction || ((_b = aiDecision.data) === null || _b === void 0 ? void 0 : _b.instruction);
+        const content = aiDecision.content || ((_c = aiDecision.data) === null || _c === void 0 ? void 0 : _c.content) || message;
+        let replyText = aiDecision.reply || ((_d = aiDecision.data) === null || _d === void 0 ? void 0 : _d.reply) || "処理しました";
+        // 5. アクション実行
+        if (action === "MEMORY_EDIT" && targetId && instruction) {
+            try {
+                const docRef = db.collection("memories").doc(targetId);
+                const docSnap = await docRef.get();
+                if (docSnap.exists) {
+                    const currentText = ((_e = docSnap.data()) === null || _e === void 0 ? void 0 : _e.text) || "";
+                    const editPrompt = `あなたはテキストエディタです。以下のテキストを指示通りに修正し、修正後の**全文のみ**を出力してください。\n\n【元テキスト】\n${currentText}\n\n【指示】\n${instruction}`;
+                    const newText = await callGeminiText(apiKey, editPrompt);
+                    if (newText) {
+                        await docRef.update({ text: newText.trim() });
+                        replyText = `📝 更新しました。\n\n${newText.trim()}`;
+                    }
+                    else {
+                        replyText = "⚠️ 更新内容が空でした。";
+                    }
+                }
+                else {
+                    replyText = "⚠️ 指定されたメモが見つかりませんでした。";
+                }
+            }
+            catch (_h) {
+                replyText = "⚠️ 更新に失敗しました。";
+            }
+        }
+        else if (action === "MEMORY_APPEND" && targetId) {
+            try {
+                const docRef = db.collection("memories").doc(targetId);
+                const docSnap = await docRef.get();
+                if (docSnap.exists) {
+                    const oldText = ((_f = docSnap.data()) === null || _f === void 0 ? void 0 : _f.text) || "";
+                    const newText = `${oldText}\n${content}`;
+                    await docRef.update({ text: newText });
+                    replyText = `📝 追記しました: ${content}`;
+                }
+                else {
+                    replyText = `⚠️ 追記先のメモが見つかりませんでした。`;
+                }
+            }
+            catch (_j) {
+                replyText = "⚠️ 追記に失敗しました。";
+            }
+        }
+        else if (action === "TASK_DELETE") {
+            replyText = await deleteTodoByTitle(uid, content);
+        }
+        else if (action === "CALENDAR_DELETE") {
+            replyText = await deleteCalendarEvent(uid, content);
+        }
+        else if (action === "CALENDAR_ADD") {
+            if ((_g = aiDecision.data) === null || _g === void 0 ? void 0 : _g.start) {
+                await addCalendarEvent(uid, aiDecision.data);
+                replyText = `📅 予定を登録しました: ${content}`;
+            }
+            else {
+                replyText = "📅 予定の追加はWebアプリから行うと確実です。";
+            }
+        }
+        else if (action === "TASK_ADD") {
+            await db.collection("todos").add({
+                userId: uid,
+                title: content,
+                isCompleted: false,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                source: "LINE",
+            });
+            replyText = `✅ タスク追加: ${content}`;
+        }
+        else if (action === "MEMORY_ADD") {
+            await db.collection("memories").add({
+                userId: uid,
+                text: content,
+                aiSummary: content.slice(0, 20),
+                tags: ["Memo", "LINE"],
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                source: "LINE",
+            });
+            replyText = `📝 メモしました`;
+        }
+        else if (action === "CHAT") {
+            // 会話モード: 返答をそのまま返す
+        }
+        await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: replyText,
+        });
+    }));
+    res.json({ success: true });
+});
+// その他機能
+exports.linkLineAccount = (0, https_1.onCall)({
+    secrets: [
+        lineLoginChannelId,
+        lineLoginChannelSecret,
+        lineBotToken,
+        lineBotSecret,
+    ],
+}, async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    const { code, redirectUri } = request.data;
+    try {
+        const params = new URLSearchParams();
+        params.append("grant_type", "authorization_code");
+        params.append("code", code);
+        params.append("redirect_uri", redirectUri);
+        params.append("client_id", lineLoginChannelId.value());
+        params.append("client_secret", lineLoginChannelSecret.value());
+        const tokenRes = await axios_1.default.post("https://api.line.me/oauth2/v2.1/token", params);
+        const profileRes = await axios_1.default.get("https://api.line.me/v2/profile", {
+            headers: { Authorization: `Bearer ${tokenRes.data.access_token}` },
+        });
+        await db
+            .collection("users")
+            .doc(request.auth.uid)
+            .set({ isLineLinked: true, lineUserId: profileRes.data.userId }, { merge: true });
+        return { success: true };
+    }
+    catch (e) {
+        throw new https_1.HttpsError("internal", e.message);
+    }
+});
+exports.unlinkLineAccount = (0, https_1.onCall)({ cors: true }, async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    await db
+        .collection("users")
+        .doc(request.auth.uid)
+        .set({ isLineLinked: false, lineUserId: admin.firestore.FieldValue.delete() }, { merge: true });
+    return { success: true };
+});
+exports.sendMorningBriefing = (0, scheduler_1.onSchedule)({
+    schedule: "0 7 * * *",
+    timeZone: "Asia/Tokyo",
+    secrets: [lineBotToken, geminiApiKey],
+}, async (event) => {
+    const usersSnap = await db.collection("users").get();
+    const apiKey = geminiApiKey.value();
+    const client = new line.Client({
+        channelAccessToken: lineBotToken.value(),
+    });
+    for (const userDoc of usersSnap.docs) {
+        const uid = userDoc.id;
+        const userData = userDoc.data();
+        if (!userData.lineUserId)
+            continue;
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const [memoriesSnap, todosSnap] = await Promise.all([
+            db
+                .collection("memories")
+                .where("userId", "==", uid)
+                .where("createdAt", ">=", yesterday)
+                .orderBy("createdAt", "desc")
+                .get(),
+            db
+                .collection("todos")
+                .where("userId", "==", uid)
+                .where("isCompleted", "==", false)
+                .get(),
+        ]);
+        if (memoriesSnap.empty && todosSnap.empty)
+            continue;
+        const memoryText = memoriesSnap.docs
+            .map((d) => `- ${d.data().text}`)
+            .join("\n");
+        const todoText = todosSnap.docs
+            .map((d) => `- [未完了] ${d.data().title}`)
+            .join("\n");
+        const prompt = `おはようございます。今日のブリーフィングです。\n昨日: ${memoryText}\n未完了タスク: ${todoText}\n元気に300文字以内で。`;
+        const briefing = await callGeminiText(apiKey, prompt);
+        await client.pushMessage(userData.lineUserId, {
+            type: "text",
+            text: briefing,
+        });
+    }
+});
+exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
+    schedule: "every 15 minutes",
+    timeZone: "Asia/Tokyo",
+    secrets: [lineBotToken, geminiApiKey, googleClientId, googleClientSecret],
+}, async (event) => {
+    var _a;
+    const apiKey = geminiApiKey.value();
+    const client = new line.Client({
+        channelAccessToken: lineBotToken.value(),
+    });
+    const usersSnap = await db.collection("users").get();
+    for (const userDoc of usersSnap.docs) {
+        const uid = userDoc.id;
+        const userData = userDoc.data();
+        if (!userData.lineUserId)
+            continue;
+        const tokenDoc = await db
+            .collection("users")
+            .doc(uid)
+            .collection("system")
+            .doc("tokens")
+            .get();
+        if (!tokenDoc.exists)
+            continue;
+        const accessToken = await refreshAccessToken((_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken);
+        if (!accessToken)
+            continue;
+        const now = new Date();
+        try {
+            const calendarRes = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                params: {
+                    timeMin: now.toISOString(),
+                    timeMax: new Date(now.getTime() + 20 * 60000).toISOString(),
+                    singleEvents: true,
+                    orderBy: "startTime",
+                },
+            });
+            const events = calendarRes.data.items || [];
+            for (const ev of events) {
+                const title = ev.summary;
+                if (!title)
+                    continue;
+                const recentMemoriesSnap = await db
+                    .collection("memories")
+                    .where("userId", "==", uid)
+                    .orderBy("createdAt", "desc")
+                    .limit(30)
+                    .get();
+                const memoryDump = recentMemoriesSnap.docs
+                    .map((d) => `[${d.data().createdAt.toDate().toLocaleDateString()}] ${d.data().text}`)
+                    .join("\n");
+                const cheatSheetPrompt = `「${title}」の直前カンペ作成。過去メモ: ${memoryDump} 関連情報なければ「関連情報なし」と出力。`;
+                const cheatSheet = await callGeminiText(apiKey, cheatSheetPrompt);
+                if (!cheatSheet.includes("関連情報なし") &&
+                    !cheatSheet.includes("エラー")) {
+                    await client.pushMessage(userData.lineUserId, {
+                        type: "text",
+                        text: `📅 まもなく開始: ${title}\n\n🧠 AIカンペ:\n${cheatSheet}`,
+                    });
+                }
+            }
+        }
+        catch (e) {
+            console.error(`Calendar Error for user ${uid}:`, e);
+        }
+    }
+});
+exports.scrapeUrl = (0, https_1.onCall)(async () => {
+    return { success: true };
+});
+</file>
+
+<file path="functions/index.ts">
+import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import { setGlobalOptions } from "firebase-functions/v2";
+import { defineSecret } from "firebase-functions/params";
+import * as admin from "firebase-admin";
+import axios from "axios";
+import * as line from "@line/bot-sdk";
+
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
+
+const db = admin.firestore();
+
+// メモリ設定
+setGlobalOptions({
+  region: "asia-northeast1",
+  memory: "1GiB",
+  timeoutSeconds: 60,
+});
+
+// Secrets
+const lineBotToken = defineSecret("LINE_BOT_TOKEN");
+const lineBotSecret = defineSecret("LINE_BOT_SECRET");
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const googleClientId = defineSecret("GOOGLE_CLIENT_ID");
+const googleClientSecret = defineSecret("GOOGLE_CLIENT_SECRET");
+const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
+const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
+
+const CANDIDATE_MODELS = [
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-001",
+  "gemini-1.5-pro",
+  "gemini-pro",
+];
+
+// ---------------------------------------------------------
+// Helper: JSON抽出（最強版）
+// ---------------------------------------------------------
+function extractJson(text: string): any {
+  try {
+    // 1. そのままパース
+    return JSON.parse(text);
+  } catch (e) {
+    try {
+      // 2. Markdown記法や余計な文字を削除
+      const cleaned = text
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+      return JSON.parse(cleaned);
+    } catch (e2) {
+      try {
+        // 3. 正規表現で { ... } の部分だけを無理やり抽出
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          return JSON.parse(jsonMatch[0]);
+        }
+        // JSONが見つからない場合はエラーを投げるのではなく、チャットとして扱うためのオブジェクトを返す
+        console.warn("No JSON found in response, falling back to chat.");
+        return { action: "CHAT", reply: text };
+      } catch (e3) {
+        console.error("JSON Parse Error. Raw text:", text);
+        // エラー時はデフォルト動作（チャット）に倒す
+        return { action: "CHAT", reply: text };
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------
+// Helper: IDクリーニング
+// ---------------------------------------------------------
+function cleanId(id: string): string {
+  if (!id || typeof id !== "string") return "";
+  return id.replace(/<<<|>>>|ID:/g, "").trim();
+}
+
+// ---------------------------------------------------------
+// Helper: AI Model Management
+// ---------------------------------------------------------
+async function fetchAvailableModels(apiKey: string): Promise<any[]> {
+  try {
+    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const listResponse = await axios.get(listUrl);
+    if (listResponse.status !== 200) return [];
+    return listResponse.data.models || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function resolveGeminiModel(apiKey: string): Promise<string> {
+  const models = await fetchAvailableModels(apiKey);
+  const generationModels = models.filter((m: any) =>
+    m.supportedGenerationMethods?.includes("generateContent"),
+  );
+  let target = generationModels.find((m: any) =>
+    m.name.includes("gemini-1.5-flash"),
+  );
+  if (!target)
+    target = generationModels.find((m: any) =>
+      m.name.includes("gemini-1.5-pro"),
+    );
+  if (!target && generationModels.length > 0) target = generationModels[0];
+  if (target) return target.name.replace("models/", "");
+  return "gemini-1.5-flash";
+}
+
+async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
+  const dynamicModel = await resolveGeminiModel(apiKey);
+  const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(
+    Boolean,
+  );
+
+  for (const modelName of modelsToTry) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      // responseMimeType: "application/json" を削除して互換性を向上
+      const response = await axios.post(
+        url,
+        {
+          contents: [{ parts: [{ text: prompt }] }],
+        },
+        { headers: { "Content-Type": "application/json" } },
+      );
+      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return extractJson(text);
+    } catch (e: any) {
+      console.warn(`Model ${modelName} failed. Retrying...`);
+    }
+  }
+  // 全モデル失敗時はエラーメッセージを返す
+  return {
+    action: "CHAT",
+    reply: "申し訳ありません。AIサーバーが混雑しており応答できませんでした。",
+  };
+}
+
+async function callGeminiText(apiKey: string, prompt: string): Promise<string> {
+  const dynamicModel = await resolveGeminiModel(apiKey);
+  const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(
+    Boolean,
+  );
+  for (const modelName of modelsToTry) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      const response = await axios.post(
+        url,
+        { contents: [{ parts: [{ text: prompt }] }] },
+        { headers: { "Content-Type": "application/json" } },
+      );
+      return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    } catch (e) {
+      console.warn(`Model ${modelName} failed. Retrying...`);
+    }
+  }
+  return "AI応答エラー";
+}
+
+// ---------------------------------------------------------
+// Helper: Google Token Refresh
+// ---------------------------------------------------------
+async function refreshAccessToken(refreshToken: string) {
+  try {
+    const response = await axios.post("https://oauth2.googleapis.com/token", {
+      client_id: googleClientId.value(),
+      client_secret: googleClientSecret.value(),
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    });
+    return response.data.access_token;
+  } catch (e: any) {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------
+// Helper: Calendar Operations
+// ---------------------------------------------------------
+async function getCalendarEvents(uid: string): Promise<string> {
+  try {
+    const tokenDoc = await db
+      .collection("users")
+      .doc(uid)
+      .collection("system")
+      .doc("tokens")
+      .get();
+    if (!tokenDoc.exists) return "（カレンダー未連携）";
+    const refreshToken = tokenDoc.data()?.refreshToken;
+    if (!refreshToken) return "（権限なし）";
+    const accessToken = await refreshAccessToken(refreshToken);
+    if (!accessToken) return "（トークン切れ）";
+
+    const now = new Date();
+    const timeMin = now.toISOString();
+    const timeMax = new Date(
+      now.getTime() + 14 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const calendarRes = await axios.get(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        params: {
+          timeMin,
+          timeMax,
+          singleEvents: true,
+          orderBy: "startTime",
+          maxResults: 20,
+        },
+      },
+    );
+    const events = calendarRes.data.items || [];
+    if (events.length === 0) return "直近の予定はありません。";
+    return events
+      .map((ev: any) => {
+        const start = ev.start.dateTime
+          ? new Date(ev.start.dateTime).toLocaleString("ja-JP", {
+              timeZone: "Asia/Tokyo",
+              month: "numeric",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : `[終日] ${ev.start.date}`;
+        return `・${start}: ${ev.summary}`;
+      })
+      .join("\n");
+  } catch (e) {
+    return "（取得エラー）";
+  }
+}
+
+async function addCalendarEvent(
+  uid: string,
+  eventData: { title: string; start: string; end: string },
+): Promise<boolean> {
+  try {
+    const tokenDoc = await db
+      .collection("users")
+      .doc(uid)
+      .collection("system")
+      .doc("tokens")
+      .get();
+    if (!tokenDoc.exists) return false;
+    const refreshToken = tokenDoc.data()?.refreshToken;
+    const accessToken = await refreshAccessToken(refreshToken);
+    if (!accessToken) return false;
+
+    await axios.post(
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+      {
+        summary: eventData.title,
+        start: { dateTime: eventData.start },
+        end: { dateTime: eventData.end },
+      },
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function deleteCalendarEvent(
+  uid: string,
+  query: string,
+): Promise<string> {
+  try {
+    const tokenDoc = await db
+      .collection("users")
+      .doc(uid)
+      .collection("system")
+      .doc("tokens")
+      .get();
+    if (!tokenDoc.exists) return "連携されていません";
+    const accessToken = await refreshAccessToken(tokenDoc.data()?.refreshToken);
+    if (!accessToken) return "認証エラー";
+
+    const searchRes = await axios.get(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        params: { q: query, maxResults: 5, singleEvents: true },
+      },
+    );
+    const events = searchRes.data.items || [];
+    if (events.length === 0) return "該当する予定が見つかりませんでした。";
+
+    const target = events[0];
+    await axios.delete(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${target.id}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    return `「${target.summary}」を削除しました。`;
+  } catch (e) {
+    return "削除に失敗しました。";
+  }
+}
+
+// ---------------------------------------------------------
+// Helper: Todo Operations
+// ---------------------------------------------------------
+async function deleteTodoByTitle(uid: string, title: string): Promise<string> {
+  const todosRef = db.collection("todos");
+  const snap = await todosRef
+    .where("userId", "==", uid)
+    .where("isCompleted", "==", false)
+    .orderBy("createdAt", "desc")
+    .limit(30)
+    .get();
+  let targetDoc = null;
+  for (const doc of snap.docs) {
+    if (doc.data().title.includes(title)) {
+      targetDoc = doc;
+      break;
+    }
+  }
+  if (targetDoc) {
+    await targetDoc.ref.delete();
+    return `タスク「${targetDoc.data().title}」を削除しました。`;
+  }
+  return "タスクが見つかりませんでした。";
+}
+
+// ---------------------------------------------------------
+// Helper: Memory Operations
+// ---------------------------------------------------------
+async function getRecentMemories(
+  uid: string,
+  queryText: string,
+): Promise<string> {
+  try {
+    const snapshot = await db
+      .collection("memories")
+      .where("userId", "==", uid)
+      .orderBy("createdAt", "desc")
+      .limit(100)
+      .get();
+
+    if (snapshot.empty) return "（履歴なし）";
+
+    let docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    const keywords = queryText
+      .replace(/[\s,、　]+/g, " ")
+      .split(" ")
+      .filter((k) => k.length > 1);
+
+    const matches = docs.filter((d: any) =>
+      keywords.some((k) => d.text.includes(k)),
+    );
+    const recents = docs.slice(0, 5);
+
+    const candidates = [...recents, ...matches];
+    const uniqueCandidates = Array.from(
+      new Map(candidates.map((c) => [c.id, c])).values(),
+    );
+
+    if (uniqueCandidates.length === 0) return "（関連なし）";
+
+    return uniqueCandidates
+      .map((data: any) => {
+        // AIがIDを認識しやすいように <<<ID>>> で囲む
+        return `<<<${data.id}>>> ${data.text.replace(/\n/g, " ")}`;
+      })
+      .join("\n");
+  } catch (e) {
+    return "（取得エラー）";
+  }
+}
+
+// =========================================================
+// LINE Webhook
+// =========================================================
+export const lineWebhook = onRequest(
+  {
+    secrets: [
+      lineBotToken,
+      lineBotSecret,
+      geminiApiKey,
+      googleClientId,
+      googleClientSecret,
+    ],
+    cors: true,
+  },
+  async (req, res) => {
+    const token = lineBotToken.value();
+    const apiKey = geminiApiKey.value();
+    if (!token || !apiKey) {
+      res.status(500).send("Config Error");
+      return;
+    }
+
+    const client = new line.Client({ channelAccessToken: token });
+    const events = req.body.events;
+
+    await Promise.all(
+      events.map(async (event: any) => {
+        if (event.type !== "message" || event.message.type !== "text") return;
+
+        const eventId = event.webhookEventId;
+        const lineUserId = event.source.userId;
+        const message = event.message.text.trim();
+
+        try {
+          await db.collection("processed_events").doc(eventId).create({
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            userId: lineUserId,
+          });
+        } catch (e) {
+          return;
+        }
+
+        const usersSnap = await db
+          .collection("users")
+          .where("lineUserId", "==", lineUserId)
+          .limit(1)
+          .get();
+        if (usersSnap.empty) {
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: "アプリで「LINE連携」ボタンを押してください。",
+          });
+          return;
+        }
+        const uid = usersSnap.docs[0].id;
+
+        // 1. 強制モード
+        const commands: Record<string, string> = {
+          "【モード】タスク": "TASK",
+          "【モード】メモ": "MEMORY",
+          "【モード】カレンダー": "CALENDAR",
+          "【モード】お任せ": "AUTO",
+          "【モード】リセット": "AUTO",
+        };
+        if (commands[message]) {
+          await db
+            .collection("users")
+            .doc(uid)
+            .update({ lineMode: commands[message] });
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: `✅ ${commands[message]}モードになりました。`,
+          });
+          return;
+        }
+
+        // 2. コンテキスト取得
+        const memoryContext = await getRecentMemories(uid, message);
+        const nowStr = new Date().toLocaleString("ja-JP", {
+          timeZone: "Asia/Tokyo",
+        });
+
+        // 3. 司令塔プロンプト
+        const routerPrompt = `
+        現在日時: ${nowStr}
+        ユーザー入力: "${message}"
+        【参照可能なメモ】(IDは<<< >>>で囲われています)
+        ${memoryContext}
+
+        指示:
+        ユーザーの意図を汲み取り、以下のJSON形式のみを出力してください。
+        
+        ★アクション判断基準:
+        1. 【メモ編集・部分削除】 "〇〇を消して" "リストから〇〇を削除" "〇〇を変更して"
+           -> "MEMORY_EDIT"
+           - targetId: 【参照可能なメモ】の中から対象ID (<<< >>>の中身) を特定
+           - instruction: 具体的な編集指示（例：「『牛乳』の行を削除」「『13時』を『14時』に変更」）
+        
+        2. 【メモ追記】 "これ追加して" "〇〇も買っておいて"
+           -> "MEMORY_APPEND"
+           - targetId: 対象ID
+           - content: 追加する内容
+
+        3. 【タスク削除】 "タスク消して" "タスク完了"
+           -> "TASK_DELETE"
+
+        4. 【予定削除】 "予定消して" "キャンセル"
+           -> "CALENDAR_DELETE"
+
+        5. 【予定追加】 日時指定がある場合
+           -> "CALENDAR_ADD"
+
+        6. 【メモ保存】 上記以外で、単なる記録の場合
+           -> "MEMORY_ADD"
+
+        7. 【会話】 挨拶や質問
+           -> "CHAT"
+
+        出力JSON形式:
+        {
+          "action": "ACTION_NAME",
+          "targetId": "ID文字列 (<<<と>>>は除く)",
+          "instruction": "編集指示の内容",
+          "content": "追記・保存する内容",
+          "reply": "ユーザーへの短い返信"
+        }
+      `;
+
+        // 4. アクション決定
+        const aiDecision = await callGeminiJson(apiKey, routerPrompt);
+
+        const action = aiDecision.action || "CHAT";
+        const rawTargetId = aiDecision.targetId || aiDecision.data?.targetId;
+        const targetId = cleanId(rawTargetId);
+        const instruction =
+          aiDecision.instruction || aiDecision.data?.instruction;
+        const content =
+          aiDecision.content || aiDecision.data?.content || message;
+        let replyText =
+          aiDecision.reply || aiDecision.data?.reply || "処理しました";
+
+        // 5. アクション実行
+        if (action === "MEMORY_EDIT" && targetId && instruction) {
+          try {
+            const docRef = db.collection("memories").doc(targetId);
+            const docSnap = await docRef.get();
+            if (docSnap.exists) {
+              const currentText = docSnap.data()?.text || "";
+              const editPrompt = `あなたはテキストエディタです。以下のテキストを指示通りに修正し、修正後の**全文のみ**を出力してください。\n\n【元テキスト】\n${currentText}\n\n【指示】\n${instruction}`;
+              const newText = await callGeminiText(apiKey, editPrompt);
+              if (newText) {
+                await docRef.update({ text: newText.trim() });
+                replyText = `📝 更新しました。\n\n${newText.trim()}`;
+              } else {
+                replyText = "⚠️ 更新内容が空でした。";
+              }
+            } else {
+              replyText = "⚠️ 指定されたメモが見つかりませんでした。";
+            }
+          } catch {
+            replyText = "⚠️ 更新に失敗しました。";
+          }
+        } else if (action === "MEMORY_APPEND" && targetId) {
+          try {
+            const docRef = db.collection("memories").doc(targetId);
+            const docSnap = await docRef.get();
+            if (docSnap.exists) {
+              const oldText = docSnap.data()?.text || "";
+              const newText = `${oldText}\n${content}`;
+              await docRef.update({ text: newText });
+              replyText = `📝 追記しました: ${content}`;
+            } else {
+              replyText = `⚠️ 追記先のメモが見つかりませんでした。`;
+            }
+          } catch {
+            replyText = "⚠️ 追記に失敗しました。";
+          }
+        } else if (action === "TASK_DELETE") {
+          replyText = await deleteTodoByTitle(uid, content);
+        } else if (action === "CALENDAR_DELETE") {
+          replyText = await deleteCalendarEvent(uid, content);
+        } else if (action === "CALENDAR_ADD") {
+          if (aiDecision.data?.start) {
+            await addCalendarEvent(uid, aiDecision.data);
+            replyText = `📅 予定を登録しました: ${content}`;
+          } else {
+            replyText = "📅 予定の追加はWebアプリから行うと確実です。";
+          }
+        } else if (action === "TASK_ADD") {
+          await db.collection("todos").add({
+            userId: uid,
+            title: content,
+            isCompleted: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            source: "LINE",
+          });
+          replyText = `✅ タスク追加: ${content}`;
+        } else if (action === "MEMORY_ADD") {
+          await db.collection("memories").add({
+            userId: uid,
+            text: content,
+            aiSummary: content.slice(0, 20),
+            tags: ["Memo", "LINE"],
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            source: "LINE",
+          });
+          replyText = `📝 メモしました`;
+        } else if (action === "CHAT") {
+          // 会話モード: 返答をそのまま返す
+        }
+
+        await client.replyMessage(event.replyToken, {
+          type: "text",
+          text: replyText,
+        });
+      }),
+    );
+
+    res.json({ success: true });
+  },
+);
+
+// その他機能
+export const linkLineAccount = onCall(
+  {
+    secrets: [
+      lineLoginChannelId,
+      lineLoginChannelSecret,
+      lineBotToken,
+      lineBotSecret,
+    ],
+  },
+  async (request) => {
+    if (!request.auth)
+      throw new HttpsError("unauthenticated", "Login required");
+    const { code, redirectUri } = request.data;
+    try {
+      const params = new URLSearchParams();
+      params.append("grant_type", "authorization_code");
+      params.append("code", code);
+      params.append("redirect_uri", redirectUri);
+      params.append("client_id", lineLoginChannelId.value());
+      params.append("client_secret", lineLoginChannelSecret.value());
+      const tokenRes = await axios.post(
+        "https://api.line.me/oauth2/v2.1/token",
+        params,
+      );
+      const profileRes = await axios.get("https://api.line.me/v2/profile", {
+        headers: { Authorization: `Bearer ${tokenRes.data.access_token}` },
+      });
+      await db
+        .collection("users")
+        .doc(request.auth.uid)
+        .set(
+          { isLineLinked: true, lineUserId: profileRes.data.userId },
+          { merge: true },
+        );
+      return { success: true };
+    } catch (e: any) {
+      throw new HttpsError("internal", e.message);
+    }
+  },
+);
+
+export const unlinkLineAccount = onCall({ cors: true }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  await db
+    .collection("users")
+    .doc(request.auth.uid)
+    .set(
+      { isLineLinked: false, lineUserId: admin.firestore.FieldValue.delete() },
+      { merge: true },
+    );
+  return { success: true };
+});
+
+export const sendMorningBriefing = onSchedule(
+  {
+    schedule: "0 7 * * *",
+    timeZone: "Asia/Tokyo",
+    secrets: [lineBotToken, geminiApiKey],
+  },
+  async (event) => {
+    const usersSnap = await db.collection("users").get();
+    const apiKey = geminiApiKey.value();
+    const client = new line.Client({
+      channelAccessToken: lineBotToken.value(),
+    });
+    for (const userDoc of usersSnap.docs) {
+      const uid = userDoc.id;
+      const userData = userDoc.data();
+      if (!userData.lineUserId) continue;
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const [memoriesSnap, todosSnap] = await Promise.all([
+        db
+          .collection("memories")
+          .where("userId", "==", uid)
+          .where("createdAt", ">=", yesterday)
+          .orderBy("createdAt", "desc")
+          .get(),
+        db
+          .collection("todos")
+          .where("userId", "==", uid)
+          .where("isCompleted", "==", false)
+          .get(),
+      ]);
+      if (memoriesSnap.empty && todosSnap.empty) continue;
+      const memoryText = memoriesSnap.docs
+        .map((d) => `- ${d.data().text}`)
+        .join("\n");
+      const todoText = todosSnap.docs
+        .map((d) => `- [未完了] ${d.data().title}`)
+        .join("\n");
+      const prompt = `おはようございます。今日のブリーフィングです。\n昨日: ${memoryText}\n未完了タスク: ${todoText}\n元気に300文字以内で。`;
+      const briefing = await callGeminiText(apiKey, prompt);
+      await client.pushMessage(userData.lineUserId, {
+        type: "text",
+        text: briefing,
+      });
+    }
+  },
+);
+
+export const checkUpcomingMeetings = onSchedule(
+  {
+    schedule: "every 15 minutes",
+    timeZone: "Asia/Tokyo",
+    secrets: [lineBotToken, geminiApiKey, googleClientId, googleClientSecret],
+  },
+  async (event) => {
+    const apiKey = geminiApiKey.value();
+    const client = new line.Client({
+      channelAccessToken: lineBotToken.value(),
+    });
+    const usersSnap = await db.collection("users").get();
+    for (const userDoc of usersSnap.docs) {
+      const uid = userDoc.id;
+      const userData = userDoc.data();
+      if (!userData.lineUserId) continue;
+      const tokenDoc = await db
+        .collection("users")
+        .doc(uid)
+        .collection("system")
+        .doc("tokens")
+        .get();
+      if (!tokenDoc.exists) continue;
+      const accessToken = await refreshAccessToken(
+        tokenDoc.data()?.refreshToken,
+      );
+      if (!accessToken) continue;
+      const now = new Date();
+      try {
+        const calendarRes = await axios.get(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            params: {
+              timeMin: now.toISOString(),
+              timeMax: new Date(now.getTime() + 20 * 60000).toISOString(),
+              singleEvents: true,
+              orderBy: "startTime",
+            },
+          },
+        );
+        const events = calendarRes.data.items || [];
+        for (const ev of events) {
+          const title = ev.summary;
+          if (!title) continue;
+          const recentMemoriesSnap = await db
+            .collection("memories")
+            .where("userId", "==", uid)
+            .orderBy("createdAt", "desc")
+            .limit(30)
+            .get();
+          const memoryDump = recentMemoriesSnap.docs
+            .map(
+              (d) =>
+                `[${d.data().createdAt.toDate().toLocaleDateString()}] ${d.data().text}`,
+            )
+            .join("\n");
+          const cheatSheetPrompt = `「${title}」の直前カンペ作成。過去メモ: ${memoryDump} 関連情報なければ「関連情報なし」と出力。`;
+          const cheatSheet = await callGeminiText(apiKey, cheatSheetPrompt);
+          if (
+            !cheatSheet.includes("関連情報なし") &&
+            !cheatSheet.includes("エラー")
+          ) {
+            await client.pushMessage(userData.lineUserId, {
+              type: "text",
+              text: `📅 まもなく開始: ${title}\n\n🧠 AIカンペ:\n${cheatSheet}`,
+            });
+          }
+        }
+      } catch (e) {
+        console.error(`Calendar Error for user ${uid}:`, e);
+      }
+    }
+  },
+);
+
+export const scrapeUrl = onCall(async () => {
+  return { success: true };
+});
 </file>
 
 <file path="src/components/InputFooter/InputFooter.vue">
@@ -6554,7 +6609,7 @@ function extractJson(text: string): string {
 }
 
 // ---------------------------------------------------------
-// Helper: AI Model Management (変更なし・安定版)
+// Helper: AI Model Management
 // ---------------------------------------------------------
 
 const fetchAvailableModels = async (apiKey: string) => {
@@ -6686,6 +6741,48 @@ const addEventToGoogleCalendar = async (
       { headers: { Authorization: `Bearer ${token}` } },
     );
   });
+};
+
+// ★追加: カレンダー削除
+const deleteCalendarEvent = async (query: string) => {
+  return await callGoogleApi(async (token) => {
+    // 1. 検索してID取得
+    const searchRes = await axios.get(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { q: query, maxResults: 5, singleEvents: true },
+      },
+    );
+    const events = searchRes.data.items || [];
+    if (events.length === 0) return false;
+
+    const target = events[0];
+    await axios.delete(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${target.id}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    return target.summary;
+  });
+};
+
+// ★追加: タスク削除
+const deleteTodoByTitle = async (title: string) => {
+  const todosRef = collection(db, "todos");
+  // タイトルが含まれるタスクを探す (簡易的)
+  const q = query(
+    todosRef,
+    where("userId", "==", currentUser.value!.uid),
+    orderBy("createdAt", "desc"),
+  );
+  const snap = await getDocs(q);
+  const target = snap.docs.find((d) => d.data().title.includes(title));
+
+  if (target) {
+    await deleteDoc(doc(db, "todos", target.id));
+    return target.data().title;
+  }
+  return null;
 };
 
 const speakText = (text: string) => {
@@ -6990,8 +7087,19 @@ export function useMyBrain() {
         .slice(0, 5)
         .map((m) => ({ ...m, score: 1.0 }));
 
-      // 統合して重複排除
-      const allCandidates = [...latestMemories, ...vecCandidates];
+      // ★追加: キーワード検索も併用 (買い物リスト対策)
+      const keywords = text.split(/[\s,、　]+/);
+      const keywordCandidates = memories.value
+        .filter((m) => keywords.some((k) => k.length > 1 && m.text.includes(k)))
+        .slice(0, 3)
+        .map((m) => ({ ...m, score: 0.9 }));
+
+      // 全候補を統合して重複排除
+      const allCandidates = [
+        ...latestMemories,
+        ...vecCandidates,
+        ...keywordCandidates,
+      ];
       const uniqueCandidates = Array.from(
         new Map(allCandidates.map((item) => [item.id, item])).values(),
       );
@@ -7008,7 +7116,7 @@ export function useMyBrain() {
         【候補メモ】
         ${uniqueCandidates.map((c, i) => `${i} (ID:${c.id}): ${c.text}`).join("\n")}
         
-        出力はJSON形式のみ: { "indices": [0, 2] } 
+        出力はJSON形式のみ: { "indices": [0, 2] } 
       `;
 
       const verifyRes = await generateContentWithRetry(
@@ -7178,7 +7286,7 @@ export function useMyBrain() {
         timeZone: "Asia/Tokyo",
       });
 
-      // ★プロンプト強化: アバウトな指示でも動くように具体例を提示
+      // ★プロンプト強化: アクション分岐を追加
       const prompt = `
         あなたはユーザーの「第2の脳」です。現在日時: ${nowStr}
         ${calendarContext}
@@ -7191,21 +7299,26 @@ export function useMyBrain() {
         ユーザーの意図を汲み取り、適切なアクションを選択してください。
         
         判断基準:
-        - "これ追加して"や"買っておいて"等の指示があり、直近の記憶に関連するものがあれば MEMORY_APPEND
-        - タスク追加依頼("〜する"、"ToDo"など)なら TASK_ADD
-        - 予定作成依頼("明日10時"など日時指定)なら CALENDAR_ADD
-        - メモ保存依頼なら MEMORY_ADD
-        - それ以外は CHAT (質問への回答など)
+        - 【編集・削除】 "メモの〇〇を消して" "〜に変更して" -> MEMORY_EDIT
+             ※この場合、変更後の**全文**を data.newContent に入れてください。
+        - 【メモ追記】 "これ追加して" "買っておいて" -> MEMORY_APPEND
+        - 【タスク削除】 "タスク消して" "完了した" -> TASK_DELETE
+        - 【タスク追加】 "タスク" "ToDo" "〜する" -> TASK_ADD
+        - 【予定削除】 "予定消して" "キャンセル" -> CALENDAR_DELETE
+        - 【予定追加】 日時指定("明日10時"など) -> CALENDAR_ADD
+        - 【メモ保存】 ただの記録 -> MEMORY_ADD
+        - それ以外 -> CHAT
 
         出力はJSON形式のみ:
         {
-          "action": "CALENDAR_ADD" | "TASK_ADD" | "MEMORY_APPEND" | "MEMORY_ADD" | "CHAT",
+          "action": "CALENDAR_ADD" | "CALENDAR_DELETE" | "TASK_ADD" | "TASK_DELETE" | "MEMORY_APPEND" | "MEMORY_EDIT" | "MEMORY_ADD" | "CHAT",
           "data": {
             "title": "予定/タスク名",
             "start": "日時(ISO)",
             "end": "日時(ISO)",
-            "targetId": "追記対象のメモID",
+            "targetId": "対象メモID",
             "content": "追記内容",
+            "newContent": "編集後のメモ全文",
             "summary": "メモ要約"
           },
           "answer": "ユーザーへの回答テキスト",
@@ -7219,21 +7332,23 @@ export function useMyBrain() {
       let finalAnswer = data.answer;
 
       // ★アクション実行処理
-      if (data.action === "CALENDAR_ADD") {
+      if (
+        data.action === "MEMORY_EDIT" &&
+        data.data.targetId &&
+        data.data.newContent
+      ) {
         try {
-          await addEventToGoogleCalendar(
-            data.data.title,
-            data.data.start,
-            data.data.end,
-            "9",
+          const docRef = doc(db, "memories", data.data.targetId);
+          await updateDoc(docRef, { text: data.data.newContent });
+          finalAnswer += `\n\n📝 メモを更新しました`;
+
+          const idx = memories.value.findIndex(
+            (m) => m.id === data.data.targetId,
           );
-          finalAnswer += `\n\n✅ 予定を登録しました: ${data.data.title}`;
+          if (idx !== -1) memories.value[idx].text = data.data.newContent;
         } catch {
-          finalAnswer += `\n⚠️ 予定登録に失敗しました`;
+          finalAnswer += `\n⚠️ 更新失敗`;
         }
-      } else if (data.action === "TASK_ADD") {
-        await addManualTodo(data.data.title);
-        finalAnswer += `\n\n✅ タスクに追加しました: ${data.data.title}`;
       } else if (data.action === "MEMORY_APPEND" && data.data.targetId) {
         try {
           const docRef = doc(db, "memories", data.data.targetId);
@@ -7252,6 +7367,31 @@ export function useMyBrain() {
         } catch {
           finalAnswer += `\n⚠️ 追記に失敗しました`;
         }
+      } else if (data.action === "TASK_DELETE") {
+        const deletedTitle = await deleteTodoByTitle(data.data.title);
+        finalAnswer += deletedTitle
+          ? `\n\n✅ タスク削除: ${deletedTitle}`
+          : `\n⚠️ タスクが見つかりませんでした`;
+      } else if (data.action === "CALENDAR_DELETE") {
+        const deletedTitle = await deleteCalendarEvent(data.data.title);
+        finalAnswer += deletedTitle
+          ? `\n\n🗑️ 予定削除: ${deletedTitle}`
+          : `\n⚠️ 予定が見つかりませんでした`;
+      } else if (data.action === "CALENDAR_ADD") {
+        try {
+          await addEventToGoogleCalendar(
+            data.data.title,
+            data.data.start,
+            data.data.end,
+            "9",
+          );
+          finalAnswer += `\n\n✅ 予定を登録しました: ${data.data.title}`;
+        } catch {
+          finalAnswer += `\n⚠️ 予定登録に失敗しました`;
+        }
+      } else if (data.action === "TASK_ADD") {
+        await addManualTodo(data.data.title);
+        finalAnswer += `\n\n✅ タスクに追加しました: ${data.data.title}`;
       } else if (data.action === "MEMORY_ADD") {
         await addMemory(data.data.content || question, null);
         finalAnswer += `\n\n📝 メモしました`;
@@ -7495,7 +7635,7 @@ const haptic = () => {
           />
           <button
             @click="
-              submitTask;
+              submitTask();
               haptic();
             "
             class="bg-indigo-600 text-white w-12 h-auto rounded-xl flex items-center justify-center hover:bg-indigo-500 active:scale-95 transition shadow-lg shadow-indigo-900/30"
@@ -7721,68 +7861,68 @@ const haptic = () => {
 </file>
 
 <file path=".firebase/hosting.ZGlzdA.cache">
-manifest.webmanifest,1769692054101,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-sw.js,1769692054817,4a53d15383a73aed8289fe7b1ba242eec7d03356bb7244d8431a982174fae534
-registerSW.js,1769692054101,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-workbox-8c29f6e4.js,1769692054817,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-firebase-messaging-sw.js,1769692053666,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-lp.html,1769692053669,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/stateDiagram-v2-4FDKWEC3-DMpBgUwk.js,1769692054100,e32e5ae4d1d9637119b47a75320d4a108f951d603e25aa4865572b5f344d5e0d
-assets/timeline-definition-IT6M3QCI-DvufvewF.js,1769692054101,3314c6f28971575a4a6e298d0116757126fb4515de0354390461ca07ee7ff584
-assets/ordinal-Cboi1Yqb.js,1769692054101,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/xychartDiagram-PRI3JC2R-BOxjpNQ4.js,1769692054101,4ade0c265ce862d695250dbb5255fb39bdb171c479c77492568690d9e0325ad8
-assets/requirementDiagram-UZGBJVZJ-9b0a86Pg.js,1769692054100,c61a02e81ed5b0552e249bee1d5b656c497c5326f89685eb0c2fe93379bc602f
-index.html,1769692054101,dd9468a9fc5197539b3d7242d98b4c8ec92e597ee511891af6b253f337064e46
-assets/stateDiagram-FKZM4ZOC-BKdb2B5H.js,1769692054100,63ea6a4271302793b98bc949a3ee02a18b076f3cf2980fcaa329d135d66274fc
-assets/pieDiagram-ADFJNKIX-DQNbOjWO.js,1769692054101,dc6b760761a4e080d682c58cdb78c68670d25353dbffbd7a98ce23178424fa64
-assets/min-CL_sNGDq.js,1769692054101,cb6414dd05e787233bbad8c5ce81e94c3b8a57e4310b59e8609c010c975c4ed4
-assets/linear-BLV4DfNl.js,1769692054101,9978cb13d9bc669dcc0ec3dae2b587fa4ed745e55b4afb49e988cd4ee7461e85
-assets/sankeyDiagram-TZEHDZUN-DhWTy0M0.js,1769692054101,a87851eec53cb09fee7cd8dacfe6a0d3865b31fd1edd7cc4a35c602cc2d096f5
-assets/kanban-definition-3W4ZIXB7-Aetzs8-1.js,1769692054101,f189547b452128a1d802ed12300a0bf21bdcaf1a50746d6d28ac23aa88a9a0aa
-assets/mindmap-definition-VGOIOE7T-DIhMv6Nl.js,1769692054101,047623eb1f9b1d34ba308f3d315bfaf4df5fc72e22bfbd70514aed7a883c0280
-assets/init-Gi6I4Gst.js,1769692054101,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/infoDiagram-WHAUD3N6-DRdWcZhV.js,1769692054100,15bf4fa32afd5ea429b0816767dd20520f6684607fdbc8a43996166a95e37ea6
-assets/journeyDiagram-XKPGCS4Q-W-arKMmU.js,1769692054101,645d1d7c5db81e5b5a05198edfb572590e88f38ebdb41be200cd2868f7ea0f0c
-assets/quadrantDiagram-AYHSOK5B-ChJ2VzrM.js,1769692054100,7e93fb5e1d576f58bd63dea77bc34ecc2a0cddca7fdc9dc88fb2907b26a4a51e
-assets/layout-VcBZeexJ.js,1769692054101,b384e9df5c42d21af218de19b51e98a6349d1053929f9a3a72a0003f2122b4f9
-assets/gitGraphDiagram-NY62KEGX-zazQyJUR.js,1769692054100,05a26005c9f53f13b8edd87398a0cef25a060b87229a848a09f9f39947573ab4
-assets/index-DkmZYhlE.css,1769692054100,ed6d94fb20a6e23c57a90bbcb097333bdf284a9669b5bc68d05a2372b6de48d7
-assets/graph-BUkOzvCQ.js,1769692054101,765689a9c1f849c71e204467affbf2aa0d45797b09dd16d03e69b31ce9134457
-assets/diagram-S2PKOQOG-BqdHjINB.js,1769692054101,2a81389f722052c26a4a0cea5d45b3da50ec0a7aa11cc2bf40b95c504c502e98
-assets/defaultLocale-DX6XiGOO.js,1769692054101,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/diagram-PSM6KHXK-dLvbeJ2I.js,1769692054101,b4c5d61973e386cd111d7ead04e71cf20400f96c5390e23d9ee0942fd7ea86f9
-assets/clone-pt1Ip3d8.js,1769692054101,55920d1befa7f236fb0e0f799e6e257e33535bea543bf1ef9a5f53b1cba32202
-assets/classDiagram-v2-WZHVMYZB-DQXk6lfB.js,1769692054100,4f6dada68ab23bed6b8d33b9f1531512d891dcd2baffa1180a383dd5be1715ca
-assets/erDiagram-Q2GNP2WA-6V5_raj6.js,1769692054100,7c920c9e5a9d8a12dbde9f4d034a56ecc5356e15dde68d815554945879b83682
-assets/chunk-TZMSLE5B-C7xKFSOS.js,1769692054101,dac1fcf4a8e094bb7a78c498e8af9783396129ff95fbfabf4705de47048a5828
-assets/dagre-6UL2VRFP-B9FMJXnc.js,1769692054101,b1ab8633a5d5aff2ed0afb4f3a0a2b5ab0c47992519cc2bfa879589cb8f2c179
-assets/classDiagram-2ON5EDUG-DQXk6lfB.js,1769692054100,4f6dada68ab23bed6b8d33b9f1531512d891dcd2baffa1180a383dd5be1715ca
-assets/chunk-QZHKN3VN-CqP5YkQr.js,1769692054100,5a4be06e5a9b8efd4e88840dda48a1a1227a94adbedd81c8ea84df0396be4c7a
-assets/diagram-QEK2KX5R-CUbF1v7Z.js,1769692054101,0cd7f2a3b460c2abc802f312a084785f75da9106ce9a2f7a7742a162fb9b0dd8
-assets/flowDiagram-NV44I4VS-BOf9x71P.js,1769692054100,b5d0fcedea7bbaaa1c82fb0c1fa0ed966f89e491fa18f9c7b6301df6eff9bd54
-assets/ganttDiagram-JELNMOA3-vui3tGMe.js,1769692054101,5c2095c155b206e25e24b0fe18d0b687217cdee9067a2f12f627a00f07799e13
-assets/sequenceDiagram-WL72ISMW-Bv0s3WTq.js,1769692054100,12fbfc73999b9b471d22f84d331a67353f2561a6a35f59ae5c43fd34b597e3c2
-assets/chunk-QN33PNHL-TzUDGFPK.js,1769692054101,fa74b94e338c43c0f59fa538b34a9a555f07e63ddf9e1ded31bd13b1518d2f5d
-assets/chunk-FMBD7UC4-DPd5Ud-Z.js,1769692054101,6b365662b2aa1255b1293fc4a543d5f0eeb3c6a57858097b904ca4c595053901
-assets/chunk-55IACEB6-BR232Ri0.js,1769692054101,180465f07d30ee3901cf570887f90f294d9613172bba2df906b8478636efeed0
-assets/cose-bilkent-S5V4N54A-DsDT28IE.js,1769692054101,ca63cc11f9e090195d03bb8bfd4780918e076518ef5b06923b58d9b70d1f191b
-assets/chunk-DI55MBZ5-C_gTvRXc.js,1769692054100,53a144d43906120c04e2ff481a99a1ac6aed8299278b9e3694ba6fbf360428b0
-assets/channel-CJhXwgyL.js,1769692054101,4a17433d8d008baf08c23c545eabe702c8fbb9962195889d7f8d19c64589a58c
-assets/chunk-B4BG7PRW-C7PDF3mV.js,1769692054100,62d4f85ea6a859184b664b96c7b8997260127d26ad81dd6b475475c6431a4bf8
-assets/chunk-4BX2VUAB-BnQZAmWx.js,1769692054101,29bd497aca89dec5f388565060eb0953d3a44f6930978bff82989848f74a5261
-assets/arc-C4IuWBv1.js,1769692054101,1aa61a14d69e6153d3d708705ce239afa9e1eddbef2a76ed966799f038f08994
-assets/_baseUniq-CoPXhkYQ.js,1769692054101,e116c2976017ee86583df37334014b11f314869ebb02f7d2ae561cb80f897c11
-assets/c4Diagram-YG6GDRKO-Df_kqhe7.js,1769692054100,1b134b5dbcd2966bf4dcb705c57ccb69af9e2581f2cdbd0f4542fccf7260bd3d
-assets/blockDiagram-VD42YOAC-BKRb_3rc.js,1769692054101,e6ef97d3d69a7efa328579d8dc9588a33ef6dd3e0db3eb1fc8a3b2018778838c
-assets/architectureDiagram-VXUJARFQ-iyD5Go7g.js,1769692054101,eb753c1fead23a647e86e00e43d1f9f0d0e374a65c39731bb20a95f94ad75a7f
-assets/katex-Cu_Erd72.js,1769692054101,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-DdFuVn4F.js,1769692054101,dda710d3a1b43e7b4d233ab3d9454258344a996a4a66c2c5d61db41ed8dadbb4
-assets/cytoscape.esm-CyJtwmzi.js,1769692054101,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-Bda1YzeZ.js,1769692054102,afa1e6c7c53b3e525fd77c975f67f21be05d0b7f71745c6090247deaa19b3dc2
-apple-touch-icon.png,1769692053666,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-logo.png,1769692053668,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1769692053680,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-192x192.png,1769692053674,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+sw.js,1769779624787,51d655e7d844b23b4a64b51dd5ddb2bcc9c25362d81528cff60b201175ad253e
+registerSW.js,1769779624062,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+index.html,1769779624062,e9730d83ba30adb2d4952aa4550b7ce5ffb57c1c692aea37f249ac73fdacc6b4
+workbox-8c29f6e4.js,1769779624787,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+firebase-messaging-sw.js,1769779623606,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+lp.html,1769779623608,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/stateDiagram-v2-4FDKWEC3-C8cnV7JN.js,1769779624061,c0f8a5f61c4b7dd5a1ccee67dbcc057a46d9461bc4f5c80855cb8449926b5e16
+assets/stateDiagram-FKZM4ZOC-CTZNdbiw.js,1769779624061,75818253de127fee9a4b2cebaf930662c3277cef931953ee6a85589dbaa1b6f7
+manifest.webmanifest,1769779624062,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+assets/timeline-definition-IT6M3QCI-BMrhgRry.js,1769779624062,78719689f2d67f5b69494eb11cc260c2bd7238c76d426a5e93c27db9ace2d1ea
+assets/sankeyDiagram-TZEHDZUN-Bk37oe0I.js,1769779624062,c83d473f680cc53c13404776cb423ef200e0923eea5ffd41a6fd43e5902ff7b9
+assets/pieDiagram-ADFJNKIX-BzPi4ZaQ.js,1769779624062,d57a09473392b9f1bb1c064b99167f0cde51101c1ba7ce83a991cd8203eb7e83
+assets/ordinal-Cboi1Yqb.js,1769779624062,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/min-DjLXBtw1.js,1769779624062,9785bf37818e4eca21390113971ce14fa06ecbdb0559371066abcecf52daa818
+assets/requirementDiagram-UZGBJVZJ-CUGhuwT3.js,1769779624061,680931fb966172af92e2f09b88e0bac174af6381a58ea4ffe3fca05516f34095
+assets/linear-C2ZTesWu.js,1769779624062,95a09fc41266fec76e9e0a678660feebea86b3f5fcfaca6f4d4db60db0a4a8bb
+assets/xychartDiagram-PRI3JC2R-mNaVXLUX.js,1769779624062,3d66582cd9dfe94faef2e2db191dd7d61284e16e95669d034e1d1d8849bb72e8
+assets/mindmap-definition-VGOIOE7T-BScNXMHq.js,1769779624062,7a6465ebcf464337457dd66f6fec703f16554f845e48132af9ec6c5a8dadca87
+assets/init-Gi6I4Gst.js,1769779624062,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/quadrantDiagram-AYHSOK5B-9CO0fIid.js,1769779624061,742d2b49e916dcb004c8833b92b59ce3ca53c0981be8059a4336caed9da3e7d1
+assets/kanban-definition-3W4ZIXB7-DAWmpbzq.js,1769779624062,22270228a284b7ae5ecda4bb016defb4bdeb0be71be9bc920d149605c1713d40
+assets/infoDiagram-WHAUD3N6-CUNNEsk_.js,1769779624061,98e344940cbe672ed9bdf0493deb1892bbfca02cdbc349f1db5fb3b6e5f1e4ff
+assets/graph-DfzfhSXY.js,1769779624062,51d4267bcab5427f4fe482d3da6b1a96b9ae9cdcc42e3fc44c341d9ba076ede1
+assets/layout-B4E822xn.js,1769779624062,948b0dd3e82c4fa158d1b8f906f59b6b64e27132b782762a8af9929de927e1df
+assets/journeyDiagram-XKPGCS4Q-hFLw3LC5.js,1769779624062,cb6921f81528ad7b7dd8a55ac970129550a9f699920f1b828325d1e68cfbb429
+assets/gitGraphDiagram-NY62KEGX-Dw4xIEg4.js,1769779624061,f4b3b3f46aed8b4d4fa534ff3c477adf424e075699d3ecba19868dcf45fcba4f
+assets/diagram-S2PKOQOG-CI6Y1iJH.js,1769779624062,a8ab0e55576922bc2e52efeb5c9f6c05fc3233ca1c5260f27091649deac9f77f
+assets/diagram-QEK2KX5R-BWWajfIB.js,1769779624062,8659b40c4201b3d4b5d70001efc7a3b1618e4fa6f34a047b75103dfb550383f8
+assets/defaultLocale-DX6XiGOO.js,1769779624062,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/diagram-PSM6KHXK-Dyr9--3c.js,1769779624062,bc70339b91583a0099dff16655356674adca8a47e6b3b6cccabd1c9d0fa0e546
+assets/clone-2DyTmTLu.js,1769779624062,97e471f88f1910e3b478f3cfc22b7b0c13e9272a3f4212536825796bea7ed541
+assets/chunk-QZHKN3VN-CKHzDaTA.js,1769779624062,383ad8707a9442cbd6f7d91e838c4ea6786a520a017ac17f21292dc75255be1d
+assets/classDiagram-v2-WZHVMYZB-CLeniJHB.js,1769779624062,79f74712d296d948ceb6cb7d377c43f6908115e843e6e80a1dab3383e05ffbf5
+assets/chunk-TZMSLE5B-7FVt7Rrz.js,1769779624061,5da4a2b3036cf88436c07bcb985dacb46035e9203e6ec30c5daf80de8043b038
+assets/dagre-6UL2VRFP-DPW7vnUQ.js,1769779624062,048f84fc664c58011dd1a87687f72f2ccdf181f0fa3493901daf9fcab21e48c4
+assets/classDiagram-2ON5EDUG-CLeniJHB.js,1769779624061,79f74712d296d948ceb6cb7d377c43f6908115e843e6e80a1dab3383e05ffbf5
+assets/erDiagram-Q2GNP2WA-CZwP5iJf.js,1769779624061,0102c1ec94ad33cda48c3b0419775ef89d6ad9a4d41f663cfdfbc754883fa418
+assets/index-DkmZYhlE.css,1769779624061,ed6d94fb20a6e23c57a90bbcb097333bdf284a9669b5bc68d05a2372b6de48d7
+assets/flowDiagram-NV44I4VS-DlTtn8eP.js,1769779624058,f8d739be3f3a677fed2b821e55212e31f586fe523d3aef2b762074397006c4fd
+assets/ganttDiagram-JELNMOA3-Bb1us8HW.js,1769779624062,f13af614c7edd0c53d99e55e458587a93604fd4b8ff6eeb8e6b8c78b1463d598
+assets/sequenceDiagram-WL72ISMW-B6RRQEFu.js,1769779624061,f588c867b3426e65fbae53cabec1f4477eb64d68c9ab0957f2b53f441215d655
+assets/cose-bilkent-S5V4N54A--oR43DMq.js,1769779624062,4b88979bc815654b8e570de17f4cd7360a9ff42caa5c4aaf8ec048c0a7c85c0b
+assets/chunk-FMBD7UC4-BQteHW8y.js,1769779624062,16da93c74d1e64e60c8d58a71f68b4d888cc9cf36f72b25c7ffbad1973dc7c43
+assets/chunk-QN33PNHL-BvcNIqfE.js,1769779624062,9c2952d98a95fb6c5bea831f4bf8c05dec205f59b4c2819a64f3375a69b4a9e7
+assets/chunk-55IACEB6-DCUYQgbr.js,1769779624062,2602c639b4beab795a5606ffbb144d0c0b6db632e9413073f560a19c5320ffb5
+assets/chunk-DI55MBZ5-efmXaQky.js,1769779624062,c48483db6dbbcc87d415d27ff8647a1d0b0f16b08b821bbc0e997f141f33e4f1
+assets/chunk-4BX2VUAB-BThpIoYm.js,1769779624062,e49d10da4783687099e518363490d07e25a150692642faa5c47820798028b149
+assets/channel-D-PZdCPF.js,1769779624062,3026e32bac263d1d5aa22d47b956960ff0aeba3e5305e166dbdf143b2ec15f1a
+assets/chunk-B4BG7PRW-CM0pFhnN.js,1769779624061,30cfb96bac633825a77390dc947c88ae94799b0bbbe04523129404ff70a25f26
+assets/arc-Ba_PbCOY.js,1769779624062,095f7d730cdde669eace60ed68cd2ab7773a52a23473c3f62e1141821baa309c
+assets/_baseUniq-D4HHB1Wl.js,1769779624062,3008ee2b32829502473f1b01a2f1ee2740054435c67c33d6a820d66c6e039a1d
+assets/c4Diagram-YG6GDRKO-_T75Rkgi.js,1769779624061,5053114b61ddc4a30bb59876a778486cbf2a70a85f452d716f5eaa8607aa1152
+assets/blockDiagram-VD42YOAC-hjKbO6WI.js,1769779624062,f2b2e9c0bb220c74837ca3c5e887709f46d88456227780c1e9aa35777ea5310c
+assets/architectureDiagram-VXUJARFQ-BH7zHOzt.js,1769779624062,d6411f874606a95cf9c78d64048c44d25fd5cbca848a7ae49eff9aa8738b9ff0
+assets/katex-Cu_Erd72.js,1769779624062,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-C3KCu4iZ.js,1769779624062,6510c62e30ee385c03b6930a9ee5ebedcee39deea21fd141a4c91bee49af6d54
+assets/cytoscape.esm-CyJtwmzi.js,1769779624062,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-DqacwwtI.js,1769779624063,f037e805b20265149c9bdc5c0bdae24d4062d9c8d798926d1416f45ab9d995d4
+pwa-512x512.png,1769779623619,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+logo.png,1769779623607,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-192x192.png,1769779623613,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1769779623605,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>

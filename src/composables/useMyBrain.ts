@@ -45,7 +45,28 @@ const isSpeaking = ref(false);
 const activeTag = ref<string | null>(null);
 const isCalendarConnected = ref(true);
 
+// ★重要: 短期記憶（直前に触ったメモID）をlocalStorageで永続化
+const lastReferencedMemoryId = ref<string | null>(
+  localStorage.getItem("last_memory_id"),
+);
+
+const setLastMemoryId = (id: string | null) => {
+  // IDが空文字やundefinedでない場合のみ更新
+  if (id) {
+    // IDクリーニングしてから保存
+    const clean = id.replace(/<<<|>>>|ID:/gi, "").trim();
+    lastReferencedMemoryId.value = clean;
+    localStorage.setItem("last_memory_id", clean);
+    console.log("🧠 Context Updated: Active Memory ID =", clean);
+  }
+};
+
 // ---------------- Helper Functions ----------------
+
+function cleanId(id: string): string {
+  if (!id || typeof id !== "string") return "";
+  return id.replace(/<<<|>>>|ID:/gi, "").trim();
+}
 
 const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
   let token = localStorage.getItem("google_calendar_token");
@@ -133,7 +154,7 @@ function extractJson(text: string): string {
 }
 
 // ---------------------------------------------------------
-// Helper: AI Model Management (変更なし・安定版)
+// Helper: AI Model Management
 // ---------------------------------------------------------
 
 const fetchAvailableModels = async (apiKey: string) => {
@@ -154,6 +175,7 @@ const resolveGeminiModel = async (apiKey: string): Promise<string> => {
   const generationModels = models.filter((m: any) =>
     m.supportedGenerationMethods?.includes("generateContent"),
   );
+  // フロントエンドでは応答速度重視でFlashを優先
   let target = generationModels.find((m: any) =>
     m.name.includes("gemini-1.5-flash"),
   );
@@ -206,7 +228,8 @@ const generateContentWithRetry = async (
   try {
     const modelName = await resolveGeminiModel(apiKey);
     const genAI = new GoogleGenerativeAI(apiKey);
-    const config = isJsonMode ? { responseMimeType: "application/json" } : {};
+    // JSONモードはエラー回避のためフロントエンドでも無効化し、プロンプトで強制する
+    const config = {};
     const model = genAI.getGenerativeModel({
       model: modelName,
       generationConfig: config,
@@ -265,6 +288,44 @@ const addEventToGoogleCalendar = async (
       { headers: { Authorization: `Bearer ${token}` } },
     );
   });
+};
+
+const deleteCalendarEvent = async (query: string) => {
+  return await callGoogleApi(async (token) => {
+    const searchRes = await axios.get(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { q: query, maxResults: 5, singleEvents: true },
+      },
+    );
+    const events = searchRes.data.items || [];
+    if (events.length === 0) return false;
+
+    const target = events[0];
+    await axios.delete(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${target.id}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    return target.summary;
+  });
+};
+
+const deleteTodoByTitle = async (title: string) => {
+  const todosRef = collection(db, "todos");
+  const q = query(
+    todosRef,
+    where("userId", "==", currentUser.value!.uid),
+    orderBy("createdAt", "desc"),
+  );
+  const snap = await getDocs(q);
+  const target = snap.docs.find((d) => d.data().title.includes(title));
+
+  if (target) {
+    await deleteDoc(doc(db, "todos", target.id));
+    return target.data().title;
+  }
+  return null;
 };
 
 const speakText = (text: string) => {
@@ -517,6 +578,9 @@ export function useMyBrain() {
         chatLogs.value = [];
         todos.value = [];
         dailyReports.value = [];
+        // ログアウト時に記憶もリセット
+        localStorage.removeItem("last_memory_id");
+        lastReferencedMemoryId.value = null;
       }
     });
   };
@@ -524,6 +588,7 @@ export function useMyBrain() {
   const logout = async () => {
     await signOut(auth);
     localStorage.removeItem("google_calendar_token");
+    localStorage.removeItem("last_memory_id");
     window.location.reload();
   };
 
@@ -541,7 +606,6 @@ export function useMyBrain() {
     return Array.from(tags);
   });
 
-  // ★修正: 最新のメモも強制的に含めて検索する
   const findRelatedMemories = async (text: string): Promise<Memory[]> => {
     if (!text.trim() || memories.value.length === 0) return [];
     try {
@@ -554,7 +618,6 @@ export function useMyBrain() {
 
       const threshold = 0.55;
 
-      // ベクトル検索候補
       const vecCandidates = memories.value
         .map((m) => ({
           ...m,
@@ -564,13 +627,21 @@ export function useMyBrain() {
         .sort((a, b) => (b.score || 0) - (a.score || 0))
         .slice(0, 5);
 
-      // ★追加: 最新5件を強制的に候補に入れる (文脈理解用)
       const latestMemories = memories.value
         .slice(0, 5)
         .map((m) => ({ ...m, score: 1.0 }));
 
-      // 統合して重複排除
-      const allCandidates = [...latestMemories, ...vecCandidates];
+      const keywords = text.split(/[\s,、　]+/);
+      const keywordCandidates = memories.value
+        .filter((m) => keywords.some((k) => k.length > 1 && m.text.includes(k)))
+        .slice(0, 3)
+        .map((m) => ({ ...m, score: 0.9 }));
+
+      const allCandidates = [
+        ...latestMemories,
+        ...vecCandidates,
+        ...keywordCandidates,
+      ];
       const uniqueCandidates = Array.from(
         new Map(allCandidates.map((item) => [item.id, item])).values(),
       );
@@ -619,6 +690,10 @@ export function useMyBrain() {
         hasImage: !!hasImages,
         fileType: hasImages ? "image/jpeg" : null,
       });
+
+      // ★保存したIDを短期記憶にセット
+      setLastMemoryId(docRef.id);
+
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
       let promptParts: any[] = [];
@@ -713,7 +788,6 @@ export function useMyBrain() {
 
       const threshold = 0.55;
 
-      // 既存の類似検索
       const vecCandidates = memories.value
         .map((m) => ({
           ...m,
@@ -723,19 +797,16 @@ export function useMyBrain() {
         .sort((a, b) => (b.score || 0) - (a.score || 0))
         .slice(0, 5);
 
-      // ★追加: 最新5件を必ず含める (文脈理解用)
       const latestMemories = memories.value
         .slice(0, 5)
         .map((m) => ({ ...m, score: 1.0 }));
 
-      // ★追加: キーワード検索も併用 (買い物リスト対策)
       const keywords = question.split(/[\s,、　]+/);
       const keywordCandidates = memories.value
         .filter((m) => keywords.some((k) => k.length > 1 && m.text.includes(k)))
         .slice(0, 3)
         .map((m) => ({ ...m, score: 0.9 }));
 
-      // 全候補を統合して重複排除
       const allCandidates = [
         ...latestMemories,
         ...vecCandidates,
@@ -749,6 +820,12 @@ export function useMyBrain() {
         .map((m) => `ID:${m.id} | ${m.text.slice(0, 300)}`)
         .join("\n");
 
+      // 直近の会話履歴を取得
+      const recentHistory = chatLogs.value
+        .slice(-5)
+        .map((log) => `User: ${log.question}\nAI: ${log.answer}`)
+        .join("\n---\n");
+
       const calendarEvents = await fetchCalendarEvents();
       const calendarContext = calendarEvents
         ? `\n【直近の予定】\n${calendarEvents}\n`
@@ -757,34 +834,49 @@ export function useMyBrain() {
         timeZone: "Asia/Tokyo",
       });
 
-      // ★プロンプト強化: アバウトな指示でも動くように具体例を提示
+      // ★プロンプト強化: 直前のIDを注入
       const prompt = `
         あなたはユーザーの「第2の脳」です。現在日時: ${nowStr}
         ${calendarContext}
+        
+        【直近の会話履歴】(文脈を理解してください)
+        ${recentHistory}
+
         【参照する記憶(ID付き)】
         ${context}
+        
+        【直前に触ったメモID】: ${lastReferencedMemoryId.value ? `<<<${lastReferencedMemoryId.value}>>>` : "なし"}
+
         【ユーザー入力】
         ${question}
 
         【指示】
         ユーザーの意図を汲み取り、適切なアクションを選択してください。
+        「これ」「あれ」「さっきの」といった指示語がある場合、「直前に触ったメモID」を優先して対象にしてください。
+        もし回答に使用したメモがある場合は、そのIDを targetId に必ず含めてください。
         
         判断基準:
-        - "これ追加して"や"買っておいて"等の指示があり、直近の記憶に関連するものがあれば MEMORY_APPEND
-        - タスク追加依頼("〜する"、"ToDo"など)なら TASK_ADD
-        - 予定作成依頼("明日10時"など日時指定)なら CALENDAR_ADD
-        - メモ保存依頼なら MEMORY_ADD
-        - それ以外は CHAT (質問への回答など)
+        - 【編集・削除】 "メモの〇〇を消して" "〜に変更して" -> MEMORY_EDIT
+             ※この場合、変更後の**全文**を data.newContent に入れてください。
+             targetId は【参照する記憶】のID、または【直前に触ったメモID】を使ってください。
+        - 【メモ追記】 "これ追加して" "買っておいて" -> MEMORY_APPEND
+        - 【タスク削除】 "タスク消して" "完了した" -> TASK_DELETE
+        - 【タスク追加】 "タスク" "ToDo" "〜する" -> TASK_ADD
+        - 【予定削除】 "予定消して" "キャンセル" -> CALENDAR_DELETE
+        - 【予定追加】 日時指定("明日10時"など) -> CALENDAR_ADD
+        - 【メモ保存】 ただの記録 -> MEMORY_ADD
+        - それ以外 -> CHAT (メモを参照した場合は targetId を入れること)
 
         出力はJSON形式のみ:
         {
-          "action": "CALENDAR_ADD" | "TASK_ADD" | "MEMORY_APPEND" | "MEMORY_ADD" | "CHAT",
+          "action": "CALENDAR_ADD" | "CALENDAR_DELETE" | "TASK_ADD" | "TASK_DELETE" | "MEMORY_APPEND" | "MEMORY_EDIT" | "MEMORY_ADD" | "CHAT",
           "data": {
             "title": "予定/タスク名",
             "start": "日時(ISO)",
             "end": "日時(ISO)",
-            "targetId": "追記対象のメモID",
+            "targetId": "対象メモID",
             "content": "追記内容",
+            "newContent": "編集後のメモ全文",
             "summary": "メモ要約"
           },
           "answer": "ユーザーへの回答テキスト",
@@ -797,8 +889,55 @@ export function useMyBrain() {
       const data = JSON.parse(extractJson(text));
       let finalAnswer = data.answer;
 
-      // ★アクション実行処理
-      if (data.action === "CALENDAR_ADD") {
+      // ★AIが返したIDを取得し、フォールバックも考慮
+      const targetId =
+        cleanId(data.data.targetId) || lastReferencedMemoryId.value;
+
+      if (data.action === "MEMORY_EDIT" && targetId && data.data.newContent) {
+        try {
+          const finalId = cleanId(targetId);
+          const docRef = doc(db, "memories", finalId);
+          await updateDoc(docRef, { text: data.data.newContent });
+          finalAnswer += `\n\n📝 メモを更新しました`;
+
+          // ★短期記憶を更新
+          setLastMemoryId(finalId);
+
+          const idx = memories.value.findIndex((m) => m.id === finalId);
+          if (idx !== -1) memories.value[idx].text = data.data.newContent;
+        } catch {
+          finalAnswer += `\n⚠️ 更新失敗`;
+        }
+      } else if (data.action === "MEMORY_APPEND" && targetId) {
+        try {
+          const finalId = cleanId(targetId);
+          const docRef = doc(db, "memories", finalId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const oldText = docSnap.data().text;
+            const newText = `${oldText}\n(追記) ${data.data.content}`;
+            await updateDoc(docRef, { text: newText });
+            finalAnswer += `\n\n📝 メモに追記しました`;
+            // ★短期記憶を更新
+            setLastMemoryId(finalId);
+
+            const idx = memories.value.findIndex((m) => m.id === finalId);
+            if (idx !== -1) memories.value[idx].text = newText;
+          }
+        } catch {
+          finalAnswer += `\n⚠️ 追記に失敗しました`;
+        }
+      } else if (data.action === "TASK_DELETE") {
+        const deletedTitle = await deleteTodoByTitle(data.data.title);
+        finalAnswer += deletedTitle
+          ? `\n\n✅ タスク削除: ${deletedTitle}`
+          : `\n⚠️ タスクが見つかりませんでした`;
+      } else if (data.action === "CALENDAR_DELETE") {
+        const deletedTitle = await deleteCalendarEvent(data.data.title);
+        finalAnswer += deletedTitle
+          ? `\n\n🗑️ 予定削除: ${deletedTitle}`
+          : `\n⚠️ 予定が見つかりませんでした`;
+      } else if (data.action === "CALENDAR_ADD") {
         try {
           await addEventToGoogleCalendar(
             data.data.title,
@@ -813,27 +952,12 @@ export function useMyBrain() {
       } else if (data.action === "TASK_ADD") {
         await addManualTodo(data.data.title);
         finalAnswer += `\n\n✅ タスクに追加しました: ${data.data.title}`;
-      } else if (data.action === "MEMORY_APPEND" && data.data.targetId) {
-        try {
-          const docRef = doc(db, "memories", data.data.targetId);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const oldText = docSnap.data().text;
-            const newText = `${oldText}\n(追記) ${data.data.content}`;
-            await updateDoc(docRef, { text: newText });
-            finalAnswer += `\n\n📝 メモに追記しました`;
-            // メモリリスト更新のためリロード
-            const idx = memories.value.findIndex(
-              (m) => m.id === data.data.targetId,
-            );
-            if (idx !== -1) memories.value[idx].text = newText;
-          }
-        } catch {
-          finalAnswer += `\n⚠️ 追記に失敗しました`;
-        }
       } else if (data.action === "MEMORY_ADD") {
         await addMemory(data.data.content || question, null);
         finalAnswer += `\n\n📝 メモしました`;
+      } else if (data.action === "CHAT") {
+        // 会話であっても、参照したIDがあれば記憶する
+        if (targetId) setLastMemoryId(cleanId(targetId));
       }
 
       // チャットログ保存
@@ -866,6 +990,7 @@ export function useMyBrain() {
 
   const updateMemory = async (id: string, newText: string) => {
     await updateDoc(doc(db, "memories", id), { text: newText });
+    setLastMemoryId(id); // 手動更新時も記憶
     const index = memories.value.findIndex((m) => m.id === id);
     if (index !== -1) {
       memories.value[index].text = newText;
@@ -874,6 +999,7 @@ export function useMyBrain() {
   const deleteMemory = async (id: string) => {
     if (confirm("削除?")) {
       await deleteDoc(doc(db, "memories", id));
+      if (lastReferencedMemoryId.value === id) setLastMemoryId(null); // 記憶消去
       memories.value = memories.value.filter((m) => m.id !== id);
     }
   };
