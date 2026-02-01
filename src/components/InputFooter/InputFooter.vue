@@ -2,6 +2,8 @@
 import { computed } from "vue";
 import { useInputFooter } from "./useInputFooter";
 import { useMyBrain } from "@/composables/useMyBrain";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { getApp } from "firebase/app";
 
 const props = defineProps<{
   modelValue: "memo" | "chat" | "url" | "calendar";
@@ -33,6 +35,27 @@ const { currentUser, isSaving, isAiThinking, isSpeaking } = useMyBrain();
 // バイブレーション
 const haptic = () => {
   if (navigator.vibrate) navigator.vibrate(10);
+};
+
+// ★修正: フロントエンドにあるトークンを直接渡す
+const testNotification = async () => {
+  if (!confirm("【動画撮影用】\nLINEにテスト通知を強制送信しますか？")) return;
+
+  const functions = getFunctions(getApp(), "asia-northeast1");
+  const func = httpsCallable(functions, "forceTriggerNotification");
+
+  // ★ここが根本解決の鍵: ブラウザが持っている「有効な鍵」を渡す
+  const localToken = localStorage.getItem("google_calendar_token");
+
+  try {
+    const res: any = await func({ accessToken: localToken });
+    if (res.data.result) {
+      alert("結果: " + res.data.result);
+    }
+  } catch (e: any) {
+    console.error(e);
+    alert("失敗: " + e.message);
+  }
 };
 </script>
 
@@ -139,8 +162,18 @@ const haptic = () => {
               📎
             </button>
           </div>
-          <div v-if="inputMode === 'chat'" class="pb-1.5">
+
+          <div class="pb-1.5 flex gap-1">
             <button
+              @click="testNotification"
+              class="p-2 text-slate-500 hover:text-white hover:bg-[#27272a] rounded-full transition"
+              title="【撮影用】テスト通知を送る"
+            >
+              🔔
+            </button>
+
+            <button
+              v-if="inputMode === 'chat'"
               @click="
                 toggleListening;
                 haptic();

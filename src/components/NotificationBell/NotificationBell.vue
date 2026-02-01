@@ -8,14 +8,25 @@ const {
   toggleDropdown,
   markAsRead,
   markAllRead,
+  requestNotificationPermission,
 } = useNotifications();
 
 const unreadCount = computed(
-  () => notifications.value.filter((n) => !n.isRead).length
+  () => notifications.value.filter((n) => !n.isRead).length,
 );
 const bellContainerRef = ref<HTMLElement | null>(null);
+const permissionStatus = ref(Notification.permission);
 
-// 外側クリックを検知して閉じる処理
+const enableNotifications = async () => {
+  await requestNotificationPermission();
+  permissionStatus.value = Notification.permission;
+  if (permissionStatus.value === "granted") {
+    alert("通知をオンにしました！");
+  } else {
+    alert("ブラウザの設定で通知がブロックされています。");
+  }
+};
+
 const handleClickOutside = (event: MouseEvent) => {
   if (
     isDropdownOpen.value &&
@@ -33,7 +44,6 @@ onUnmounted(() => {
   document.removeEventListener("click", handleClickOutside);
 });
 
-// 時間表示 (例: 5分前)
 const formatTime = (date: Date) => {
   const diff = (new Date().getTime() - date.getTime()) / 1000;
   if (diff < 60) return "たった今";
@@ -42,7 +52,6 @@ const formatTime = (date: Date) => {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 };
 
-// 通知タイプごとのスタイル
 const getTypeStyles = (type: string) => {
   switch (type) {
     case "reservation":
@@ -88,19 +97,29 @@ const getTypeStyles = (type: string) => {
     <Transition name="pop">
       <div
         v-if="isDropdownOpen"
-        class="absolute top-12 right-[-60px] md:right-0 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden origin-top-right"
+        class="fixed top-20 left-1/2 -translate-x-1/2 w-[95vw] max-w-sm md:absolute md:top-12 md:left-auto md:right-0 md:w-80 md:translate-x-0 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50"
       >
         <div
           class="px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 backdrop-blur"
         >
           <h3 class="font-bold text-sm text-slate-700">通知センター</h3>
-          <button
-            v-if="unreadCount > 0"
-            @click="markAllRead"
-            class="text-[10px] text-teal-600 font-bold hover:underline"
-          >
-            すべて既読
-          </button>
+
+          <div class="flex gap-2">
+            <button
+              v-if="permissionStatus === 'default'"
+              @click="enableNotifications"
+              class="text-[10px] bg-blue-100 text-blue-600 px-2 py-1 rounded font-bold hover:bg-blue-200 transition"
+            >
+              🔔 通知ON
+            </button>
+            <button
+              v-if="unreadCount > 0"
+              @click="markAllRead"
+              class="text-[10px] text-teal-600 font-bold hover:underline"
+            >
+              すべて既読
+            </button>
+          </div>
         </div>
 
         <div class="max-h-[350px] overflow-y-auto custom-scrollbar">

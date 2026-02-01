@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useAppHeader } from "./useAppHeader";
 import { useMyBrain } from "@/composables/useMyBrain";
+import NotificationBell from "@/components/NotificationBell/NotificationBell.vue"; // ★追加
 
 const { logout } = useAppHeader();
-const { currentUser, startLineAuth, unlinkLine } = useMyBrain(); // ★unlinkLineを追加
+const { currentUser, startLineAuth, unlinkLine } = useMyBrain();
 </script>
 
 <template>
@@ -20,6 +21,8 @@ const { currentUser, startLineAuth, unlinkLine } = useMyBrain(); // ★unlinkLin
     </div>
 
     <div class="flex items-center gap-2">
+      <NotificationBell />
+
       <button
         v-if="currentUser && !currentUser.isLineLinked"
         @click="startLineAuth"

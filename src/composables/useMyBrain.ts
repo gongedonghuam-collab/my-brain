@@ -45,19 +45,18 @@ const isSpeaking = ref(false);
 const activeTag = ref<string | null>(null);
 const isCalendarConnected = ref(true);
 
-// ★重要: 短期記憶（直前に触ったメモID）をlocalStorageで永続化
 const lastReferencedMemoryId = ref<string | null>(
   localStorage.getItem("last_memory_id"),
 );
 
 const setLastMemoryId = (id: string | null) => {
-  // IDが空文字やundefinedでない場合のみ更新
   if (id) {
-    // IDクリーニングしてから保存
     const clean = id.replace(/<<<|>>>|ID:/gi, "").trim();
     lastReferencedMemoryId.value = clean;
     localStorage.setItem("last_memory_id", clean);
-    console.log("🧠 Context Updated: Active Memory ID =", clean);
+  } else {
+    lastReferencedMemoryId.value = null;
+    localStorage.removeItem("last_memory_id");
   }
 };
 
@@ -66,6 +65,34 @@ const setLastMemoryId = (id: string | null) => {
 function cleanId(id: string): string {
   if (!id || typeof id !== "string") return "";
   return id.replace(/<<<|>>>|ID:/gi, "").trim();
+}
+
+function cleanAiReply(text: string): string {
+  return text
+    .replace(/📝 メモを更新しました/g, "")
+    .replace(/📝 メモに追記しました/g, "")
+    .replace(/📝 メモしました/g, "")
+    .replace(/✅ .*しました/g, "")
+    .replace(/⚠️ .*失敗しました/g, "")
+    .trim();
+}
+
+// ★追加: 日時文字列を強制的にGoogleカレンダー用に整形する関数
+function formatIsoDate(dateStr: string): string {
+  if (!dateStr) return "";
+  // すでに+09:00やZがついているならそのまま
+  if (dateStr.includes("+") || dateStr.endsWith("Z")) return dateStr;
+
+  // 秒がない場合 (YYYY-MM-DDTHH:mm) -> 秒を追加
+  if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
+    return `${dateStr}:00+09:00`;
+  }
+  // 秒がある場合 (YYYY-MM-DDTHH:mm:ss) -> タイムゾーンを追加
+  if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)) {
+    return `${dateStr}+09:00`;
+  }
+  // それ以外でもとりあえずタイムゾーンをつける
+  return `${dateStr}+09:00`;
 }
 
 const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
@@ -79,9 +106,15 @@ const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
     isCalendarConnected.value = true;
     return res;
   } catch (e: any) {
+    // ★修正: 401エラー（トークン切れ）なら強制ログアウトしてログイン画面へ
     if (e.response && e.response.status === 401) {
+      console.warn("Calendar token expired. Redirecting to login...");
       localStorage.removeItem("google_calendar_token");
       isCalendarConnected.value = false;
+
+      await signOut(auth);
+      // リロードして強制的にログイン画面へ飛ばす
+      window.location.href = "/login";
       return null;
     }
     throw e;
@@ -175,7 +208,6 @@ const resolveGeminiModel = async (apiKey: string): Promise<string> => {
   const generationModels = models.filter((m: any) =>
     m.supportedGenerationMethods?.includes("generateContent"),
   );
-  // フロントエンドでは応答速度重視でFlashを優先
   let target = generationModels.find((m: any) =>
     m.name.includes("gemini-1.5-flash"),
   );
@@ -228,8 +260,7 @@ const generateContentWithRetry = async (
   try {
     const modelName = await resolveGeminiModel(apiKey);
     const genAI = new GoogleGenerativeAI(apiKey);
-    // JSONモードはエラー回避のためフロントエンドでも無効化し、プロンプトで強制する
-    const config = {};
+    const config = isJsonMode ? { responseMimeType: "application/json" } : {};
     const model = genAI.getGenerativeModel({
       model: modelName,
       generationConfig: config,
@@ -269,17 +300,22 @@ const fetchCalendarEvents = async () => {
   });
 };
 
+// ★修正: 日時フォーマット処理を適用
 const addEventToGoogleCalendar = async (
   title: string,
   startDateTime: string,
   endDateTime: string,
   colorId?: string,
 ) => {
+  // ISO形式 + タイムゾーン (+09:00) にここで強制変換
+  const finalStart = formatIsoDate(startDateTime);
+  const finalEnd = formatIsoDate(endDateTime);
+
   await callGoogleApi(async (token) => {
     const event = {
       summary: title,
-      start: { dateTime: startDateTime },
-      end: { dateTime: endDateTime },
+      start: { dateTime: finalStart },
+      end: { dateTime: finalEnd },
       colorId: colorId || "9",
     };
     await axios.post(
@@ -578,7 +614,6 @@ export function useMyBrain() {
         chatLogs.value = [];
         todos.value = [];
         dailyReports.value = [];
-        // ログアウト時に記憶もリセット
         localStorage.removeItem("last_memory_id");
         lastReferencedMemoryId.value = null;
       }
@@ -691,7 +726,7 @@ export function useMyBrain() {
         fileType: hasImages ? "image/jpeg" : null,
       });
 
-      // ★保存したIDを短期記憶にセット
+      // ★ID記憶
       setLastMemoryId(docRef.id);
 
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
@@ -820,7 +855,6 @@ export function useMyBrain() {
         .map((m) => `ID:${m.id} | ${m.text.slice(0, 300)}`)
         .join("\n");
 
-      // 直近の会話履歴を取得
       const recentHistory = chatLogs.value
         .slice(-5)
         .map((log) => `User: ${log.question}\nAI: ${log.answer}`)
@@ -834,12 +868,11 @@ export function useMyBrain() {
         timeZone: "Asia/Tokyo",
       });
 
-      // ★プロンプト強化: 直前のIDを注入
       const prompt = `
         あなたはユーザーの「第2の脳」です。現在日時: ${nowStr}
         ${calendarContext}
         
-        【直近の会話履歴】(文脈を理解してください)
+        【直近の会話履歴】
         ${recentHistory}
 
         【参照する記憶(ID付き)】
@@ -853,12 +886,13 @@ export function useMyBrain() {
         【指示】
         ユーザーの意図を汲み取り、適切なアクションを選択してください。
         「これ」「あれ」「さっきの」といった指示語がある場合、「直前に触ったメモID」を優先して対象にしてください。
-        もし回答に使用したメモがある場合は、そのIDを targetId に必ず含めてください。
+        
+        ★重要:
+        - 予定を追加する場合 (CALENDAR_ADD)、日時は必ず **ISO 8601形式 (YYYY-MM-DDTHH:mm:ss+09:00)** で出力してください。
+        - ユーザーが「明日10時」と言ったら、現在日時から計算した正確な日時（タイムゾーン+09:00付）を入れてください。
         
         判断基準:
         - 【編集・削除】 "メモの〇〇を消して" "〜に変更して" -> MEMORY_EDIT
-             ※この場合、変更後の**全文**を data.newContent に入れてください。
-             targetId は【参照する記憶】のID、または【直前に触ったメモID】を使ってください。
         - 【メモ追記】 "これ追加して" "買っておいて" -> MEMORY_APPEND
         - 【タスク削除】 "タスク消して" "完了した" -> TASK_DELETE
         - 【タスク追加】 "タスク" "ToDo" "〜する" -> TASK_ADD
@@ -872,8 +906,8 @@ export function useMyBrain() {
           "action": "CALENDAR_ADD" | "CALENDAR_DELETE" | "TASK_ADD" | "TASK_DELETE" | "MEMORY_APPEND" | "MEMORY_EDIT" | "MEMORY_ADD" | "CHAT",
           "data": {
             "title": "予定/タスク名",
-            "start": "日時(ISO)",
-            "end": "日時(ISO)",
+            "start": "2024-02-01T10:00:00+09:00", 
+            "end": "2024-02-01T11:00:00+09:00",
             "targetId": "対象メモID",
             "content": "追記内容",
             "newContent": "編集後のメモ全文",
@@ -887,9 +921,10 @@ export function useMyBrain() {
 
       const text = await generateContentWithRetry(apiKey, [prompt], true);
       const data = JSON.parse(extractJson(text));
-      let finalAnswer = data.answer;
 
-      // ★AIが返したIDを取得し、フォールバックも考慮
+      // ★AIが勝手にシステム文言を入れないようにクリーニング
+      let finalAnswer = cleanAiReply(data.answer);
+
       const targetId =
         cleanId(data.data.targetId) || lastReferencedMemoryId.value;
 
@@ -898,11 +933,10 @@ export function useMyBrain() {
           const finalId = cleanId(targetId);
           const docRef = doc(db, "memories", finalId);
           await updateDoc(docRef, { text: data.data.newContent });
+          // ★ここで1回だけ追加（重複防止）
           finalAnswer += `\n\n📝 メモを更新しました`;
 
-          // ★短期記憶を更新
           setLastMemoryId(finalId);
-
           const idx = memories.value.findIndex((m) => m.id === finalId);
           if (idx !== -1) memories.value[idx].text = data.data.newContent;
         } catch {
@@ -918,9 +952,7 @@ export function useMyBrain() {
             const newText = `${oldText}\n(追記) ${data.data.content}`;
             await updateDoc(docRef, { text: newText });
             finalAnswer += `\n\n📝 メモに追記しました`;
-            // ★短期記憶を更新
             setLastMemoryId(finalId);
-
             const idx = memories.value.findIndex((m) => m.id === finalId);
             if (idx !== -1) memories.value[idx].text = newText;
           }
@@ -955,9 +987,8 @@ export function useMyBrain() {
       } else if (data.action === "MEMORY_ADD") {
         await addMemory(data.data.content || question, null);
         finalAnswer += `\n\n📝 メモしました`;
-      } else if (data.action === "CHAT") {
-        // 会話であっても、参照したIDがあれば記憶する
-        if (targetId) setLastMemoryId(cleanId(targetId));
+      } else if (data.action === "CHAT" && targetId) {
+        setLastMemoryId(cleanId(targetId));
       }
 
       // チャットログ保存

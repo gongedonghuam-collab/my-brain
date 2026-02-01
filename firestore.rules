@@ -2,50 +2,35 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // 本人確認関数
+    // ヘルパー関数: 本人かどうか
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }
 
-    // テキスト検証関数
-    function isValidText() {
-      return request.resource.data.text is string
-             && request.resource.data.text.size() > 0
-             && request.resource.data.text.size() < 20000;
-    }
-
-    match /users/{userId} {
+    // ★ここが変更点: ユーザー配下のデータ(system含む)をすべて無条件で許可
+    match /users/{userId}/{document=**} {
       allow read, write: if isOwner(userId);
-      match /checkout_sessions/{id} {
-        allow read, write: if isOwner(userId);
-      }
-      match /system/{docId} {
-        allow read: if isOwner(userId);
-      }
     }
 
+    // その他のデータもシンプルに許可
     match /memories/{memoryId} {
-      allow read, delete: if isOwner(resource.data.userId);
-      allow create: if isOwner(request.resource.data.userId) && isValidText();
-      allow update: if isOwner(resource.data.userId) && isValidText();
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
     }
 
     match /chat_logs/{logId} {
-      allow read, delete: if isOwner(resource.data.userId);
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isOwner(resource.data.userId);
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
     }
 
-    // ★修正: ToDoリストへの読み書き権限を追加
     match /todos/{todoId} {
-      allow read, delete: if isOwner(resource.data.userId);
-      allow create, update: if isOwner(request.resource.data.userId);
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
     }
 
-    // ★修正: 日刊レポートへの読み書き権限を追加
     match /daily_reports/{reportId} {
-      allow read, delete: if isOwner(resource.data.userId);
-      allow create, update: if isOwner(request.resource.data.userId);
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
     }
   }
 }

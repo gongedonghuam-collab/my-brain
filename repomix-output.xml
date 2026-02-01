@@ -1294,14 +1294,25 @@ const {
   toggleDropdown,
   markAsRead,
   markAllRead,
+  requestNotificationPermission,
 } = useNotifications();
 
 const unreadCount = computed(
-  () => notifications.value.filter((n) => !n.isRead).length
+  () => notifications.value.filter((n) => !n.isRead).length,
 );
 const bellContainerRef = ref<HTMLElement | null>(null);
+const permissionStatus = ref(Notification.permission);
 
-// 外側クリックを検知して閉じる処理
+const enableNotifications = async () => {
+  await requestNotificationPermission();
+  permissionStatus.value = Notification.permission;
+  if (permissionStatus.value === "granted") {
+    alert("通知をオンにしました！");
+  } else {
+    alert("ブラウザの設定で通知がブロックされています。");
+  }
+};
+
 const handleClickOutside = (event: MouseEvent) => {
   if (
     isDropdownOpen.value &&
@@ -1319,7 +1330,6 @@ onUnmounted(() => {
   document.removeEventListener("click", handleClickOutside);
 });
 
-// 時間表示 (例: 5分前)
 const formatTime = (date: Date) => {
   const diff = (new Date().getTime() - date.getTime()) / 1000;
   if (diff < 60) return "たった今";
@@ -1328,7 +1338,6 @@ const formatTime = (date: Date) => {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 };
 
-// 通知タイプごとのスタイル
 const getTypeStyles = (type: string) => {
   switch (type) {
     case "reservation":
@@ -1374,19 +1383,29 @@ const getTypeStyles = (type: string) => {
     <Transition name="pop">
       <div
         v-if="isDropdownOpen"
-        class="absolute top-12 right-[-60px] md:right-0 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden origin-top-right"
+        class="fixed top-20 left-1/2 -translate-x-1/2 w-[95vw] max-w-sm md:absolute md:top-12 md:left-auto md:right-0 md:w-80 md:translate-x-0 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50"
       >
         <div
           class="px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 backdrop-blur"
         >
           <h3 class="font-bold text-sm text-slate-700">通知センター</h3>
-          <button
-            v-if="unreadCount > 0"
-            @click="markAllRead"
-            class="text-[10px] text-teal-600 font-bold hover:underline"
-          >
-            すべて既読
-          </button>
+
+          <div class="flex gap-2">
+            <button
+              v-if="permissionStatus === 'default'"
+              @click="enableNotifications"
+              class="text-[10px] bg-blue-100 text-blue-600 px-2 py-1 rounded font-bold hover:bg-blue-200 transition"
+            >
+              🔔 通知ON
+            </button>
+            <button
+              v-if="unreadCount > 0"
+              @click="markAllRead"
+              class="text-[10px] text-teal-600 font-bold hover:underline"
+            >
+              すべて既読
+            </button>
+          </div>
         </div>
 
         <div class="max-h-[350px] overflow-y-auto custom-scrollbar">
@@ -3118,37 +3137,41 @@ const goToLogin = () => {
         <div class="logo-wrapper">
           <img
             src="/logo.png?v=3"
-            width="50"
-            height="50"
+            width="60"
+            height="60"
             class="lp-logo fade-in-up"
           />
         </div>
 
-        <p class="fade-in-up subtitle">AI KNOWLEDGE BASE</p>
+        <p class="fade-in-up subtitle">ZUBORA AI ASSISTANT</p>
         <h1 class="fade-in-up delay-100">
-          あなたの記憶を、<br />AIが拡張する。
+          LINEに投げるだけ。<br />勝手にスケジュール管理。
         </h1>
         <p class="fade-in-up delay-200 description">
-          忘れても大丈夫。あなただけの「第2の脳」がここにあります。
+          カレンダー入力、タスク管理、メモの整理。<br />
+          面倒なことは全部、AIに丸投げしよう。
         </p>
 
         <button @click="goToLogin" class="btn-primary fade-in-up delay-300">
-          今すぐ始める
+          無料で使い始める
         </button>
 
         <div class="fade-in-up delay-500 mock-wrapper">
           <div class="phone">
             <div class="notch"></div>
             <div class="screen">
-              <div class="screen-header">My Brain</div>
+              <div class="line-header">My Brain (LINE)</div>
               <div class="chat-bubble chat-user">
-                先週の会議で決まったA社の予算っていくらだっけ？
+                明日の19時に美容室の予約入れて！
               </div>
               <div class="chat-bubble chat-ai">
-                先週木曜日のメモによると、A社の予算は「300万円（税抜）」で承認されています。<br /><br />関連資料：<br />📄
-                240115_議事録.pdf
+                了解です！<br />
+                📅 <strong>明日 19:00 美容室</strong><br />
+                Googleカレンダーに登録しました✅
               </div>
-              <div class="chat-bubble chat-user">ありがとう！助かった。</div>
+              <div class="calendar-widget">
+                <div class="cal-event">19:00 ✂️ 美容室</div>
+              </div>
             </div>
           </div>
         </div>
@@ -3157,29 +3180,23 @@ const goToLogin = () => {
       <section id="s2">
         <h2 class="fade-in-up">The Problem</h2>
         <h1 class="fade-in-up delay-100 section-title">
-          脳の容量、足りてますか？
+          その予定、<br />入力するの面倒じゃない？
         </h1>
 
         <div class="problem-grid fade-in-up delay-200">
           <div class="problem-card">
-            <span class="icon">🌫️</span>
-            <h3>思い出せない</h3>
+            <span class="icon">😫</span>
+            <h3>アプリを開くのがダルい</h3>
             <p>
-              「あの件、どうなったっけ？」<br />大事な情報を忘れてしまい、<br />信頼を失う恐怖。
+              カレンダーアプリを起動して、<br />日付を選んで、時間を入力して...<br />その数タップが面倒くさい。
             </p>
           </div>
           <div class="problem-card">
-            <span class="icon">🔍</span>
-            <h3>見つからない</h3>
+            <span class="icon">🗑️</span>
+            <h3>メモがゴミ屋敷</h3>
             <p>
-              LINE、Slack、メモ帳...<br />情報が散らばりすぎて、<br />検索に時間を浪費する毎日。
-            </p>
-          </div>
-          <div class="problem-card">
-            <span class="icon">🤯</span>
-            <h3>整理できない</h3>
-            <p>
-              情報はインプットするだけ。<br />整理する時間がなく、<br />知識として定着しない。
+              とりあえずスクショ、とりあえずメモ。<br />
+              でも見返さないし、<br />どこにあるか分からない。
             </p>
           </div>
         </div>
@@ -3190,76 +3207,79 @@ const goToLogin = () => {
 
         <h2 class="fade-in-up">Solution</h2>
         <h1 class="fade-in-up delay-100 section-title">
-          放り込むだけで、整理完了。
+          LINEなら、<br />3秒で終わります。
         </h1>
         <p class="fade-in-up delay-200 description">
-          My
-          Brainは、あらゆる情報を一元管理し、AIがあなたの思考をサポートします。
+          いつも使っているLINEで、友達に送る感覚で。<br />
+          裏側でAIが完璧に整理整頓します。
         </p>
 
         <div class="solution-row fade-in-up delay-300">
           <div class="feature-box">
-            <span class="icon">📝</span>
-            <span class="feature-title">メモ・画像</span>
-            <span class="feature-desc">何でも保存</span>
-          </div>
-          <div class="feature-box">
-            <span class="icon">🌐</span>
-            <span class="feature-title">Web保存</span>
-            <span class="feature-desc">URL貼るだけ</span>
+            <span class="icon">💬</span>
+            <span class="feature-title">LINE連携</span>
+            <span class="feature-desc">会話で操作</span>
           </div>
           <div class="feature-box highlight-box">
-            <span class="icon">🤖</span>
-            <span class="feature-title highlight-text">AI検索</span>
-            <span class="feature-desc">会話で思い出す</span>
+            <span class="icon">📅</span>
+            <span class="feature-title highlight-text">自動登録</span>
+            <span class="feature-desc">カレンダーへ</span>
+          </div>
+          <div class="feature-box">
+            <span class="icon">🧠</span>
+            <span class="feature-title">完全記憶</span>
+            <span class="feature-desc">忘れても大丈夫</span>
           </div>
         </div>
       </section>
 
       <section id="s4">
-        <h2 class="fade-in-up">AI Core</h2>
+        <h2 class="fade-in-up">Magic</h2>
         <h1 class="fade-in-up delay-100 section-title">
-          ただの検索じゃない。<br />文脈を理解する「対話」です。
+          「直前カンペ」が<br />あなたを救う。
         </h1>
 
         <div class="ai-features fade-in-up delay-200">
-          <div class="ai-card">
-            <div class="ai-icon">🧠</div>
-            <h3>曖昧な記憶でOK</h3>
-            <p>
-              「先月の飲み会で話題になった映画なんだっけ？」のような、キーワードを覚えていなくてもAIが推測して答えます。
+          <div class="ai-card" style="width: 100%; max-width: 400px">
+            <div class="ai-icon">🔔</div>
+            <h3>予定の直前に、AIからLINE通知</h3>
+            <p style="margin-top: 10px; font-weight: bold; color: #fff">
+              「まもなく 14:00 佐藤さんと打ち合わせ」
             </p>
-          </div>
-          <div class="ai-card">
-            <div class="ai-icon">📊</div>
-            <h3>構造化・図解</h3>
-            <p>
-              複雑な情報は、AIが自動でマインドマップや表に変換。視覚的に理解を助けます。
+            <div
+              style="
+                background: rgba(255, 255, 255, 0.1);
+                padding: 10px;
+                border-radius: 8px;
+                margin-top: 10px;
+                font-size: 0.8rem;
+              "
+            >
+              🧠 <strong>AIカンペ:</strong><br />
+              先週のメモによると、佐藤さんは「新しいWebサイトのデザイン案」を楽しみにしています。前回の予算は50万円で合意済みです。
+            </div>
+            <p style="margin-top: 10px; font-size: 0.8rem">
+              ↑ 過去のメモから必要な情報をAIが勝手に探して教えてくれます。
             </p>
           </div>
         </div>
       </section>
 
       <section id="s5">
-        <p class="fade-in-up primary-text">FREE ACCESS</p>
+        <p class="fade-in-up primary-text">FREE BETA</p>
         <h1 class="fade-in-up delay-100 section-title">
-          あなたの脳を、アップデートしよう。
+          もう、覚えるのをやめよう。
         </h1>
 
         <div class="fade-in-up delay-200 badge-wrapper">
-          <div class="pulse-badge">🚀 ベータ版につき完全無料</div>
+          <div class="pulse-badge">🚀 開発中につき完全無料</div>
         </div>
 
         <button @click="goToLogin" class="btn-primary fade-in-up delay-300">
-          My Brain を開く
+          My Brain をはじめる
         </button>
 
         <div class="fade-in-up delay-500 footer-container">
-          <div class="legal-links">
-            <router-link to="/legal" class="legal-link"
-              >特定商取引法に基づく表記</router-link
-            >
-          </div>
           <p class="footer-text">Designed by Takumi Yoshioka</p>
         </div>
       </section>
@@ -3268,14 +3288,14 @@ const goToLogin = () => {
 </template>
 
 <style scoped>
-/* スコープ付きCSS */
+/* 基本設定は維持しつつ、LINE風デザインなどを追加 */
 .lp-container {
-  --primary: #3b82f6;
-  --primary-light: #60a5fa;
+  --primary: #06c755; /* LINE Green */
+  --primary-light: #4ade80;
   --dark: #0f172a;
   --darker: #020617;
   --light: #f8fafc;
-  --accent: #8b5cf6;
+  --accent: #3b82f6;
   --text-gray: #94a3b8;
 
   font-family: "Poppins", "Noto Sans JP", sans-serif;
@@ -3289,6 +3309,7 @@ const goToLogin = () => {
   height: 100%;
 }
 
+/* ... (共通スタイルは既存のまま) ... */
 .slides-container {
   width: 100vw;
   height: 100vh;
@@ -3300,17 +3321,44 @@ const goToLogin = () => {
 section {
   width: 100vw;
   height: 100vh;
-  min-height: 550px; /* 最小高さをさらに縮小 */
+  min-height: 600px;
   scroll-snap-align: start;
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 0.5rem; /* パディングを極限まで減らす */
+  padding: 1rem;
   overflow: hidden;
 }
 
+/* LINE風画面の調整 */
+.line-header {
+  background: #202b3c;
+  color: white;
+  padding: 10px;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: bold;
+  border-bottom: 1px solid #333;
+}
+
+.calendar-widget {
+  margin-top: 10px;
+  background: white;
+  color: #333;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+.cal-event {
+  border-left: 3px solid #06c755;
+  padding-left: 5px;
+}
+
+/* 他のCSSは既存のものを引き継ぎつつ、色味を調整 */
 .bg-blob {
   position: absolute;
   border-radius: 50%;
@@ -3331,20 +3379,11 @@ section {
   background: var(--accent);
 }
 
-.logo-wrapper {
-  margin-bottom: 5px; /* マージン極小 */
-}
-.lp-logo {
-  border-radius: 12px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-}
-
 h1 {
-  /* フォントサイズを縮小して1行に収まりやすくする */
-  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-size: clamp(2rem, 5vw, 3.5rem);
   font-weight: 900;
-  line-height: 1.1;
-  margin-bottom: 0.5rem;
+  line-height: 1.2;
+  margin-bottom: 1rem;
   background: linear-gradient(135deg, #fff 0%, var(--primary-light) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -3353,77 +3392,160 @@ h1 {
 }
 
 h2 {
-  font-size: clamp(1rem, 2.5vw, 1.5rem);
+  font-size: 1rem;
   color: var(--primary);
   text-transform: uppercase;
   letter-spacing: 0.2em;
   margin-bottom: 1rem;
-  text-align: center;
   z-index: 1;
-}
-
-h3 {
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin-bottom: 0.3rem;
-  color: white;
 }
 
 p {
-  font-size: 0.9rem;
+  font-size: 1rem;
   color: var(--text-gray);
-  max-width: 800px;
+  max-width: 600px;
   text-align: center;
-  line-height: 1.5;
+  line-height: 1.6;
   z-index: 1;
 }
 
-.subtitle {
-  letter-spacing: 0.15em;
-  color: var(--primary-light);
+/* ボタン */
+.btn-primary {
+  background: var(--primary);
+  color: white;
   font-weight: bold;
-  margin-bottom: 0.5rem;
-  font-size: 0.7rem;
+  padding: 1rem 3rem;
+  border-radius: 50px;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 0.3s;
+  box-shadow: 0 0 20px rgba(6, 199, 85, 0.4);
+  margin-top: 30px;
+  z-index: 10;
 }
-.description {
-  font-size: 0.9rem;
-  color: var(--text-gray);
-}
-.section-title {
-  font-size: clamp(1.8rem, 4vw, 2.5rem);
-  margin-bottom: 1.5rem;
-}
-.primary-text {
-  color: var(--primary);
-  font-weight: bold;
+.btn-primary:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 30px rgba(6, 199, 85, 0.6);
 }
 
-/* フッター調整 */
-.footer-container {
-  margin-top: 30px;
-  text-align: center;
+/* モックアップ */
+.mock-wrapper {
+  margin-top: 40px;
+  position: relative;
+}
+.phone {
+  width: 260px;
+  height: 520px;
+  background: #76879d; /* LINE talk bg color-ish */
+  border-radius: 40px;
+  border: 8px solid #334155;
+  position: relative;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  z-index: 2;
 }
-.legal-links {
-  margin-bottom: 5px;
+.notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 25px;
+  background: #334155;
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 16px;
+  z-index: 10;
 }
-.legal-link {
-  color: var(--text-gray);
-  font-size: 0.7rem;
-  text-decoration: underline;
-  transition: color 0.3s;
-}
-.legal-link:hover {
+.screen {
+  flex: 1;
+  background: #7289da; /* LINE background-ish */
+  background: linear-gradient(180deg, #1e252f 0%, #171d25 100%);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
   color: white;
-}
-.footer-text {
-  font-size: 0.6rem;
-  opacity: 0.4;
+  padding: 20px;
+  padding-top: 40px;
 }
 
-/* アニメーション */
+.chat-bubble {
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 0.8rem;
+  margin-bottom: 10px;
+  max-width: 85%;
+  line-height: 1.5;
+  position: relative;
+}
+.chat-user {
+  background-color: #06c755;
+  color: white;
+  align-self: flex-end;
+  border-top-right-radius: 4px;
+}
+.chat-ai {
+  background-color: #2c3e50;
+  border: 1px solid #334155;
+  color: white;
+  align-self: flex-start;
+  border-top-left-radius: 4px;
+}
+
+/* Feature Grid */
+.problem-grid,
+.solution-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 40px;
+  z-index: 2;
+}
+.problem-card,
+.feature-box,
+.ai-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 20px;
+  border-radius: 20px;
+  text-align: center;
+  width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.ai-card {
+  width: auto;
+  max-width: 90%;
+}
+
+.icon,
+.ai-icon {
+  font-size: 2.5rem;
+  margin-bottom: 10px;
+}
+.feature-title {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+.feature-desc {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+.highlight-box {
+  border-color: var(--primary);
+  box-shadow: 0 0 15px rgba(6, 199, 85, 0.2);
+}
+.highlight-text {
+  color: var(--primary-light);
+}
+
 .fade-in-up {
   opacity: 0;
   animation: fadeInUp 0.8s ease-out forwards;
@@ -3452,206 +3574,13 @@ p {
   }
 }
 
-/* スマホモック */
-.mock-wrapper {
-  margin-top: 20px;
-  position: relative;
-}
-.phone {
-  /* スマホサイズを大幅に縮小 */
-  width: 180px;
-  height: 380px;
-  background: #0f172a;
-  border-radius: 24px;
-  border: 5px solid #334155;
-  position: relative;
-  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  z-index: 2;
-  transform: rotate(-3deg) translateY(0px); /* 傾きと位置調整 */
-}
-.notch {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 80px;
-  height: 18px;
-  background: #334155;
-  border-bottom-left-radius: 10px;
-  border-bottom-right-radius: 10px;
-  z-index: 10;
-}
-.screen {
-  flex: 1;
-  background: #020617;
-  overflow: hidden;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  color: white;
-  padding: 10px;
-}
-.screen-header {
-  margin-top: 25px;
-  font-weight: 900;
-  font-size: 0.9rem;
-  text-align: center;
-  margin-bottom: 10px;
-}
-
-/* チャット */
-.chat-bubble {
-  padding: 8px 10px;
-  border-radius: 10px;
-  font-size: 0.6rem;
-  margin-bottom: 6px;
-  max-width: 90%;
-  line-height: 1.4;
-  text-align: left;
-}
-.chat-user {
-  background-color: #1e293b;
-  align-self: flex-end;
-  border-top-right-radius: 4px;
-}
-.chat-ai {
-  background-color: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #bfdbfe;
-  align-self: flex-start;
-  border-top-left-radius: 4px;
-}
-
-/* カード類 */
-.problem-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-  width: 100%;
-  max-width: 800px;
-  margin-top: 20px;
-  z-index: 2;
-}
-.problem-card {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 15px;
-  border-radius: 16px;
-  text-align: center;
-  transition: transform 0.3s;
-}
-.problem-card:hover {
-  transform: translateY(-5px);
-  background: rgba(255, 255, 255, 0.05);
-}
-.icon {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
-  display: block;
-}
-
-.solution-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 15px;
-  margin-top: 20px;
-  z-index: 2;
-}
-.feature-box {
-  width: 110px;
-  height: 110px;
-  background: linear-gradient(145deg, #1e293b, #0f172a);
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 5px 10px -3px rgba(0, 0, 0, 0.5);
-}
-.feature-title {
-  font-weight: bold;
-  margin-top: 6px;
-  font-size: 0.8rem;
-}
-.feature-desc {
-  font-size: 0.55rem;
-  opacity: 0.7;
-  margin-top: 3px;
-}
-.highlight-box {
-  border-color: var(--primary);
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
-}
-.highlight-text {
-  color: var(--primary-light);
-}
-
-.ai-features {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: center;
-  margin-top: 20px;
-}
-.ai-card {
-  width: 240px;
-  background: #1e293b;
-  padding: 15px;
-  border-radius: 16px;
-  border: 1px solid #334155;
-}
-.ai-icon {
-  font-size: 1.5rem;
-  margin-bottom: 6px;
-}
-.ai-card h3 {
-  font-size: 1rem;
-  margin-bottom: 0.3rem;
-}
-.ai-card p {
-  font-size: 0.75rem;
-  text-align: left;
-  margin-bottom: 0;
-}
-
-.btn-primary {
-  background: var(--primary);
-  color: white;
-  font-weight: bold;
-  padding: 0.6rem 2rem;
-  border-radius: 50px;
-  text-decoration: none;
-  font-size: 1rem;
-  transition: all 0.3s;
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
-  margin-top: 15px;
-  display: inline-block;
-  border: none;
-  cursor: pointer;
-}
-.btn-primary:hover {
-  transform: scale(1.05);
-  box-shadow: 0 0 25px rgba(59, 130, 246, 0.8);
-}
-
-.badge-wrapper {
-  margin: 15px 0;
-}
 .pulse-badge {
   background: var(--accent);
   color: white;
-  padding: 5px 12px;
+  padding: 8px 20px;
   border-radius: 50px;
   font-weight: bold;
-  margin-bottom: 5px;
-  display: inline-block;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   animation: pulse 2s infinite;
 }
 @keyframes pulse {
@@ -3665,13 +3594,12 @@ p {
     transform: scale(1);
   }
 }
-
 .nav-hint {
   position: fixed;
-  bottom: 15px;
-  right: 15px;
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.3);
+  bottom: 20px;
+  right: 20px;
+  font-size: 0.8rem;
+  opacity: 0.5;
   z-index: 100;
 }
 </style>
@@ -3717,50 +3645,35 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // 本人確認関数
+    // ヘルパー関数: 本人かどうか
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }
 
-    // テキスト検証関数
-    function isValidText() {
-      return request.resource.data.text is string
-             && request.resource.data.text.size() > 0
-             && request.resource.data.text.size() < 20000;
-    }
-
-    match /users/{userId} {
+    // ★ここが変更点: ユーザー配下のデータ(system含む)をすべて無条件で許可
+    match /users/{userId}/{document=**} {
       allow read, write: if isOwner(userId);
-      match /checkout_sessions/{id} {
-        allow read, write: if isOwner(userId);
-      }
-      match /system/{docId} {
-        allow read: if isOwner(userId);
-      }
     }
 
+    // その他のデータもシンプルに許可
     match /memories/{memoryId} {
-      allow read, delete: if isOwner(resource.data.userId);
-      allow create: if isOwner(request.resource.data.userId) && isValidText();
-      allow update: if isOwner(resource.data.userId) && isValidText();
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
     }
 
     match /chat_logs/{logId} {
-      allow read, delete: if isOwner(resource.data.userId);
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isOwner(resource.data.userId);
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
     }
 
-    // ★修正: ToDoリストへの読み書き権限を追加
     match /todos/{todoId} {
-      allow read, delete: if isOwner(resource.data.userId);
-      allow create, update: if isOwner(request.resource.data.userId);
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
     }
 
-    // ★修正: 日刊レポートへの読み書き権限を追加
     match /daily_reports/{reportId} {
-      allow read, delete: if isOwner(resource.data.userId);
-      allow create, update: if isOwner(request.resource.data.userId);
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
     }
   }
 }
@@ -4565,9 +4478,10 @@ export function useHomeView() {
 <script setup lang="ts">
 import { useAppHeader } from "./useAppHeader";
 import { useMyBrain } from "@/composables/useMyBrain";
+import NotificationBell from "@/components/NotificationBell/NotificationBell.vue"; // ★追加
 
 const { logout } = useAppHeader();
-const { currentUser, startLineAuth, unlinkLine } = useMyBrain(); // ★unlinkLineを追加
+const { currentUser, startLineAuth, unlinkLine } = useMyBrain();
 </script>
 
 <template>
@@ -4584,6 +4498,8 @@ const { currentUser, startLineAuth, unlinkLine } = useMyBrain(); // ★unlinkLin
     </div>
 
     <div class="flex items-center gap-2">
+      <NotificationBell />
+
       <button
         v-if="currentUser && !currentUser.isLineLinked"
         @click="startLineAuth"
@@ -4619,7 +4535,7 @@ const { currentUser, startLineAuth, unlinkLine } = useMyBrain(); // ★unlinkLin
 <script setup lang="ts">
 import { ref } from "vue";
 import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
+import { getFirestore, doc, setDoc } from "firebase/firestore";
 import { useRouter } from "vue-router";
 
 const router = useRouter();
@@ -4635,27 +4551,48 @@ const handleGoogleLogin = async () => {
 
     // ★重要: カレンダーへの読み書き権限
     provider.addScope("https://www.googleapis.com/auth/calendar.events");
-    provider.addScope("https://www.googleapis.com/auth/calendar.readonly"); // 読み取り用
+    provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
 
-    // ★重要: リフレッシュトークンを取得するための設定
+    // ★修正: リフレッシュトークンを強制的に取得するための最強設定
     provider.setCustomParameters({
-      prompt: "consent", // 毎回承認画面を出す（これがないとリフレッシュトークンが来ない場合がある）
-      access_type: "offline", // バックエンドアクセスのために必須
+      prompt: "consent",
+      access_type: "offline",
+      include_granted_scopes: "true", // ★これを追加！
     });
 
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
 
-    // ★ここがハック: Firebase SDKの隠しプロパティからOAuthのリフレッシュトークンを取得
-    // ※通常の credential.accessToken は1時間で切れるため、バックグラウンド処理には使えない
+    // フロントエンド用トークン保存
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    const tokenResponse = (result as any)._tokenResponse; // 型定義にはないが実在する
+    const accessToken = credential?.accessToken;
+    if (accessToken) {
+      localStorage.setItem("google_calendar_token", accessToken);
+    }
+
+    // ★診断ロジック
+    const tokenResponse = (result as any)._tokenResponse;
     const refreshToken = tokenResponse?.oauthRefreshToken;
 
-    // ユーザー基本情報保存
-    const userRef = doc(db, "users", user.uid);
+    if (!refreshToken) {
+      // 警告は出すが、今回はダミーモードがあるので進める
+      console.warn("Googleから鍵が渡されませんでした。");
+    } else {
+      // 鍵保存
+      try {
+        await setDoc(doc(db, "users", user.uid, "system", "tokens"), {
+          refreshToken: refreshToken,
+          updatedAt: new Date(),
+        });
+        console.log("Offline token saved successfully.");
+      } catch (saveError: any) {
+        console.error("保存エラー:", saveError);
+      }
+    }
+
+    // ユーザー情報保存
     await setDoc(
-      userRef,
+      doc(db, "users", user.uid),
       {
         email: user.email,
         displayName: user.displayName,
@@ -4664,15 +4601,6 @@ const handleGoogleLogin = async () => {
       },
       { merge: true },
     );
-
-    // ★重要: リフレッシュトークンを保存 (バックエンドがカレンダーを見るため)
-    if (refreshToken) {
-      await setDoc(doc(db, "users", user.uid, "system", "tokens"), {
-        refreshToken: refreshToken,
-        updatedAt: new Date(),
-      });
-      console.log("Offline token saved.");
-    }
 
     router.push("/app");
   } catch (e: any) {
@@ -4791,7 +4719,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.scrapeUrl = exports.checkUpcomingMeetings = exports.sendMorningBriefing = exports.unlinkLineAccount = exports.linkLineAccount = exports.lineWebhook = void 0;
+exports.forceTriggerNotification = exports.scrapeUrl = exports.checkUpcomingMeetings = exports.sendMorningBriefing = exports.unlinkLineAccount = exports.linkLineAccount = exports.lineWebhook = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const v2_1 = require("firebase-functions/v2");
@@ -4803,11 +4731,11 @@ if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 const db = admin.firestore();
-// メモリ設定
+// タイムアウト300秒
 (0, v2_1.setGlobalOptions)({
     region: "asia-northeast1",
     memory: "1GiB",
-    timeoutSeconds: 60,
+    timeoutSeconds: 300,
 });
 // Secrets
 const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN");
@@ -4817,6 +4745,7 @@ const googleClientId = (0, params_1.defineSecret)("GOOGLE_CLIENT_ID");
 const googleClientSecret = (0, params_1.defineSecret)("GOOGLE_CLIENT_SECRET");
 const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID");
 const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET");
+// 予備のモデルリスト
 const CANDIDATE_MODELS = [
     "gemini-1.5-flash",
     "gemini-1.5-flash-001",
@@ -4824,16 +4753,29 @@ const CANDIDATE_MODELS = [
     "gemini-pro",
 ];
 // ---------------------------------------------------------
-// Helper: JSON抽出（最強版）
+// Helper: テキストクリーニング
+// ---------------------------------------------------------
+function cleanAiReply(text) {
+    if (!text)
+        return "";
+    return text
+        .replace(/📝 メモを更新しました/g, "")
+        .replace(/📝 メモに追記しました/g, "")
+        .replace(/📝 メモしました/g, "")
+        .replace(/✅ .*しました/g, "")
+        .replace(/⚠️ .*失敗しました/g, "")
+        .replace(/(\n|^)[-・*]\s+.+/g, "")
+        .trim();
+}
+// ---------------------------------------------------------
+// Helper: JSON抽出
 // ---------------------------------------------------------
 function extractJson(text) {
     try {
-        // 1. そのままパース
         return JSON.parse(text);
     }
     catch (e) {
         try {
-            // 2. Markdown記法や余計な文字を削除
             const cleaned = text
                 .replace(/```json/g, "")
                 .replace(/```/g, "")
@@ -4842,18 +4784,13 @@ function extractJson(text) {
         }
         catch (e2) {
             try {
-                // 3. 正規表現で { ... } の部分だけを無理やり抽出
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
                 if (jsonMatch) {
                     return JSON.parse(jsonMatch[0]);
                 }
-                // JSONが見つからない場合はエラーを投げるのではなく、チャットとして扱うためのオブジェクトを返す
-                console.warn("No JSON found in response, falling back to chat.");
                 return { action: "CHAT", reply: text };
             }
             catch (e3) {
-                console.error("JSON Parse Error. Raw text:", text);
-                // エラー時はデフォルト動作（チャット）に倒す
                 return { action: "CHAT", reply: text };
             }
         }
@@ -4865,7 +4802,21 @@ function extractJson(text) {
 function cleanId(id) {
     if (!id || typeof id !== "string")
         return "";
-    return id.replace(/<<<|>>>|ID:/g, "").trim();
+    return id.replace(/<<<|>>>|ID:/gi, "").trim();
+}
+// ★追加: 日時フォーマッター (バックエンド用)
+function formatIsoDate(dateStr) {
+    if (!dateStr)
+        return "";
+    if (dateStr.includes("+") || dateStr.endsWith("Z"))
+        return dateStr;
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
+        return `${dateStr}:00+09:00`;
+    }
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)) {
+        return `${dateStr}+09:00`;
+    }
+    return dateStr;
 }
 // ---------------------------------------------------------
 // Helper: AI Model Management
@@ -4890,50 +4841,57 @@ async function resolveGeminiModel(apiKey) {
         target = generationModels.find((m) => m.name.includes("gemini-1.5-pro"));
     if (!target && generationModels.length > 0)
         target = generationModels[0];
-    if (target)
+    if (target) {
         return target.name.replace("models/", "");
+    }
     return "gemini-1.5-flash";
 }
-async function callGeminiJson(apiKey, prompt) {
+// ---------------------------------------------------------
+// Helper: AI Call
+// ---------------------------------------------------------
+async function generateContentWithRetry(apiKey, prompt) {
     var _a, _b, _c, _d, _e, _f;
-    const dynamicModel = await resolveGeminiModel(apiKey);
-    const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(Boolean);
-    for (const modelName of modelsToTry) {
-        try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-            // responseMimeType: "application/json" を削除して互換性を向上
-            const response = await axios_1.default.post(url, {
-                contents: [{ parts: [{ text: prompt }] }],
-            }, { headers: { "Content-Type": "application/json" } });
-            const text = (_f = (_e = (_d = (_c = (_b = (_a = response.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text;
-            if (text)
-                return extractJson(text);
-        }
-        catch (e) {
-            console.warn(`Model ${modelName} failed. Retrying...`);
-        }
-    }
-    // 全モデル失敗時はエラーメッセージを返す
-    return {
-        action: "CHAT",
-        reply: "申し訳ありません。AIサーバーが混雑しており応答できませんでした。",
-    };
-}
-async function callGeminiText(apiKey, prompt) {
-    var _a, _b, _c, _d, _e, _f;
-    const dynamicModel = await resolveGeminiModel(apiKey);
-    const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(Boolean);
+    const bestModel = await resolveGeminiModel(apiKey);
+    const modelsToTry = [...new Set([bestModel, ...CANDIDATE_MODELS])].filter(Boolean);
     for (const modelName of modelsToTry) {
         try {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
             const response = await axios_1.default.post(url, { contents: [{ parts: [{ text: prompt }] }] }, { headers: { "Content-Type": "application/json" } });
-            return ((_f = (_e = (_d = (_c = (_b = (_a = response.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text) || "";
+            const text = (_f = (_e = (_d = (_c = (_b = (_a = response.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text;
+            if (text)
+                return text;
         }
         catch (e) {
-            console.warn(`Model ${modelName} failed. Retrying...`);
+            console.warn(`Model ${modelName} failed:`, e.message);
         }
     }
-    return "AI応答エラー";
+    throw new Error("All AI models failed via Axios.");
+}
+async function callGeminiJson(apiKey, prompt) {
+    if (!apiKey)
+        return { action: "CHAT", reply: "⚠️ APIキー未設定" };
+    try {
+        const text = await generateContentWithRetry(apiKey, prompt);
+        return extractJson(text);
+    }
+    catch (e) {
+        console.error("Gemini JSON Error:", e.message);
+        return { action: "CHAT", reply: `⚠️ AI通信エラー: ${e.message}` };
+    }
+}
+async function callGeminiText(apiKey, prompt) {
+    if (!apiKey)
+        return "";
+    try {
+        const text = await generateContentWithRetry(apiKey, prompt);
+        return text
+            .replace(/^```.*\n/gm, "")
+            .replace(/```/g, "")
+            .trim();
+    }
+    catch (e) {
+        return "";
+    }
 }
 // ---------------------------------------------------------
 // Helper: Google Token Refresh
@@ -4953,7 +4911,7 @@ async function refreshAccessToken(refreshToken) {
     }
 }
 // ---------------------------------------------------------
-// Helper: Calendar Operations
+// Helper: Calendar & Todo
 // ---------------------------------------------------------
 async function getCalendarEvents(uid) {
     var _a;
@@ -4987,7 +4945,7 @@ async function getCalendarEvents(uid) {
         });
         const events = calendarRes.data.items || [];
         if (events.length === 0)
-            return "直近の予定はありません。";
+            return "直近の予定なし";
         return events
             .map((ev) => {
             const start = ev.start.dateTime
@@ -5004,7 +4962,7 @@ async function getCalendarEvents(uid) {
             .join("\n");
     }
     catch (e) {
-        return "（取得エラー）";
+        return "（カレンダー取得失敗）";
     }
 }
 async function addCalendarEvent(uid, eventData) {
@@ -5022,10 +4980,12 @@ async function addCalendarEvent(uid, eventData) {
         const accessToken = await refreshAccessToken(refreshToken);
         if (!accessToken)
             return false;
+        const finalStart = formatIsoDate(eventData.start);
+        const finalEnd = formatIsoDate(eventData.end);
         await axios_1.default.post("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
             summary: eventData.title,
-            start: { dateTime: eventData.start },
-            end: { dateTime: eventData.end },
+            start: { dateTime: finalStart },
+            end: { dateTime: finalEnd },
         }, { headers: { Authorization: `Bearer ${accessToken}` } });
         return true;
     }
@@ -5062,9 +5022,6 @@ async function deleteCalendarEvent(uid, query) {
         return "削除に失敗しました。";
     }
 }
-// ---------------------------------------------------------
-// Helper: Todo Operations
-// ---------------------------------------------------------
 async function deleteTodoByTitle(uid, title) {
     const todosRef = db.collection("todos");
     const snap = await todosRef
@@ -5073,29 +5030,20 @@ async function deleteTodoByTitle(uid, title) {
         .orderBy("createdAt", "desc")
         .limit(30)
         .get();
-    let targetDoc = null;
-    for (const doc of snap.docs) {
-        if (doc.data().title.includes(title)) {
-            targetDoc = doc;
-            break;
-        }
-    }
+    const targetDoc = snap.docs.find((doc) => doc.data().title.includes(title));
     if (targetDoc) {
         await targetDoc.ref.delete();
         return `タスク「${targetDoc.data().title}」を削除しました。`;
     }
     return "タスクが見つかりませんでした。";
 }
-// ---------------------------------------------------------
-// Helper: Memory Operations
-// ---------------------------------------------------------
 async function getRecentMemories(uid, queryText) {
     try {
         const snapshot = await db
             .collection("memories")
             .where("userId", "==", uid)
             .orderBy("createdAt", "desc")
-            .limit(100)
+            .limit(50)
             .get();
         if (snapshot.empty)
             return "（履歴なし）";
@@ -5108,17 +5056,29 @@ async function getRecentMemories(uid, queryText) {
         const recents = docs.slice(0, 5);
         const candidates = [...recents, ...matches];
         const uniqueCandidates = Array.from(new Map(candidates.map((c) => [c.id, c])).values());
-        if (uniqueCandidates.length === 0)
-            return "（関連なし）";
         return uniqueCandidates
-            .map((data) => {
-            // AIがIDを認識しやすいように <<<ID>>> で囲む
-            return `<<<${data.id}>>> ${data.text.replace(/\n/g, " ")}`;
-        })
+            .map((data) => `<<<${data.id}>>> ${data.text.replace(/\n/g, " ")}`)
             .join("\n");
     }
     catch (e) {
-        return "（取得エラー）";
+        return "（メモ取得失敗）";
+    }
+}
+async function getChatHistory(uid) {
+    try {
+        const snap = await db
+            .collection("chat_logs")
+            .where("userId", "==", uid)
+            .orderBy("createdAt", "desc")
+            .limit(5)
+            .get();
+        return snap.docs
+            .reverse()
+            .map((d) => `User: ${d.data().question}\nAI: ${d.data().answer}`)
+            .join("\n---\n");
+    }
+    catch (_a) {
+        return "";
     }
 }
 // =========================================================
@@ -5143,7 +5103,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
     const client = new line.Client({ channelAccessToken: token });
     const events = req.body.events;
     await Promise.all(events.map(async (event) => {
-        var _a, _b, _c, _d, _e, _f, _g;
+        var _a, _b, _c, _d, _e;
         if (event.type !== "message" || event.message.type !== "text")
             return;
         const eventId = event.webhookEventId;
@@ -5171,7 +5131,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
             return;
         }
         const uid = usersSnap.docs[0].id;
-        // 1. 強制モード
+        const userRef = db.collection("users").doc(uid);
         const commands = {
             "【モード】タスク": "TASK",
             "【モード】メモ": "MEMORY",
@@ -5180,97 +5140,134 @@ exports.lineWebhook = (0, https_1.onRequest)({
             "【モード】リセット": "AUTO",
         };
         if (commands[message]) {
-            await db
-                .collection("users")
-                .doc(uid)
-                .update({ lineMode: commands[message] });
+            await userRef.update({ lineMode: commands[message] });
             await client.replyMessage(event.replyToken, {
                 type: "text",
                 text: `✅ ${commands[message]}モードになりました。`,
             });
             return;
         }
-        // 2. コンテキスト取得
-        const memoryContext = await getRecentMemories(uid, message);
+        const [userDoc, contextSnap] = await Promise.all([
+            userRef.get(),
+            userRef.collection("system").doc("user_context").get(),
+        ]);
+        const currentMode = ((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.lineMode) || "AUTO";
+        const lastMemoryId = contextSnap.exists
+            ? (_b = contextSnap.data()) === null || _b === void 0 ? void 0 : _b.lastMemoryId
+            : null;
+        let activeMemoryContent = "";
+        if (lastMemoryId) {
+            try {
+                const memSnap = await db
+                    .collection("memories")
+                    .doc(lastMemoryId)
+                    .get();
+                if (memSnap.exists) {
+                    activeMemoryContent = `【直前に操作・参照していたメモ】\nID: <<<${lastMemoryId}>>>\n内容: ${(_c = memSnap.data()) === null || _c === void 0 ? void 0 : _c.text}\n`;
+                }
+            }
+            catch (e) {
+                console.error("Context fetch failed:", e);
+            }
+        }
+        const [memoryContext, chatHistory, calendarEvents] = await Promise.all([
+            getRecentMemories(uid, message),
+            getChatHistory(uid),
+            getCalendarEvents(uid),
+        ]);
         const nowStr = new Date().toLocaleString("ja-JP", {
             timeZone: "Asia/Tokyo",
         });
-        // 3. 司令塔プロンプト
         const routerPrompt = `
-        現在日時: ${nowStr}
-        ユーザー入力: "${message}"
-        【参照可能なメモ】(IDは<<< >>>で囲われています)
+        あなたはユーザーの「第2の脳」です。現在日時: ${nowStr}
+        【現在のモード】: ${currentMode}
+
+        ${calendarEvents ? `\n【直近の予定】\n${calendarEvents}` : ""}
+        
+        【直近の会話履歴】
+        ${chatHistory}
+
+        ${activeMemoryContent ? activeMemoryContent : "※直前のメモ参照なし"}
+
+        【その他参照可能なメモ】(IDは<<< >>>で囲われています)
         ${memoryContext}
+
+        【ユーザー入力】
+        "${message}"
 
         指示:
         ユーザーの意図を汲み取り、以下のJSON形式のみを出力してください。
         
-        ★アクション判断基準:
-        1. 【メモ編集・部分削除】 "〇〇を消して" "リストから〇〇を削除" "〇〇を変更して"
-           -> "MEMORY_EDIT"
-           - targetId: 【参照可能なメモ】の中から対象ID (<<< >>>の中身) を特定
-           - instruction: 具体的な編集指示（例：「『牛乳』の行を削除」「『13時』を『14時』に変更」）
+        ★モード優先ルール:
+        - **モードが「TASK」の場合**: どんな内容でも「追加」と言われたら、絶対に MEMORY_APPEND ではなく **TASK_ADD** を選択してください。
         
-        2. 【メモ追記】 "これ追加して" "〇〇も買っておいて"
-           -> "MEMORY_APPEND"
-           - targetId: 対象ID
-           - content: 追加する内容
+        ★名詞抽出ルール:
+        - "content" には、「〜を追加して」「〜を買ってきて」などの動詞や助詞を一切含めず、対象の**名詞のみ**を入れてください。（例: "牛乳を追加" -> content: "牛乳"）
 
-        3. 【タスク削除】 "タスク消して" "タスク完了"
-           -> "TASK_DELETE"
+        ★日時形式ルール (最重要):
+        - CALENDAR_ADD の場合、"start" と "end" は必ず **ISO 8601形式 (YYYY-MM-DDTHH:mm:ss+09:00)** で出力してください。
+        - **+09:00 (日本時間)** のタイムゾーン指定を忘れないでください。
 
-        4. 【予定削除】 "予定消して" "キャンセル"
-           -> "CALENDAR_DELETE"
+        ★アクション判断基準:
+        1. 【参照・検索】 "買い物リスト" "リスト見せて"
+           -> "CHAT" (replyに中身を記述)
 
-        5. 【予定追加】 日時指定がある場合
-           -> "CALENDAR_ADD"
+        2. 【メモ編集】 "〇〇を消して" "リストから削除"
+           -> "MEMORY_EDIT"
 
-        6. 【メモ保存】 上記以外で、単なる記録の場合
-           -> "MEMORY_ADD"
+        3. 【メモ追記】 "これ追加して" "〇〇も買っておいて"
+           -> **モードがTASKなら TASK_ADD**、それ以外は MEMORY_APPEND
 
-        7. 【会話】 挨拶や質問
-           -> "CHAT"
+        4. 【タスク削除】 "タスク消して" -> "TASK_DELETE"
+        5. 【予定削除】 "予定消して" -> "CALENDAR_DELETE"
+        6. 【予定追加】 日時指定あり -> "CALENDAR_ADD"
+        7. 【メモ保存】 上記以外 -> "MEMORY_ADD"
+        8. 【会話】 挨拶・質問 -> "CHAT"
 
         出力JSON形式:
         {
           "action": "ACTION_NAME",
-          "targetId": "ID文字列 (<<<と>>>は除く)",
-          "instruction": "編集指示の内容",
-          "content": "追記・保存する内容",
-          "reply": "ユーザーへの短い返信"
+          "targetId": "ID文字列",
+          "instruction": "編集指示",
+          "content": "内容",
+          "reply": "ユーザーへの返信"
         }
       `;
-        // 4. アクション決定
         const aiDecision = await callGeminiJson(apiKey, routerPrompt);
         const action = aiDecision.action || "CHAT";
-        const rawTargetId = aiDecision.targetId || ((_a = aiDecision.data) === null || _a === void 0 ? void 0 : _a.targetId);
-        const targetId = cleanId(rawTargetId);
-        const instruction = aiDecision.instruction || ((_b = aiDecision.data) === null || _b === void 0 ? void 0 : _b.instruction);
-        const content = aiDecision.content || ((_c = aiDecision.data) === null || _c === void 0 ? void 0 : _c.content) || message;
-        let replyText = aiDecision.reply || ((_d = aiDecision.data) === null || _d === void 0 ? void 0 : _d.reply) || "処理しました";
-        // 5. アクション実行
+        const data = aiDecision.data || aiDecision;
+        const rawTargetId = data.targetId;
+        const targetId = cleanId(rawTargetId) ||
+            (action === "MEMORY_EDIT" || action === "MEMORY_APPEND"
+                ? lastMemoryId
+                : null);
+        const instruction = data.instruction;
+        const content = data.content || message;
+        let replyText = cleanAiReply(data.reply || "処理しました");
+        let newLastMemoryId = null;
         if (action === "MEMORY_EDIT" && targetId && instruction) {
             try {
                 const docRef = db.collection("memories").doc(targetId);
                 const docSnap = await docRef.get();
                 if (docSnap.exists) {
-                    const currentText = ((_e = docSnap.data()) === null || _e === void 0 ? void 0 : _e.text) || "";
+                    const currentText = ((_d = docSnap.data()) === null || _d === void 0 ? void 0 : _d.text) || "";
                     const editPrompt = `あなたはテキストエディタです。以下のテキストを指示通りに修正し、修正後の**全文のみ**を出力してください。\n\n【元テキスト】\n${currentText}\n\n【指示】\n${instruction}`;
                     const newText = await callGeminiText(apiKey, editPrompt);
                     if (newText) {
                         await docRef.update({ text: newText.trim() });
-                        replyText = `📝 更新しました。\n\n${newText.trim()}`;
+                        replyText = `\n📝 更新しました。\n\n${newText.trim()}`;
+                        newLastMemoryId = targetId;
                     }
                     else {
-                        replyText = "⚠️ 更新内容が空でした。";
+                        replyText += "\n⚠️ 更新内容が空でした。";
                     }
                 }
                 else {
-                    replyText = "⚠️ 指定されたメモが見つかりませんでした。";
+                    replyText += "\n⚠️ 指定されたメモが見つかりませんでした。";
                 }
             }
-            catch (_h) {
-                replyText = "⚠️ 更新に失敗しました。";
+            catch (_f) {
+                replyText += "\n⚠️ 更新に失敗しました。";
             }
         }
         else if (action === "MEMORY_APPEND" && targetId) {
@@ -5278,32 +5275,38 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 const docRef = db.collection("memories").doc(targetId);
                 const docSnap = await docRef.get();
                 if (docSnap.exists) {
-                    const oldText = ((_f = docSnap.data()) === null || _f === void 0 ? void 0 : _f.text) || "";
+                    const oldText = ((_e = docSnap.data()) === null || _e === void 0 ? void 0 : _e.text) || "";
                     const newText = `${oldText}\n${content}`;
                     await docRef.update({ text: newText });
-                    replyText = `📝 追記しました: ${content}`;
+                    replyText = `\n📝 追記しました: ${content}`;
+                    newLastMemoryId = targetId;
                 }
                 else {
-                    replyText = `⚠️ 追記先のメモが見つかりませんでした。`;
+                    replyText += `\n⚠️ 追記先のメモが見つかりませんでした。`;
                 }
             }
-            catch (_j) {
-                replyText = "⚠️ 追記に失敗しました。";
+            catch (_g) {
+                replyText += "\n⚠️ 追記に失敗しました。";
             }
         }
         else if (action === "TASK_DELETE") {
-            replyText = await deleteTodoByTitle(uid, content);
+            replyText += "\n" + (await deleteTodoByTitle(uid, content));
         }
         else if (action === "CALENDAR_DELETE") {
-            replyText = await deleteCalendarEvent(uid, content);
+            replyText += "\n" + (await deleteCalendarEvent(uid, content));
         }
         else if (action === "CALENDAR_ADD") {
-            if ((_g = aiDecision.data) === null || _g === void 0 ? void 0 : _g.start) {
-                await addCalendarEvent(uid, aiDecision.data);
-                replyText = `📅 予定を登録しました: ${content}`;
+            if (data.start) {
+                const success = await addCalendarEvent(uid, data);
+                if (success) {
+                    replyText += `\n📅 予定を登録しました: ${content}`;
+                }
+                else {
+                    replyText += `\n⚠️ 予定の登録に失敗しました。`;
+                }
             }
             else {
-                replyText = "📅 予定の追加はWebアプリから行うと確実です。";
+                replyText += "\n📅 予定の追加はWebアプリから行うと確実です。";
             }
         }
         else if (action === "TASK_ADD") {
@@ -5314,10 +5317,10 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 source: "LINE",
             });
-            replyText = `✅ タスク追加: ${content}`;
+            replyText += `\n✅ タスク追加: ${content}`;
         }
         else if (action === "MEMORY_ADD") {
-            await db.collection("memories").add({
+            const docRef = await db.collection("memories").add({
                 userId: uid,
                 text: content,
                 aiSummary: content.slice(0, 20),
@@ -5325,19 +5328,32 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 source: "LINE",
             });
-            replyText = `📝 メモしました`;
+            replyText += `\n📝 メモしました`;
+            newLastMemoryId = docRef.id;
         }
         else if (action === "CHAT") {
-            // 会話モード: 返答をそのまま返す
+            if (targetId)
+                newLastMemoryId = targetId;
         }
+        if (newLastMemoryId) {
+            await userRef
+                .collection("system")
+                .doc("user_context")
+                .set({ lastMemoryId: newLastMemoryId }, { merge: true });
+        }
+        await db.collection("chat_logs").add({
+            userId: uid,
+            question: message,
+            answer: replyText,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
         await client.replyMessage(event.replyToken, {
             type: "text",
-            text: replyText,
+            text: replyText.trim(),
         });
     }));
     res.json({ success: true });
 });
-// その他機能
 exports.linkLineAccount = (0, https_1.onCall)({
     secrets: [
         lineLoginChannelId,
@@ -5477,13 +5493,17 @@ exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
                 const memoryDump = recentMemoriesSnap.docs
                     .map((d) => `[${d.data().createdAt.toDate().toLocaleDateString()}] ${d.data().text}`)
                     .join("\n");
-                const cheatSheetPrompt = `「${title}」の直前カンペ作成。過去メモ: ${memoryDump} 関連情報なければ「関連情報なし」と出力。`;
+                // ★修正: プロンプトに「メッセージ本文のみ」の指示を追加
+                const cheatSheetPrompt = `「${title}」の直前カンペ作成。過去メモ: ${memoryDump} 関連情報なければ「関連情報なし」と出力。
+          
+          ★重要: 出力は「お疲れ様です」や「こんにちは」から始まる、ユーザーへのメッセージ本文のみを出力してください。
+          「承知いたしました」「カンペを作成します」などのAIの返答やシステム的な前置きは一切不要です。`;
                 const cheatSheet = await callGeminiText(apiKey, cheatSheetPrompt);
                 if (!cheatSheet.includes("関連情報なし") &&
                     !cheatSheet.includes("エラー")) {
                     await client.pushMessage(userData.lineUserId, {
                         type: "text",
-                        text: `📅 まもなく開始: ${title}\n\n🧠 AIカンペ:\n${cheatSheet}`,
+                        text: `📅 まもなく開始: ${title}\n\n${cheatSheet}`, // ★AIカンペの見出しを消して本文だけに
                     });
                 }
             }
@@ -5495,6 +5515,89 @@ exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
 });
 exports.scrapeUrl = (0, https_1.onCall)(async () => {
     return { success: true };
+});
+// ★修正: 根本解決版 + メッセージ整形
+exports.forceTriggerNotification = (0, https_1.onCall)({
+    secrets: [lineBotToken, geminiApiKey, googleClientId, googleClientSecret],
+    cors: true,
+}, async (request) => {
+    var _a;
+    if (!request.auth)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    const uid = request.auth.uid;
+    const apiKey = geminiApiKey.value();
+    const client = new line.Client({
+        channelAccessToken: lineBotToken.value(),
+    });
+    const userDoc = await db.collection("users").doc(uid).get();
+    const userData = userDoc.data();
+    if (!userData || !userData.lineUserId)
+        return { result: "LINE未連携" };
+    let accessToken = null;
+    if (request.data.accessToken) {
+        accessToken = request.data.accessToken;
+    }
+    if (!accessToken) {
+        try {
+            const tokenDoc = await db
+                .collection("users")
+                .doc(uid)
+                .collection("system")
+                .doc("tokens")
+                .get();
+            if (tokenDoc.exists) {
+                accessToken = await refreshAccessToken((_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.refreshToken);
+            }
+        }
+        catch (e) {
+            console.warn("DB Token fetch failed:", e);
+        }
+    }
+    if (!accessToken) {
+        return {
+            result: "カレンダーにアクセスできませんでした (再ログインしてください)",
+        };
+    }
+    try {
+        const now = new Date();
+        const timeMin = now.toISOString();
+        const timeMax = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+        const calendarRes = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            params: {
+                timeMin,
+                timeMax,
+                singleEvents: true,
+                orderBy: "startTime",
+                maxResults: 1,
+            },
+        });
+        const events = calendarRes.data.items || [];
+        const title = events.length > 0 ? events[0].summary : "（直近の予定なし）";
+        const recentMemoriesSnap = await db
+            .collection("memories")
+            .where("userId", "==", uid)
+            .orderBy("createdAt", "desc")
+            .limit(30)
+            .get();
+        const memoryDump = recentMemoriesSnap.docs
+            .map((d) => `[${d.data().createdAt.toDate().toLocaleDateString()}] ${d.data().text}`)
+            .join("\n");
+        // ★修正: プロンプトに「メッセージ本文のみ」の指示を追加
+        const cheatSheetPrompt = `「${title}」のカンペを作成して。関連メモ: ${memoryDump} ※関連情報がなくても、適当に励ましの言葉を入れて必ず何か出力すること。
+      
+      ★重要: 出力は「お疲れ様です」や「こんにちは」から始まる、ユーザーへのメッセージ本文のみを出力してください。
+      「承知いたしました」「カンペを作成します」などのAIの返答やシステム的な前置きは一切不要です。`;
+        const cheatSheet = await callGeminiText(apiKey, cheatSheetPrompt);
+        await client.pushMessage(userData.lineUserId, {
+            type: "text",
+            text: `🎥 テスト通知: ${title}\n\n${cheatSheet}`, // ★AIカンペの見出しを消して本文だけに
+        });
+        return { result: "送信成功！LINEを見てください" };
+    }
+    catch (e) {
+        return { result: `エラー: ${e.message}` };
+    }
 });
 </file>
 
@@ -5513,11 +5616,11 @@ if (admin.apps.length === 0) {
 
 const db = admin.firestore();
 
-// メモリ設定
+// タイムアウト300秒
 setGlobalOptions({
   region: "asia-northeast1",
   memory: "1GiB",
-  timeoutSeconds: 60,
+  timeoutSeconds: 300,
 });
 
 // Secrets
@@ -5529,6 +5632,7 @@ const googleClientSecret = defineSecret("GOOGLE_CLIENT_SECRET");
 const lineLoginChannelId = defineSecret("LINE_LOGIN_CHANNEL_ID");
 const lineLoginChannelSecret = defineSecret("LINE_LOGIN_CHANNEL_SECRET");
 
+// 予備のモデルリスト
 const CANDIDATE_MODELS = [
   "gemini-1.5-flash",
   "gemini-1.5-flash-001",
@@ -5537,15 +5641,28 @@ const CANDIDATE_MODELS = [
 ];
 
 // ---------------------------------------------------------
-// Helper: JSON抽出（最強版）
+// Helper: テキストクリーニング
+// ---------------------------------------------------------
+function cleanAiReply(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/📝 メモを更新しました/g, "")
+    .replace(/📝 メモに追記しました/g, "")
+    .replace(/📝 メモしました/g, "")
+    .replace(/✅ .*しました/g, "")
+    .replace(/⚠️ .*失敗しました/g, "")
+    .replace(/(\n|^)[-・*]\s+.+/g, "")
+    .trim();
+}
+
+// ---------------------------------------------------------
+// Helper: JSON抽出
 // ---------------------------------------------------------
 function extractJson(text: string): any {
   try {
-    // 1. そのままパース
     return JSON.parse(text);
   } catch (e) {
     try {
-      // 2. Markdown記法や余計な文字を削除
       const cleaned = text
         .replace(/```json/g, "")
         .replace(/```/g, "")
@@ -5553,17 +5670,12 @@ function extractJson(text: string): any {
       return JSON.parse(cleaned);
     } catch (e2) {
       try {
-        // 3. 正規表現で { ... } の部分だけを無理やり抽出
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           return JSON.parse(jsonMatch[0]);
         }
-        // JSONが見つからない場合はエラーを投げるのではなく、チャットとして扱うためのオブジェクトを返す
-        console.warn("No JSON found in response, falling back to chat.");
         return { action: "CHAT", reply: text };
       } catch (e3) {
-        console.error("JSON Parse Error. Raw text:", text);
-        // エラー時はデフォルト動作（チャット）に倒す
         return { action: "CHAT", reply: text };
       }
     }
@@ -5575,7 +5687,20 @@ function extractJson(text: string): any {
 // ---------------------------------------------------------
 function cleanId(id: string): string {
   if (!id || typeof id !== "string") return "";
-  return id.replace(/<<<|>>>|ID:/g, "").trim();
+  return id.replace(/<<<|>>>|ID:/gi, "").trim();
+}
+
+// ★追加: 日時フォーマッター (バックエンド用)
+function formatIsoDate(dateStr: string): string {
+  if (!dateStr) return "";
+  if (dateStr.includes("+") || dateStr.endsWith("Z")) return dateStr;
+  if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
+    return `${dateStr}:00+09:00`;
+  }
+  if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)) {
+    return `${dateStr}+09:00`;
+  }
+  return dateStr;
 }
 
 // ---------------------------------------------------------
@@ -5597,6 +5722,7 @@ async function resolveGeminiModel(apiKey: string): Promise<string> {
   const generationModels = models.filter((m: any) =>
     m.supportedGenerationMethods?.includes("generateContent"),
   );
+
   let target = generationModels.find((m: any) =>
     m.name.includes("gemini-1.5-flash"),
   );
@@ -5605,45 +5731,25 @@ async function resolveGeminiModel(apiKey: string): Promise<string> {
       m.name.includes("gemini-1.5-pro"),
     );
   if (!target && generationModels.length > 0) target = generationModels[0];
-  if (target) return target.name.replace("models/", "");
+
+  if (target) {
+    return target.name.replace("models/", "");
+  }
   return "gemini-1.5-flash";
 }
 
-async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
-  const dynamicModel = await resolveGeminiModel(apiKey);
-  const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(
+// ---------------------------------------------------------
+// Helper: AI Call
+// ---------------------------------------------------------
+async function generateContentWithRetry(
+  apiKey: string,
+  prompt: string,
+): Promise<string> {
+  const bestModel = await resolveGeminiModel(apiKey);
+  const modelsToTry = [...new Set([bestModel, ...CANDIDATE_MODELS])].filter(
     Boolean,
   );
 
-  for (const modelName of modelsToTry) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-      // responseMimeType: "application/json" を削除して互換性を向上
-      const response = await axios.post(
-        url,
-        {
-          contents: [{ parts: [{ text: prompt }] }],
-        },
-        { headers: { "Content-Type": "application/json" } },
-      );
-      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (text) return extractJson(text);
-    } catch (e: any) {
-      console.warn(`Model ${modelName} failed. Retrying...`);
-    }
-  }
-  // 全モデル失敗時はエラーメッセージを返す
-  return {
-    action: "CHAT",
-    reply: "申し訳ありません。AIサーバーが混雑しており応答できませんでした。",
-  };
-}
-
-async function callGeminiText(apiKey: string, prompt: string): Promise<string> {
-  const dynamicModel = await resolveGeminiModel(apiKey);
-  const modelsToTry = [...new Set([dynamicModel, ...CANDIDATE_MODELS])].filter(
-    Boolean,
-  );
   for (const modelName of modelsToTry) {
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
@@ -5652,12 +5758,37 @@ async function callGeminiText(apiKey: string, prompt: string): Promise<string> {
         { contents: [{ parts: [{ text: prompt }] }] },
         { headers: { "Content-Type": "application/json" } },
       );
-      return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    } catch (e) {
-      console.warn(`Model ${modelName} failed. Retrying...`);
+      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return text;
+    } catch (e: any) {
+      console.warn(`Model ${modelName} failed:`, e.message);
     }
   }
-  return "AI応答エラー";
+  throw new Error("All AI models failed via Axios.");
+}
+
+async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
+  if (!apiKey) return { action: "CHAT", reply: "⚠️ APIキー未設定" };
+  try {
+    const text = await generateContentWithRetry(apiKey, prompt);
+    return extractJson(text);
+  } catch (e: any) {
+    console.error("Gemini JSON Error:", e.message);
+    return { action: "CHAT", reply: `⚠️ AI通信エラー: ${e.message}` };
+  }
+}
+
+async function callGeminiText(apiKey: string, prompt: string): Promise<string> {
+  if (!apiKey) return "";
+  try {
+    const text = await generateContentWithRetry(apiKey, prompt);
+    return text
+      .replace(/^```.*\n/gm, "")
+      .replace(/```/g, "")
+      .trim();
+  } catch (e: any) {
+    return "";
+  }
 }
 
 // ---------------------------------------------------------
@@ -5678,7 +5809,7 @@ async function refreshAccessToken(refreshToken: string) {
 }
 
 // ---------------------------------------------------------
-// Helper: Calendar Operations
+// Helper: Calendar & Todo
 // ---------------------------------------------------------
 async function getCalendarEvents(uid: string): Promise<string> {
   try {
@@ -5693,7 +5824,6 @@ async function getCalendarEvents(uid: string): Promise<string> {
     if (!refreshToken) return "（権限なし）";
     const accessToken = await refreshAccessToken(refreshToken);
     if (!accessToken) return "（トークン切れ）";
-
     const now = new Date();
     const timeMin = now.toISOString();
     const timeMax = new Date(
@@ -5713,7 +5843,7 @@ async function getCalendarEvents(uid: string): Promise<string> {
       },
     );
     const events = calendarRes.data.items || [];
-    if (events.length === 0) return "直近の予定はありません。";
+    if (events.length === 0) return "直近の予定なし";
     return events
       .map((ev: any) => {
         const start = ev.start.dateTime
@@ -5729,7 +5859,7 @@ async function getCalendarEvents(uid: string): Promise<string> {
       })
       .join("\n");
   } catch (e) {
-    return "（取得エラー）";
+    return "（カレンダー取得失敗）";
   }
 }
 
@@ -5749,12 +5879,15 @@ async function addCalendarEvent(
     const accessToken = await refreshAccessToken(refreshToken);
     if (!accessToken) return false;
 
+    const finalStart = formatIsoDate(eventData.start);
+    const finalEnd = formatIsoDate(eventData.end);
+
     await axios.post(
       "https://www.googleapis.com/calendar/v3/calendars/primary/events",
       {
         summary: eventData.title,
-        start: { dateTime: eventData.start },
-        end: { dateTime: eventData.end },
+        start: { dateTime: finalStart },
+        end: { dateTime: finalEnd },
       },
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
@@ -5778,7 +5911,6 @@ async function deleteCalendarEvent(
     if (!tokenDoc.exists) return "連携されていません";
     const accessToken = await refreshAccessToken(tokenDoc.data()?.refreshToken);
     if (!accessToken) return "認証エラー";
-
     const searchRes = await axios.get(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
       {
@@ -5788,7 +5920,6 @@ async function deleteCalendarEvent(
     );
     const events = searchRes.data.items || [];
     if (events.length === 0) return "該当する予定が見つかりませんでした。";
-
     const target = events[0];
     await axios.delete(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events/${target.id}`,
@@ -5800,9 +5931,6 @@ async function deleteCalendarEvent(
   }
 }
 
-// ---------------------------------------------------------
-// Helper: Todo Operations
-// ---------------------------------------------------------
 async function deleteTodoByTitle(uid: string, title: string): Promise<string> {
   const todosRef = db.collection("todos");
   const snap = await todosRef
@@ -5811,13 +5939,7 @@ async function deleteTodoByTitle(uid: string, title: string): Promise<string> {
     .orderBy("createdAt", "desc")
     .limit(30)
     .get();
-  let targetDoc = null;
-  for (const doc of snap.docs) {
-    if (doc.data().title.includes(title)) {
-      targetDoc = doc;
-      break;
-    }
-  }
+  const targetDoc = snap.docs.find((doc) => doc.data().title.includes(title));
   if (targetDoc) {
     await targetDoc.ref.delete();
     return `タスク「${targetDoc.data().title}」を削除しました。`;
@@ -5825,9 +5947,6 @@ async function deleteTodoByTitle(uid: string, title: string): Promise<string> {
   return "タスクが見つかりませんでした。";
 }
 
-// ---------------------------------------------------------
-// Helper: Memory Operations
-// ---------------------------------------------------------
 async function getRecentMemories(
   uid: string,
   queryText: string,
@@ -5837,38 +5956,46 @@ async function getRecentMemories(
       .collection("memories")
       .where("userId", "==", uid)
       .orderBy("createdAt", "desc")
-      .limit(100)
+      .limit(50)
       .get();
-
     if (snapshot.empty) return "（履歴なし）";
 
     let docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-
     const keywords = queryText
       .replace(/[\s,、　]+/g, " ")
       .split(" ")
       .filter((k) => k.length > 1);
-
     const matches = docs.filter((d: any) =>
       keywords.some((k) => d.text.includes(k)),
     );
     const recents = docs.slice(0, 5);
-
     const candidates = [...recents, ...matches];
     const uniqueCandidates = Array.from(
       new Map(candidates.map((c) => [c.id, c])).values(),
     );
 
-    if (uniqueCandidates.length === 0) return "（関連なし）";
-
     return uniqueCandidates
-      .map((data: any) => {
-        // AIがIDを認識しやすいように <<<ID>>> で囲む
-        return `<<<${data.id}>>> ${data.text.replace(/\n/g, " ")}`;
-      })
+      .map((data: any) => `<<<${data.id}>>> ${data.text.replace(/\n/g, " ")}`)
       .join("\n");
   } catch (e) {
-    return "（取得エラー）";
+    return "（メモ取得失敗）";
+  }
+}
+
+async function getChatHistory(uid: string): Promise<string> {
+  try {
+    const snap = await db
+      .collection("chat_logs")
+      .where("userId", "==", uid)
+      .orderBy("createdAt", "desc")
+      .limit(5)
+      .get();
+    return snap.docs
+      .reverse()
+      .map((d) => `User: ${d.data().question}\nAI: ${d.data().answer}`)
+      .join("\n---\n");
+  } catch {
+    return "";
   }
 }
 
@@ -5927,8 +6054,8 @@ export const lineWebhook = onRequest(
           return;
         }
         const uid = usersSnap.docs[0].id;
+        const userRef = db.collection("users").doc(uid);
 
-        // 1. 強制モード
         const commands: Record<string, string> = {
           "【モード】タスク": "TASK",
           "【モード】メモ": "MEMORY",
@@ -5937,10 +6064,7 @@ export const lineWebhook = onRequest(
           "【モード】リセット": "AUTO",
         };
         if (commands[message]) {
-          await db
-            .collection("users")
-            .doc(uid)
-            .update({ lineMode: commands[message] });
+          await userRef.update({ lineMode: commands[message] });
           await client.replyMessage(event.replyToken, {
             type: "text",
             text: `✅ ${commands[message]}モードになりました。`,
@@ -5948,72 +6072,111 @@ export const lineWebhook = onRequest(
           return;
         }
 
-        // 2. コンテキスト取得
-        const memoryContext = await getRecentMemories(uid, message);
+        const [userDoc, contextSnap] = await Promise.all([
+          userRef.get(),
+          userRef.collection("system").doc("user_context").get(),
+        ]);
+        const currentMode = userDoc.data()?.lineMode || "AUTO";
+        const lastMemoryId = contextSnap.exists
+          ? contextSnap.data()?.lastMemoryId
+          : null;
+
+        let activeMemoryContent = "";
+        if (lastMemoryId) {
+          try {
+            const memSnap = await db
+              .collection("memories")
+              .doc(lastMemoryId)
+              .get();
+            if (memSnap.exists) {
+              activeMemoryContent = `【直前に操作・参照していたメモ】\nID: <<<${lastMemoryId}>>>\n内容: ${memSnap.data()?.text}\n`;
+            }
+          } catch (e) {
+            console.error("Context fetch failed:", e);
+          }
+        }
+
+        const [memoryContext, chatHistory, calendarEvents] = await Promise.all([
+          getRecentMemories(uid, message),
+          getChatHistory(uid),
+          getCalendarEvents(uid),
+        ]);
         const nowStr = new Date().toLocaleString("ja-JP", {
           timeZone: "Asia/Tokyo",
         });
 
-        // 3. 司令塔プロンプト
         const routerPrompt = `
-        現在日時: ${nowStr}
-        ユーザー入力: "${message}"
-        【参照可能なメモ】(IDは<<< >>>で囲われています)
+        あなたはユーザーの「第2の脳」です。現在日時: ${nowStr}
+        【現在のモード】: ${currentMode}
+
+        ${calendarEvents ? `\n【直近の予定】\n${calendarEvents}` : ""}
+        
+        【直近の会話履歴】
+        ${chatHistory}
+
+        ${activeMemoryContent ? activeMemoryContent : "※直前のメモ参照なし"}
+
+        【その他参照可能なメモ】(IDは<<< >>>で囲われています)
         ${memoryContext}
+
+        【ユーザー入力】
+        "${message}"
 
         指示:
         ユーザーの意図を汲み取り、以下のJSON形式のみを出力してください。
         
-        ★アクション判断基準:
-        1. 【メモ編集・部分削除】 "〇〇を消して" "リストから〇〇を削除" "〇〇を変更して"
-           -> "MEMORY_EDIT"
-           - targetId: 【参照可能なメモ】の中から対象ID (<<< >>>の中身) を特定
-           - instruction: 具体的な編集指示（例：「『牛乳』の行を削除」「『13時』を『14時』に変更」）
+        ★モード優先ルール:
+        - **モードが「TASK」の場合**: どんな内容でも「追加」と言われたら、絶対に MEMORY_APPEND ではなく **TASK_ADD** を選択してください。
         
-        2. 【メモ追記】 "これ追加して" "〇〇も買っておいて"
-           -> "MEMORY_APPEND"
-           - targetId: 対象ID
-           - content: 追加する内容
+        ★名詞抽出ルール:
+        - "content" には、「〜を追加して」「〜を買ってきて」などの動詞や助詞を一切含めず、対象の**名詞のみ**を入れてください。（例: "牛乳を追加" -> content: "牛乳"）
 
-        3. 【タスク削除】 "タスク消して" "タスク完了"
-           -> "TASK_DELETE"
+        ★日時形式ルール (最重要):
+        - CALENDAR_ADD の場合、"start" と "end" は必ず **ISO 8601形式 (YYYY-MM-DDTHH:mm:ss+09:00)** で出力してください。
+        - **+09:00 (日本時間)** のタイムゾーン指定を忘れないでください。
 
-        4. 【予定削除】 "予定消して" "キャンセル"
-           -> "CALENDAR_DELETE"
+        ★アクション判断基準:
+        1. 【参照・検索】 "買い物リスト" "リスト見せて"
+           -> "CHAT" (replyに中身を記述)
 
-        5. 【予定追加】 日時指定がある場合
-           -> "CALENDAR_ADD"
+        2. 【メモ編集】 "〇〇を消して" "リストから削除"
+           -> "MEMORY_EDIT"
 
-        6. 【メモ保存】 上記以外で、単なる記録の場合
-           -> "MEMORY_ADD"
+        3. 【メモ追記】 "これ追加して" "〇〇も買っておいて"
+           -> **モードがTASKなら TASK_ADD**、それ以外は MEMORY_APPEND
 
-        7. 【会話】 挨拶や質問
-           -> "CHAT"
+        4. 【タスク削除】 "タスク消して" -> "TASK_DELETE"
+        5. 【予定削除】 "予定消して" -> "CALENDAR_DELETE"
+        6. 【予定追加】 日時指定あり -> "CALENDAR_ADD"
+        7. 【メモ保存】 上記以外 -> "MEMORY_ADD"
+        8. 【会話】 挨拶・質問 -> "CHAT"
 
         出力JSON形式:
         {
           "action": "ACTION_NAME",
-          "targetId": "ID文字列 (<<<と>>>は除く)",
-          "instruction": "編集指示の内容",
-          "content": "追記・保存する内容",
-          "reply": "ユーザーへの短い返信"
+          "targetId": "ID文字列",
+          "instruction": "編集指示",
+          "content": "内容",
+          "reply": "ユーザーへの返信"
         }
       `;
 
-        // 4. アクション決定
         const aiDecision = await callGeminiJson(apiKey, routerPrompt);
-
         const action = aiDecision.action || "CHAT";
-        const rawTargetId = aiDecision.targetId || aiDecision.data?.targetId;
-        const targetId = cleanId(rawTargetId);
-        const instruction =
-          aiDecision.instruction || aiDecision.data?.instruction;
-        const content =
-          aiDecision.content || aiDecision.data?.content || message;
-        let replyText =
-          aiDecision.reply || aiDecision.data?.reply || "処理しました";
+        const data = aiDecision.data || aiDecision;
 
-        // 5. アクション実行
+        const rawTargetId = data.targetId;
+        const targetId =
+          cleanId(rawTargetId) ||
+          (action === "MEMORY_EDIT" || action === "MEMORY_APPEND"
+            ? lastMemoryId
+            : null);
+        const instruction = data.instruction;
+        const content = data.content || message;
+        let replyText = cleanAiReply(data.reply || "処理しました");
+
+        let newLastMemoryId = null;
+
         if (action === "MEMORY_EDIT" && targetId && instruction) {
           try {
             const docRef = db.collection("memories").doc(targetId);
@@ -6022,17 +6185,19 @@ export const lineWebhook = onRequest(
               const currentText = docSnap.data()?.text || "";
               const editPrompt = `あなたはテキストエディタです。以下のテキストを指示通りに修正し、修正後の**全文のみ**を出力してください。\n\n【元テキスト】\n${currentText}\n\n【指示】\n${instruction}`;
               const newText = await callGeminiText(apiKey, editPrompt);
+
               if (newText) {
                 await docRef.update({ text: newText.trim() });
-                replyText = `📝 更新しました。\n\n${newText.trim()}`;
+                replyText = `\n📝 更新しました。\n\n${newText.trim()}`;
+                newLastMemoryId = targetId;
               } else {
-                replyText = "⚠️ 更新内容が空でした。";
+                replyText += "\n⚠️ 更新内容が空でした。";
               }
             } else {
-              replyText = "⚠️ 指定されたメモが見つかりませんでした。";
+              replyText += "\n⚠️ 指定されたメモが見つかりませんでした。";
             }
           } catch {
-            replyText = "⚠️ 更新に失敗しました。";
+            replyText += "\n⚠️ 更新に失敗しました。";
           }
         } else if (action === "MEMORY_APPEND" && targetId) {
           try {
@@ -6042,23 +6207,28 @@ export const lineWebhook = onRequest(
               const oldText = docSnap.data()?.text || "";
               const newText = `${oldText}\n${content}`;
               await docRef.update({ text: newText });
-              replyText = `📝 追記しました: ${content}`;
+              replyText = `\n📝 追記しました: ${content}`;
+              newLastMemoryId = targetId;
             } else {
-              replyText = `⚠️ 追記先のメモが見つかりませんでした。`;
+              replyText += `\n⚠️ 追記先のメモが見つかりませんでした。`;
             }
           } catch {
-            replyText = "⚠️ 追記に失敗しました。";
+            replyText += "\n⚠️ 追記に失敗しました。";
           }
         } else if (action === "TASK_DELETE") {
-          replyText = await deleteTodoByTitle(uid, content);
+          replyText += "\n" + (await deleteTodoByTitle(uid, content));
         } else if (action === "CALENDAR_DELETE") {
-          replyText = await deleteCalendarEvent(uid, content);
+          replyText += "\n" + (await deleteCalendarEvent(uid, content));
         } else if (action === "CALENDAR_ADD") {
-          if (aiDecision.data?.start) {
-            await addCalendarEvent(uid, aiDecision.data);
-            replyText = `📅 予定を登録しました: ${content}`;
+          if (data.start) {
+            const success = await addCalendarEvent(uid, data);
+            if (success) {
+              replyText += `\n📅 予定を登録しました: ${content}`;
+            } else {
+              replyText += `\n⚠️ 予定の登録に失敗しました。`;
+            }
           } else {
-            replyText = "📅 予定の追加はWebアプリから行うと確実です。";
+            replyText += "\n📅 予定の追加はWebアプリから行うと確実です。";
           }
         } else if (action === "TASK_ADD") {
           await db.collection("todos").add({
@@ -6068,9 +6238,9 @@ export const lineWebhook = onRequest(
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             source: "LINE",
           });
-          replyText = `✅ タスク追加: ${content}`;
+          replyText += `\n✅ タスク追加: ${content}`;
         } else if (action === "MEMORY_ADD") {
-          await db.collection("memories").add({
+          const docRef = await db.collection("memories").add({
             userId: uid,
             text: content,
             aiSummary: content.slice(0, 20),
@@ -6078,14 +6248,29 @@ export const lineWebhook = onRequest(
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             source: "LINE",
           });
-          replyText = `📝 メモしました`;
+          replyText += `\n📝 メモしました`;
+          newLastMemoryId = docRef.id;
         } else if (action === "CHAT") {
-          // 会話モード: 返答をそのまま返す
+          if (targetId) newLastMemoryId = targetId;
         }
+
+        if (newLastMemoryId) {
+          await userRef
+            .collection("system")
+            .doc("user_context")
+            .set({ lastMemoryId: newLastMemoryId }, { merge: true });
+        }
+
+        await db.collection("chat_logs").add({
+          userId: uid,
+          question: message,
+          answer: replyText,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
 
         await client.replyMessage(event.replyToken, {
           type: "text",
-          text: replyText,
+          text: replyText.trim(),
         });
       }),
     );
@@ -6094,7 +6279,6 @@ export const lineWebhook = onRequest(
   },
 );
 
-// その他機能
 export const linkLineAccount = onCall(
   {
     secrets: [
@@ -6253,7 +6437,13 @@ export const checkUpcomingMeetings = onSchedule(
                 `[${d.data().createdAt.toDate().toLocaleDateString()}] ${d.data().text}`,
             )
             .join("\n");
-          const cheatSheetPrompt = `「${title}」の直前カンペ作成。過去メモ: ${memoryDump} 関連情報なければ「関連情報なし」と出力。`;
+
+          // ★修正: プロンプトに「メッセージ本文のみ」の指示を追加
+          const cheatSheetPrompt = `「${title}」の直前カンペ作成。過去メモ: ${memoryDump} 関連情報なければ「関連情報なし」と出力。
+          
+          ★重要: 出力は「お疲れ様です」や「こんにちは」から始まる、ユーザーへのメッセージ本文のみを出力してください。
+          「承知いたしました」「カンペを作成します」などのAIの返答やシステム的な前置きは一切不要です。`;
+
           const cheatSheet = await callGeminiText(apiKey, cheatSheetPrompt);
           if (
             !cheatSheet.includes("関連情報なし") &&
@@ -6261,7 +6451,7 @@ export const checkUpcomingMeetings = onSchedule(
           ) {
             await client.pushMessage(userData.lineUserId, {
               type: "text",
-              text: `📅 まもなく開始: ${title}\n\n🧠 AIカンペ:\n${cheatSheet}`,
+              text: `📅 まもなく開始: ${title}\n\n${cheatSheet}`, // ★AIカンペの見出しを消して本文だけに
             });
           }
         }
@@ -6275,6 +6465,112 @@ export const checkUpcomingMeetings = onSchedule(
 export const scrapeUrl = onCall(async () => {
   return { success: true };
 });
+
+// ★修正: 根本解決版 + メッセージ整形
+export const forceTriggerNotification = onCall(
+  {
+    secrets: [lineBotToken, geminiApiKey, googleClientId, googleClientSecret],
+    cors: true,
+  },
+  async (request) => {
+    if (!request.auth)
+      throw new HttpsError("unauthenticated", "Login required");
+
+    const uid = request.auth.uid;
+    const apiKey = geminiApiKey.value();
+    const client = new line.Client({
+      channelAccessToken: lineBotToken.value(),
+    });
+
+    const userDoc = await db.collection("users").doc(uid).get();
+    const userData = userDoc.data();
+    if (!userData || !userData.lineUserId) return { result: "LINE未連携" };
+
+    let accessToken = null;
+    if (request.data.accessToken) {
+      accessToken = request.data.accessToken;
+    }
+
+    if (!accessToken) {
+      try {
+        const tokenDoc = await db
+          .collection("users")
+          .doc(uid)
+          .collection("system")
+          .doc("tokens")
+          .get();
+        if (tokenDoc.exists) {
+          accessToken = await refreshAccessToken(tokenDoc.data()?.refreshToken);
+        }
+      } catch (e) {
+        console.warn("DB Token fetch failed:", e);
+      }
+    }
+
+    if (!accessToken) {
+      return {
+        result: "カレンダーにアクセスできませんでした (再ログインしてください)",
+      };
+    }
+
+    try {
+      const now = new Date();
+      const timeMin = now.toISOString();
+      const timeMax = new Date(
+        now.getTime() + 24 * 60 * 60 * 1000,
+      ).toISOString();
+
+      const calendarRes = await axios.get(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          params: {
+            timeMin,
+            timeMax,
+            singleEvents: true,
+            orderBy: "startTime",
+            maxResults: 1,
+          },
+        },
+      );
+
+      const events = calendarRes.data.items || [];
+      const title =
+        events.length > 0 ? events[0].summary : "（直近の予定なし）";
+
+      const recentMemoriesSnap = await db
+        .collection("memories")
+        .where("userId", "==", uid)
+        .orderBy("createdAt", "desc")
+        .limit(30)
+        .get();
+
+      const memoryDump = recentMemoriesSnap.docs
+        .map(
+          (d) =>
+            `[${d.data().createdAt.toDate().toLocaleDateString()}] ${d.data().text}`,
+        )
+        .join("\n");
+
+      // ★修正: プロンプトに「メッセージ本文のみ」の指示を追加
+      const cheatSheetPrompt = `「${title}」のカンペを作成して。関連メモ: ${memoryDump} ※関連情報がなくても、適当に励ましの言葉を入れて必ず何か出力すること。
+      
+      ★重要: 出力は「お疲れ様です」や「こんにちは」から始まる、ユーザーへのメッセージ本文のみを出力してください。
+      「承知いたしました」「カンペを作成します」などのAIの返答やシステム的な前置きは一切不要です。`;
+
+      const cheatSheet = await callGeminiText(apiKey, cheatSheetPrompt);
+
+      await client.pushMessage(userData.lineUserId, {
+        type: "text",
+        text: `🎥 テスト通知: ${title}\n\n${cheatSheet}`, // ★AIカンペの見出しを消して本文だけに
+      });
+
+      return { result: "送信成功！LINEを見てください" };
+    } catch (e: any) {
+      return { result: `エラー: ${e.message}` };
+    }
+  },
+);
 </file>
 
 <file path="src/components/InputFooter/InputFooter.vue">
@@ -6282,6 +6578,8 @@ export const scrapeUrl = onCall(async () => {
 import { computed } from "vue";
 import { useInputFooter } from "./useInputFooter";
 import { useMyBrain } from "@/composables/useMyBrain";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { getApp } from "firebase/app";
 
 const props = defineProps<{
   modelValue: "memo" | "chat" | "url" | "calendar";
@@ -6313,6 +6611,27 @@ const { currentUser, isSaving, isAiThinking, isSpeaking } = useMyBrain();
 // バイブレーション
 const haptic = () => {
   if (navigator.vibrate) navigator.vibrate(10);
+};
+
+// ★修正: フロントエンドにあるトークンを直接渡す
+const testNotification = async () => {
+  if (!confirm("【動画撮影用】\nLINEにテスト通知を強制送信しますか？")) return;
+
+  const functions = getFunctions(getApp(), "asia-northeast1");
+  const func = httpsCallable(functions, "forceTriggerNotification");
+
+  // ★ここが根本解決の鍵: ブラウザが持っている「有効な鍵」を渡す
+  const localToken = localStorage.getItem("google_calendar_token");
+
+  try {
+    const res: any = await func({ accessToken: localToken });
+    if (res.data.result) {
+      alert("結果: " + res.data.result);
+    }
+  } catch (e: any) {
+    console.error(e);
+    alert("失敗: " + e.message);
+  }
 };
 </script>
 
@@ -6419,8 +6738,18 @@ const haptic = () => {
               📎
             </button>
           </div>
-          <div v-if="inputMode === 'chat'" class="pb-1.5">
+
+          <div class="pb-1.5 flex gap-1">
             <button
+              @click="testNotification"
+              class="p-2 text-slate-500 hover:text-white hover:bg-[#27272a] rounded-full transition"
+              title="【撮影用】テスト通知を送る"
+            >
+              🔔
+            </button>
+
+            <button
+              v-if="inputMode === 'chat'"
               @click="
                 toggleListening;
                 haptic();
@@ -6471,1053 +6800,6 @@ const haptic = () => {
     </div>
   </footer>
 </template>
-</file>
-
-<file path="src/composables/useMyBrain.ts">
-import { ref, computed } from "vue";
-import { db, auth } from "@/firebase";
-import {
-  doc,
-  getDoc,
-  collection,
-  query,
-  limit,
-  getDocs,
-  addDoc,
-  deleteDoc,
-  updateDoc,
-  setDoc,
-  orderBy,
-  serverTimestamp,
-  where,
-  onSnapshot,
-  increment,
-  writeBatch,
-} from "firebase/firestore";
-import {
-  onAuthStateChanged,
-  signOut,
-  GoogleAuthProvider,
-  signInWithPopup,
-} from "firebase/auth";
-import { getApp } from "firebase/app";
-import { getFunctions, httpsCallable } from "firebase/functions";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import axios from "axios";
-import type { Memory, ChatLog, User, Todo, DailyReport } from "@/types";
-
-const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/6oU28r4Hi71dglzd1z6AM00";
-const ADMIN_EMAILS = ["gongedonghuam@gmail.com"];
-
-const currentUser = ref<User | null>(null);
-const memories = ref<Memory[]>([]);
-const chatLogs = ref<ChatLog[]>([]);
-const todos = ref<Todo[]>([]);
-const dailyReports = ref<DailyReport[]>([]);
-const loading = ref(false);
-const isAiThinking = ref(false);
-const isSaving = ref(false);
-const isSpeaking = ref(false);
-const activeTag = ref<string | null>(null);
-const isCalendarConnected = ref(true);
-
-// ---------------- Helper Functions ----------------
-
-const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
-  let token = localStorage.getItem("google_calendar_token");
-  if (!token) {
-    isCalendarConnected.value = false;
-    return null;
-  }
-  try {
-    const res = await callback(token);
-    isCalendarConnected.value = true;
-    return res;
-  } catch (e: any) {
-    if (e.response && e.response.status === 401) {
-      localStorage.removeItem("google_calendar_token");
-      isCalendarConnected.value = false;
-      return null;
-    }
-    throw e;
-  }
-};
-
-const reconnectCalendar = async () => {
-  try {
-    const provider = new GoogleAuthProvider();
-    provider.addScope("https://www.googleapis.com/auth/calendar");
-    provider.setCustomParameters({
-      prompt: "select_account consent",
-      access_type: "offline",
-    });
-
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const token = credential?.accessToken;
-
-    if (token) {
-      localStorage.setItem("google_calendar_token", token);
-      isCalendarConnected.value = true;
-      alert("カレンダーを再接続しました！");
-      window.location.reload();
-    }
-  } catch (e: any) {
-    console.error("Reconnect Error:", e);
-    alert("再接続に失敗しました: " + e.message);
-  }
-};
-
-const fileToGenerativePart = async (file: File) => {
-  return new Promise<{ inlineData: { data: string; mimeType: string } }>(
-    (resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = (reader.result as string).split(",")[1];
-        resolve({ inlineData: { data: base64String, mimeType: file.type } });
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    },
-  );
-};
-
-const cosineSimilarity = (vecA: number[], vecB: number[]) => {
-  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < vecA.length; i++) {
-    dotProduct += vecA[i] * vecB[i];
-    normA += vecA[i] * vecA[i];
-    normB += vecB[i] * vecB[i];
-  }
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-};
-
-function extractJson(text: string): string {
-  let clean = text
-    .replace(/```json/g, "")
-    .replace(/```/g, "")
-    .trim();
-  const firstOpen = clean.indexOf("{");
-  const lastClose = clean.lastIndexOf("}");
-  if (firstOpen !== -1 && lastClose !== -1) {
-    return clean.substring(firstOpen, lastClose + 1);
-  }
-  return clean;
-}
-
-// ---------------------------------------------------------
-// Helper: AI Model Management
-// ---------------------------------------------------------
-
-const fetchAvailableModels = async (apiKey: string) => {
-  try {
-    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-    const listResponse = await fetch(listUrl);
-    if (!listResponse.ok) return [];
-    const listData = await listResponse.json();
-    return listData.models || [];
-  } catch (e) {
-    console.warn("Failed to fetch model list:", e);
-    return [];
-  }
-};
-
-const resolveGeminiModel = async (apiKey: string): Promise<string> => {
-  const models = await fetchAvailableModels(apiKey);
-  const generationModels = models.filter((m: any) =>
-    m.supportedGenerationMethods?.includes("generateContent"),
-  );
-  let target = generationModels.find((m: any) =>
-    m.name.includes("gemini-1.5-flash"),
-  );
-  if (!target) {
-    target = generationModels.find((m: any) =>
-      m.name.includes("gemini-1.5-pro"),
-    );
-  }
-  if (!target && generationModels.length > 0) {
-    target = generationModels[0];
-  }
-  if (target) {
-    return target.name.replace("models/", "");
-  }
-  return "gemini-1.5-flash";
-};
-
-const getEmbeddingModel = async (apiKey: string) => {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  try {
-    const models = await fetchAvailableModels(apiKey);
-    const embeddingModels = models.filter((m: any) =>
-      m.supportedGenerationMethods?.includes("embedContent"),
-    );
-    let target = embeddingModels.find((m: any) =>
-      m.name.includes("text-embedding-004"),
-    );
-    if (!target) {
-      target = embeddingModels.find((m: any) =>
-        m.name.includes("embedding-001"),
-      );
-    }
-    if (!target && embeddingModels.length > 0) {
-      target = embeddingModels[0];
-    }
-    const modelName = target
-      ? target.name.replace("models/", "")
-      : "embedding-001";
-    return genAI.getGenerativeModel({ model: modelName });
-  } catch (e) {
-    return genAI.getGenerativeModel({ model: "embedding-001" });
-  }
-};
-
-const generateContentWithRetry = async (
-  apiKey: string,
-  promptParts: any[],
-  isJsonMode = false,
-) => {
-  try {
-    const modelName = await resolveGeminiModel(apiKey);
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const config = isJsonMode ? { responseMimeType: "application/json" } : {};
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      generationConfig: config,
-    });
-    const result = await model.generateContent(promptParts);
-    return result.response.text();
-  } catch (e: any) {
-    console.error("AI Generation Error (Primary):", e);
-    try {
-      console.log("Retrying with gemini-pro...");
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-      const result = await model.generateContent(promptParts);
-      return result.response.text();
-    } catch (retryError: any) {
-      throw new Error("AI processing failed completely: " + retryError.message);
-    }
-  }
-};
-
-const fetchCalendarEvents = async () => {
-  return await callGoogleApi(async (token) => {
-    const now = new Date().toISOString();
-    const response = await axios.get(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${now}&maxResults=10&orderBy=startTime&singleEvents=true`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    const events = response.data.items || [];
-    if (events.length === 0) return "直近の予定はありません。";
-    return events
-      .map((ev: any) => {
-        const start = ev.start.dateTime || ev.start.date;
-        const summary = ev.summary || "(タイトルなし)";
-        return `- ${start}: ${summary}`;
-      })
-      .join("\n");
-  });
-};
-
-const addEventToGoogleCalendar = async (
-  title: string,
-  startDateTime: string,
-  endDateTime: string,
-  colorId?: string,
-) => {
-  await callGoogleApi(async (token) => {
-    const event = {
-      summary: title,
-      start: { dateTime: startDateTime },
-      end: { dateTime: endDateTime },
-      colorId: colorId || "9",
-    };
-    await axios.post(
-      "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-      event,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-  });
-};
-
-// ★追加: カレンダー削除
-const deleteCalendarEvent = async (query: string) => {
-  return await callGoogleApi(async (token) => {
-    // 1. 検索してID取得
-    const searchRes = await axios.get(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { q: query, maxResults: 5, singleEvents: true },
-      },
-    );
-    const events = searchRes.data.items || [];
-    if (events.length === 0) return false;
-
-    const target = events[0];
-    await axios.delete(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${target.id}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    return target.summary;
-  });
-};
-
-// ★追加: タスク削除
-const deleteTodoByTitle = async (title: string) => {
-  const todosRef = collection(db, "todos");
-  // タイトルが含まれるタスクを探す (簡易的)
-  const q = query(
-    todosRef,
-    where("userId", "==", currentUser.value!.uid),
-    orderBy("createdAt", "desc"),
-  );
-  const snap = await getDocs(q);
-  const target = snap.docs.find((d) => d.data().title.includes(title));
-
-  if (target) {
-    await deleteDoc(doc(db, "todos", target.id));
-    return target.data().title;
-  }
-  return null;
-};
-
-const speakText = (text: string) => {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "ja-JP";
-  utterance.rate = 1.2;
-  utterance.pitch = 1.0;
-  utterance.onstart = () => {
-    isSpeaking.value = true;
-  };
-  utterance.onend = () => {
-    isSpeaking.value = false;
-  };
-  utterance.onerror = () => {
-    isSpeaking.value = false;
-  };
-  window.speechSynthesis.speak(utterance);
-};
-
-// ---------------- Main Composable ----------------
-
-export function useMyBrain() {
-  const checkAndIncrementUsage = async (): Promise<boolean> => {
-    if (!currentUser.value) return false;
-    if (currentUser.value.isPro) return true;
-    const todayStr = new Date().toISOString().split("T")[0];
-    const userRef = doc(db, "users", currentUser.value.uid);
-    const snap = await getDoc(userRef);
-    const data = snap.data();
-    let currentCount = 0;
-    if (data?.lastUsageDate !== todayStr) {
-      currentCount = 0;
-      await updateDoc(userRef, { dailyUsage: 0, lastUsageDate: todayStr });
-    } else {
-      currentCount = data?.dailyUsage || 0;
-    }
-    if (currentCount >= 5) {
-      alert("本日の無料枠（5回）を使い切りました。");
-      return false;
-    }
-    await updateDoc(userRef, {
-      dailyUsage: increment(1),
-      lastUsageDate: todayStr,
-    });
-    return true;
-  };
-
-  const generateTasksFromMemory = async (memoryId: string, text: string) => {
-    if (!currentUser.value) return;
-    try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      const prompt = `以下のメモから「やるべきこと（ToDo）」を抽出しJSONで返して。
-        { "tasks": ["タスク1", "タスク2"] }
-        メモ: ${text}`;
-      const rawText = await generateContentWithRetry(apiKey, [prompt], true);
-      const data = JSON.parse(extractJson(rawText));
-      const tasks: string[] = data.tasks || [];
-      if (tasks.length > 0) {
-        const batch = writeBatch(db);
-        tasks.forEach((taskTitle) => {
-          const newRef = doc(collection(db, "todos"));
-          batch.set(newRef, {
-            userId: currentUser.value!.uid,
-            title: taskTitle,
-            isCompleted: false,
-            sourceMemoryId: memoryId,
-            createdAt: serverTimestamp(),
-          });
-        });
-        await batch.commit();
-      }
-    } catch (e) {
-      console.error("ToDo generation failed:", e);
-    }
-  };
-
-  const addManualTodo = async (title: string) => {
-    if (!currentUser.value || !title.trim()) return;
-    try {
-      await addDoc(collection(db, "todos"), {
-        userId: currentUser.value.uid,
-        title: title,
-        isCompleted: false,
-        sourceMemoryId: null,
-        createdAt: serverTimestamp(),
-      });
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const generateDailyReport = async () => {
-    if (!currentUser.value) return;
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const dateStr = yesterday.toISOString().split("T")[0];
-
-    const q = query(
-      collection(db, "daily_reports"),
-      where("userId", "==", currentUser.value.uid),
-      where("date", "==", dateStr),
-    );
-    const snap = await getDocs(q);
-    if (!snap.empty) return;
-
-    const start = new Date(dateStr);
-    const end = new Date(dateStr);
-    end.setDate(end.getDate() + 1);
-
-    const memQ = query(
-      collection(db, "memories"),
-      where("userId", "==", currentUser.value.uid),
-      where("createdAt", ">=", start),
-      where("createdAt", "<", end),
-    );
-    const memSnap = await getDocs(memQ);
-    const dailyMemories = memSnap.docs
-      .map((d) => d.data().text)
-      .join("\n---\n");
-    if (!dailyMemories) return;
-
-    try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      const prompt = `昨日のメモを元に日刊レポートを作成。出力JSON: { "content": "総括", "highlights": ["要点1"] }\nメモ: ${dailyMemories}`;
-      const rawText = await generateContentWithRetry(apiKey, [prompt], true);
-      const data = JSON.parse(extractJson(rawText));
-
-      await addDoc(collection(db, "daily_reports"), {
-        userId: currentUser.value.uid,
-        date: dateStr,
-        content: data.content,
-        highlights: data.highlights || [],
-        createdAt: serverTimestamp(),
-      });
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const startSubscription = async () => {
-    if (!currentUser.value) return;
-    if (confirm("PROプラン（月額980円）の決済画面へ移動しますか？")) {
-      window.location.href = STRIPE_PAYMENT_LINK;
-    }
-  };
-
-  const fetchMemories = async () => {
-    if (!currentUser.value) return;
-    loading.value = true;
-    try {
-      let q = query(
-        collection(db, "memories"),
-        where("userId", "==", currentUser.value.uid),
-        orderBy("createdAt", "desc"),
-      );
-      const snap = await getDocs(q);
-      memories.value = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() }) as Memory,
-      );
-    } catch (e) {
-      console.error(e);
-    } finally {
-      loading.value = false;
-    }
-  };
-
-  const fetchChatLogs = async () => {
-    if (!currentUser.value) return;
-    const q = query(
-      collection(db, "chat_logs"),
-      where("userId", "==", currentUser.value.uid),
-      orderBy("createdAt", "desc"),
-      limit(50),
-    );
-    const snap = await getDocs(q);
-    chatLogs.value = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as ChatLog)
-      .reverse();
-  };
-
-  const fetchTodos = async () => {
-    if (!currentUser.value) return;
-    const q = query(
-      collection(db, "todos"),
-      where("userId", "==", currentUser.value.uid),
-      orderBy("createdAt", "desc"),
-    );
-    onSnapshot(q, (snap) => {
-      todos.value = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Todo);
-    });
-  };
-
-  const fetchReports = async () => {
-    if (!currentUser.value) return;
-    const q = query(
-      collection(db, "daily_reports"),
-      where("userId", "==", currentUser.value.uid),
-      orderBy("createdAt", "desc"),
-      limit(5),
-    );
-    onSnapshot(q, (snap) => {
-      dailyReports.value = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() }) as DailyReport,
-      );
-    });
-  };
-
-  const initAuth = () => {
-    onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        currentUser.value = {
-          uid: user.uid,
-          email: user.email || "",
-          displayName: user.displayName || undefined,
-          photoURL: user.photoURL || undefined,
-          isPro: false,
-          dailyUsage: 0,
-          isLineLinked: false,
-        };
-        onSnapshot(doc(db, "users", user.uid), (docSnap) => {
-          const data = docSnap.data();
-          if (data && currentUser.value) {
-            const isAdmin = ADMIN_EMAILS.includes(user.email || "");
-            const isSubscribed =
-              !!data.stripeId || data.role === "pro" || isAdmin;
-            currentUser.value = {
-              ...currentUser.value,
-              displayName: data.displayName || currentUser.value.displayName,
-              isPro: isSubscribed,
-              dailyUsage: data.dailyUsage || 0,
-              lastUsageDate: data.lastUsageDate,
-              stripeId: data.stripeId,
-              role: data.role,
-              isLineLinked: data.isLineLinked || false,
-            };
-          }
-        });
-        await Promise.all([
-          fetchMemories(),
-          fetchChatLogs(),
-          fetchTodos(),
-          fetchReports(),
-        ]);
-        generateDailyReport();
-      } else {
-        currentUser.value = null;
-        memories.value = [];
-        chatLogs.value = [];
-        todos.value = [];
-        dailyReports.value = [];
-      }
-    });
-  };
-
-  const logout = async () => {
-    await signOut(auth);
-    localStorage.removeItem("google_calendar_token");
-    window.location.reload();
-  };
-
-  const selectTag = async (tag: string | null) => {
-    activeTag.value = tag;
-  };
-  const filteredMemories = computed(() => {
-    if (!activeTag.value) return memories.value;
-    return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
-  });
-
-  const allTags = computed(() => {
-    const tags = new Set<string>();
-    memories.value.forEach((m) => m.tags?.forEach((t) => tags.add(t)));
-    return Array.from(tags);
-  });
-
-  // ★修正: 最新のメモも強制的に含めて検索する
-  const findRelatedMemories = async (text: string): Promise<Memory[]> => {
-    if (!text.trim() || memories.value.length === 0) return [];
-    try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) return [];
-
-      const embedModel = await getEmbeddingModel(apiKey);
-      const result = await embedModel.embedContent(text);
-      const vec = result.embedding.values;
-
-      const threshold = 0.55;
-
-      // ベクトル検索候補
-      const vecCandidates = memories.value
-        .map((m) => ({
-          ...m,
-          score: m.embedding ? cosineSimilarity(vec, m.embedding) : 0,
-        }))
-        .filter((m) => m.score && m.score > threshold)
-        .sort((a, b) => (b.score || 0) - (a.score || 0))
-        .slice(0, 5);
-
-      // ★追加: 最新5件を強制的に候補に入れる (文脈理解用)
-      const latestMemories = memories.value
-        .slice(0, 5)
-        .map((m) => ({ ...m, score: 1.0 }));
-
-      // ★追加: キーワード検索も併用 (買い物リスト対策)
-      const keywords = text.split(/[\s,、　]+/);
-      const keywordCandidates = memories.value
-        .filter((m) => keywords.some((k) => k.length > 1 && m.text.includes(k)))
-        .slice(0, 3)
-        .map((m) => ({ ...m, score: 0.9 }));
-
-      // 全候補を統合して重複排除
-      const allCandidates = [
-        ...latestMemories,
-        ...vecCandidates,
-        ...keywordCandidates,
-      ];
-      const uniqueCandidates = Array.from(
-        new Map(allCandidates.map((item) => [item.id, item])).values(),
-      );
-
-      if (uniqueCandidates.length === 0) return [];
-
-      const verifyPrompt = `
-        以下の【検索クエリ】に対して、【候補メモ】の中から本当に関連性が高いものだけを選んでください。
-        「買い物リスト」や「タスク」などのキーワードがある場合は、日付が新しくても古くても関連するものを選んでください。
-        全く関係ない場合は空の配列を返してください。
-
-        【検索クエリ】
-        ${text}
-        【候補メモ】
-        ${uniqueCandidates.map((c, i) => `${i} (ID:${c.id}): ${c.text}`).join("\n")}
-        
-        出力はJSON形式のみ: { "indices": [0, 2] } 
-      `;
-
-      const verifyRes = await generateContentWithRetry(
-        apiKey,
-        [{ text: verifyPrompt }],
-        true,
-      );
-      const verifyJson = JSON.parse(extractJson(verifyRes));
-      const validIndices: number[] = verifyJson.indices || [];
-
-      return uniqueCandidates.filter((_, i) => validIndices.includes(i));
-    } catch (e) {
-      console.error("Search Error:", e);
-      return [];
-    }
-  };
-
-  const addMemory = async (text: string, files?: File[] | null) => {
-    if (!(await checkAndIncrementUsage())) return null;
-    isSaving.value = true;
-    try {
-      const hasImages = files && files.length > 0;
-      const docRef = await addDoc(collection(db, "memories"), {
-        userId: currentUser.value!.uid,
-        text: hasImages ? `(解析中...) ${text}` : text,
-        createdAt: serverTimestamp(),
-        tags: [],
-        aiSummary: "保存中...",
-        hasImage: !!hasImages,
-        fileType: hasImages ? "image/jpeg" : null,
-      });
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-
-      let promptParts: any[] = [];
-      if (hasImages) {
-        const imageParts = await Promise.all(
-          files!.map((f) => fileToGenerativePart(f)),
-        );
-        promptParts.push(...imageParts);
-        promptParts.push({
-          text: `画像を分析して。出力JSON:{summary, tags, fullText}`,
-        });
-      } else {
-        promptParts.push({
-          text: `以下のテキストを整理して。${text} 出力JSON:{summary, tags, fullText}`,
-        });
-      }
-
-      const resText = await generateContentWithRetry(apiKey, promptParts, true);
-      const aiData = JSON.parse(extractJson(resText));
-
-      const finalText = hasImages
-        ? `【解析済み】${text}\n\n${aiData.fullText || ""}`
-        : text;
-
-      const embModel = await getEmbeddingModel(apiKey);
-      const embResult = await embModel.embedContent(finalText);
-      const embedding = embResult.embedding.values;
-
-      await updateDoc(docRef, {
-        text: finalText,
-        aiSummary: aiData.summary,
-        tags: aiData.tags,
-        embedding: embedding,
-      });
-
-      memories.value.unshift({
-        id: docRef.id,
-        userId: currentUser.value!.uid,
-        text: finalText,
-        aiSummary: aiData.summary,
-        tags: aiData.tags,
-        createdAt: new Date(),
-        hasImage: !!hasImages,
-        fileType: hasImages ? "image/jpeg" : null,
-        embedding: embedding,
-      });
-      generateTasksFromMemory(docRef.id, finalText);
-      return [];
-    } catch (e) {
-      alert("保存エラー");
-      return null;
-    } finally {
-      isSaving.value = false;
-    }
-  };
-
-  const addUrlMemory = async (url: string) => {
-    if (!(await checkAndIncrementUsage())) return;
-    isSaving.value = true;
-    try {
-      const func = httpsCallable(
-        getFunctions(getApp(), "asia-northeast1"),
-        "scrapeUrl",
-      );
-      const res: any = await func({ url });
-      if (res.data.success) {
-        await addMemory(
-          `【WEB記事】${res.data.title}\nURL: ${url}\n\n${res.data.content}`,
-          null,
-        );
-      }
-    } catch (e: any) {
-      alert("エラー: " + e.message);
-    } finally {
-      isSaving.value = false;
-    }
-  };
-
-  const askBrain = async (
-    question: string,
-    voiceMode: boolean = false,
-  ): Promise<string> => {
-    if (!(await checkAndIncrementUsage())) return "";
-    isAiThinking.value = true;
-    try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("APIキー未設定");
-
-      const embedModel = await getEmbeddingModel(apiKey);
-      const qEmbed = await embedModel.embedContent(question);
-      const qVec = qEmbed.embedding.values;
-
-      const threshold = 0.55;
-
-      // 既存の類似検索
-      const vecCandidates = memories.value
-        .map((m) => ({
-          ...m,
-          score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
-        }))
-        .filter((m) => m.score && m.score > threshold)
-        .sort((a, b) => (b.score || 0) - (a.score || 0))
-        .slice(0, 5);
-
-      // ★追加: 最新5件を必ず含める (文脈理解用)
-      const latestMemories = memories.value
-        .slice(0, 5)
-        .map((m) => ({ ...m, score: 1.0 }));
-
-      // ★追加: キーワード検索も併用 (買い物リスト対策)
-      const keywords = question.split(/[\s,、　]+/);
-      const keywordCandidates = memories.value
-        .filter((m) => keywords.some((k) => k.length > 1 && m.text.includes(k)))
-        .slice(0, 3)
-        .map((m) => ({ ...m, score: 0.9 }));
-
-      // 全候補を統合して重複排除
-      const allCandidates = [
-        ...latestMemories,
-        ...vecCandidates,
-        ...keywordCandidates,
-      ];
-      const uniqueCandidates = Array.from(
-        new Map(allCandidates.map((item) => [item.id, item])).values(),
-      );
-
-      const context = uniqueCandidates
-        .map((m) => `ID:${m.id} | ${m.text.slice(0, 300)}`)
-        .join("\n");
-
-      const calendarEvents = await fetchCalendarEvents();
-      const calendarContext = calendarEvents
-        ? `\n【直近の予定】\n${calendarEvents}\n`
-        : "";
-      const nowStr = new Date().toLocaleString("ja-JP", {
-        timeZone: "Asia/Tokyo",
-      });
-
-      // ★プロンプト強化: アクション分岐を追加
-      const prompt = `
-        あなたはユーザーの「第2の脳」です。現在日時: ${nowStr}
-        ${calendarContext}
-        【参照する記憶(ID付き)】
-        ${context}
-        【ユーザー入力】
-        ${question}
-
-        【指示】
-        ユーザーの意図を汲み取り、適切なアクションを選択してください。
-        
-        判断基準:
-        - 【編集・削除】 "メモの〇〇を消して" "〜に変更して" -> MEMORY_EDIT
-             ※この場合、変更後の**全文**を data.newContent に入れてください。
-        - 【メモ追記】 "これ追加して" "買っておいて" -> MEMORY_APPEND
-        - 【タスク削除】 "タスク消して" "完了した" -> TASK_DELETE
-        - 【タスク追加】 "タスク" "ToDo" "〜する" -> TASK_ADD
-        - 【予定削除】 "予定消して" "キャンセル" -> CALENDAR_DELETE
-        - 【予定追加】 日時指定("明日10時"など) -> CALENDAR_ADD
-        - 【メモ保存】 ただの記録 -> MEMORY_ADD
-        - それ以外 -> CHAT
-
-        出力はJSON形式のみ:
-        {
-          "action": "CALENDAR_ADD" | "CALENDAR_DELETE" | "TASK_ADD" | "TASK_DELETE" | "MEMORY_APPEND" | "MEMORY_EDIT" | "MEMORY_ADD" | "CHAT",
-          "data": {
-            "title": "予定/タスク名",
-            "start": "日時(ISO)",
-            "end": "日時(ISO)",
-            "targetId": "対象メモID",
-            "content": "追記内容",
-            "newContent": "編集後のメモ全文",
-            "summary": "メモ要約"
-          },
-          "answer": "ユーザーへの回答テキスト",
-          "mermaid": null,
-          "calendarAction": null
-        }
-      `;
-
-      const text = await generateContentWithRetry(apiKey, [prompt], true);
-      const data = JSON.parse(extractJson(text));
-      let finalAnswer = data.answer;
-
-      // ★アクション実行処理
-      if (
-        data.action === "MEMORY_EDIT" &&
-        data.data.targetId &&
-        data.data.newContent
-      ) {
-        try {
-          const docRef = doc(db, "memories", data.data.targetId);
-          await updateDoc(docRef, { text: data.data.newContent });
-          finalAnswer += `\n\n📝 メモを更新しました`;
-
-          const idx = memories.value.findIndex(
-            (m) => m.id === data.data.targetId,
-          );
-          if (idx !== -1) memories.value[idx].text = data.data.newContent;
-        } catch {
-          finalAnswer += `\n⚠️ 更新失敗`;
-        }
-      } else if (data.action === "MEMORY_APPEND" && data.data.targetId) {
-        try {
-          const docRef = doc(db, "memories", data.data.targetId);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const oldText = docSnap.data().text;
-            const newText = `${oldText}\n(追記) ${data.data.content}`;
-            await updateDoc(docRef, { text: newText });
-            finalAnswer += `\n\n📝 メモに追記しました`;
-            // メモリリスト更新のためリロード
-            const idx = memories.value.findIndex(
-              (m) => m.id === data.data.targetId,
-            );
-            if (idx !== -1) memories.value[idx].text = newText;
-          }
-        } catch {
-          finalAnswer += `\n⚠️ 追記に失敗しました`;
-        }
-      } else if (data.action === "TASK_DELETE") {
-        const deletedTitle = await deleteTodoByTitle(data.data.title);
-        finalAnswer += deletedTitle
-          ? `\n\n✅ タスク削除: ${deletedTitle}`
-          : `\n⚠️ タスクが見つかりませんでした`;
-      } else if (data.action === "CALENDAR_DELETE") {
-        const deletedTitle = await deleteCalendarEvent(data.data.title);
-        finalAnswer += deletedTitle
-          ? `\n\n🗑️ 予定削除: ${deletedTitle}`
-          : `\n⚠️ 予定が見つかりませんでした`;
-      } else if (data.action === "CALENDAR_ADD") {
-        try {
-          await addEventToGoogleCalendar(
-            data.data.title,
-            data.data.start,
-            data.data.end,
-            "9",
-          );
-          finalAnswer += `\n\n✅ 予定を登録しました: ${data.data.title}`;
-        } catch {
-          finalAnswer += `\n⚠️ 予定登録に失敗しました`;
-        }
-      } else if (data.action === "TASK_ADD") {
-        await addManualTodo(data.data.title);
-        finalAnswer += `\n\n✅ タスクに追加しました: ${data.data.title}`;
-      } else if (data.action === "MEMORY_ADD") {
-        await addMemory(data.data.content || question, null);
-        finalAnswer += `\n\n📝 メモしました`;
-      }
-
-      // チャットログ保存
-      const logData = {
-        userId: currentUser.value!.uid,
-        question,
-        answer: finalAnswer,
-        mermaidCode: data.mermaid || null,
-        createdAt: serverTimestamp(),
-        displayAnswer: "",
-        isAnimating: true,
-      };
-      const logRef = await addDoc(collection(db, "chat_logs"), logData);
-      chatLogs.value.push({
-        id: logRef.id,
-        ...logData,
-        createdAt: new Date(),
-        displayAnswer: "",
-        isAnimating: true,
-      } as any);
-
-      if (voiceMode) speakText(finalAnswer);
-      return finalAnswer;
-    } catch (e: any) {
-      return "エラー: " + e.message;
-    } finally {
-      isAiThinking.value = false;
-    }
-  };
-
-  const updateMemory = async (id: string, newText: string) => {
-    await updateDoc(doc(db, "memories", id), { text: newText });
-    const index = memories.value.findIndex((m) => m.id === id);
-    if (index !== -1) {
-      memories.value[index].text = newText;
-    }
-  };
-  const deleteMemory = async (id: string) => {
-    if (confirm("削除?")) {
-      await deleteDoc(doc(db, "memories", id));
-      memories.value = memories.value.filter((m) => m.id !== id);
-    }
-  };
-  const deleteChatLog = async (id: string) => {
-    await deleteDoc(doc(db, "chat_logs", id));
-    chatLogs.value = chatLogs.value.filter((l) => l.id !== id);
-  };
-  const toggleTodo = async (id: string, currentStatus: boolean) => {
-    await updateDoc(doc(db, "todos", id), { isCompleted: !currentStatus });
-  };
-  const deleteTodo = async (id: string) => {
-    await deleteDoc(doc(db, "todos", id));
-  };
-
-  const startLineAuth = () => {
-    const channelId = import.meta.env.VITE_LINE_LOGIN_CHANNEL_ID;
-    const redirectUri = window.location.origin + "/app";
-    const state = Math.random().toString(36).substring(7);
-
-    if (!channelId) {
-      alert("LINEチャネルIDが設定されていません(.envを確認)");
-      return;
-    }
-
-    const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${channelId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=profile%20openid`;
-    window.location.href = url;
-  };
-
-  const unlinkLine = async () => {
-    if (!confirm("LINE連携を解除しますか？")) return;
-    loading.value = true;
-    try {
-      const functions = getFunctions(getApp(), "asia-northeast1");
-      const unlinkFunc = httpsCallable(functions, "unlinkLineAccount");
-      await unlinkFunc();
-
-      if (currentUser.value) {
-        currentUser.value.isLineLinked = false;
-      }
-      alert("解除しました");
-    } catch (e: any) {
-      console.error(e);
-      alert("解除に失敗しました");
-    } finally {
-      loading.value = false;
-    }
-  };
-
-  return {
-    currentUser,
-    memories,
-    filteredMemories,
-    chatLogs,
-    todos,
-    dailyReports,
-    loading,
-    isAiThinking,
-    isSaving,
-    isSpeaking,
-    activeTag,
-    allTags,
-    isCalendarConnected,
-    initAuth,
-    logout,
-    addMemory,
-    addUrlMemory,
-    askBrain,
-    selectTag,
-    startSubscription,
-    updateMemory,
-    deleteMemory,
-    deleteChatLog,
-    findRelatedMemories,
-    toggleTodo,
-    deleteTodo,
-    speakText,
-    addManualTodo,
-    callGoogleApi,
-    reconnectCalendar,
-    startLineAuth,
-    unlinkLine,
-  };
-}
 </file>
 
 <file path="src/views/HomeView/HomeView.vue">
@@ -7860,69 +7142,1188 @@ const haptic = () => {
 </template>
 </file>
 
+<file path="src/composables/useMyBrain.ts">
+import { ref, computed } from "vue";
+import { db, auth } from "@/firebase";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  limit,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  updateDoc,
+  setDoc,
+  orderBy,
+  serverTimestamp,
+  where,
+  onSnapshot,
+  increment,
+  writeBatch,
+} from "firebase/firestore";
+import {
+  onAuthStateChanged,
+  signOut,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from "firebase/auth";
+import { getApp } from "firebase/app";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import axios from "axios";
+import type { Memory, ChatLog, User, Todo, DailyReport } from "@/types";
+
+const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/6oU28r4Hi71dglzd1z6AM00";
+const ADMIN_EMAILS = ["gongedonghuam@gmail.com"];
+
+const currentUser = ref<User | null>(null);
+const memories = ref<Memory[]>([]);
+const chatLogs = ref<ChatLog[]>([]);
+const todos = ref<Todo[]>([]);
+const dailyReports = ref<DailyReport[]>([]);
+const loading = ref(false);
+const isAiThinking = ref(false);
+const isSaving = ref(false);
+const isSpeaking = ref(false);
+const activeTag = ref<string | null>(null);
+const isCalendarConnected = ref(true);
+
+const lastReferencedMemoryId = ref<string | null>(
+  localStorage.getItem("last_memory_id"),
+);
+
+const setLastMemoryId = (id: string | null) => {
+  if (id) {
+    const clean = id.replace(/<<<|>>>|ID:/gi, "").trim();
+    lastReferencedMemoryId.value = clean;
+    localStorage.setItem("last_memory_id", clean);
+  } else {
+    lastReferencedMemoryId.value = null;
+    localStorage.removeItem("last_memory_id");
+  }
+};
+
+// ---------------- Helper Functions ----------------
+
+function cleanId(id: string): string {
+  if (!id || typeof id !== "string") return "";
+  return id.replace(/<<<|>>>|ID:/gi, "").trim();
+}
+
+function cleanAiReply(text: string): string {
+  return text
+    .replace(/📝 メモを更新しました/g, "")
+    .replace(/📝 メモに追記しました/g, "")
+    .replace(/📝 メモしました/g, "")
+    .replace(/✅ .*しました/g, "")
+    .replace(/⚠️ .*失敗しました/g, "")
+    .trim();
+}
+
+// ★追加: 日時文字列を強制的にGoogleカレンダー用に整形する関数
+function formatIsoDate(dateStr: string): string {
+  if (!dateStr) return "";
+  // すでに+09:00やZがついているならそのまま
+  if (dateStr.includes("+") || dateStr.endsWith("Z")) return dateStr;
+
+  // 秒がない場合 (YYYY-MM-DDTHH:mm) -> 秒を追加
+  if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
+    return `${dateStr}:00+09:00`;
+  }
+  // 秒がある場合 (YYYY-MM-DDTHH:mm:ss) -> タイムゾーンを追加
+  if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)) {
+    return `${dateStr}+09:00`;
+  }
+  // それ以外でもとりあえずタイムゾーンをつける
+  return `${dateStr}+09:00`;
+}
+
+const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
+  let token = localStorage.getItem("google_calendar_token");
+  if (!token) {
+    isCalendarConnected.value = false;
+    return null;
+  }
+  try {
+    const res = await callback(token);
+    isCalendarConnected.value = true;
+    return res;
+  } catch (e: any) {
+    // ★修正: 401エラー（トークン切れ）なら強制ログアウトしてログイン画面へ
+    if (e.response && e.response.status === 401) {
+      console.warn("Calendar token expired. Redirecting to login...");
+      localStorage.removeItem("google_calendar_token");
+      isCalendarConnected.value = false;
+
+      await signOut(auth);
+      // リロードして強制的にログイン画面へ飛ばす
+      window.location.href = "/login";
+      return null;
+    }
+    throw e;
+  }
+};
+
+const reconnectCalendar = async () => {
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.addScope("https://www.googleapis.com/auth/calendar");
+    provider.setCustomParameters({
+      prompt: "select_account consent",
+      access_type: "offline",
+    });
+
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const token = credential?.accessToken;
+
+    if (token) {
+      localStorage.setItem("google_calendar_token", token);
+      isCalendarConnected.value = true;
+      alert("カレンダーを再接続しました！");
+      window.location.reload();
+    }
+  } catch (e: any) {
+    console.error("Reconnect Error:", e);
+    alert("再接続に失敗しました: " + e.message);
+  }
+};
+
+const fileToGenerativePart = async (file: File) => {
+  return new Promise<{ inlineData: { data: string; mimeType: string } }>(
+    (resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = (reader.result as string).split(",")[1];
+        resolve({ inlineData: { data: base64String, mimeType: file.type } });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    },
+  );
+};
+
+const cosineSimilarity = (vecA: number[], vecB: number[]) => {
+  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+};
+
+function extractJson(text: string): string {
+  let clean = text
+    .replace(/```json/g, "")
+    .replace(/```/g, "")
+    .trim();
+  const firstOpen = clean.indexOf("{");
+  const lastClose = clean.lastIndexOf("}");
+  if (firstOpen !== -1 && lastClose !== -1) {
+    return clean.substring(firstOpen, lastClose + 1);
+  }
+  return clean;
+}
+
+// ---------------------------------------------------------
+// Helper: AI Model Management
+// ---------------------------------------------------------
+
+const fetchAvailableModels = async (apiKey: string) => {
+  try {
+    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const listResponse = await fetch(listUrl);
+    if (!listResponse.ok) return [];
+    const listData = await listResponse.json();
+    return listData.models || [];
+  } catch (e) {
+    console.warn("Failed to fetch model list:", e);
+    return [];
+  }
+};
+
+const resolveGeminiModel = async (apiKey: string): Promise<string> => {
+  const models = await fetchAvailableModels(apiKey);
+  const generationModels = models.filter((m: any) =>
+    m.supportedGenerationMethods?.includes("generateContent"),
+  );
+  let target = generationModels.find((m: any) =>
+    m.name.includes("gemini-1.5-flash"),
+  );
+  if (!target) {
+    target = generationModels.find((m: any) =>
+      m.name.includes("gemini-1.5-pro"),
+    );
+  }
+  if (!target && generationModels.length > 0) {
+    target = generationModels[0];
+  }
+  if (target) {
+    return target.name.replace("models/", "");
+  }
+  return "gemini-1.5-flash";
+};
+
+const getEmbeddingModel = async (apiKey: string) => {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  try {
+    const models = await fetchAvailableModels(apiKey);
+    const embeddingModels = models.filter((m: any) =>
+      m.supportedGenerationMethods?.includes("embedContent"),
+    );
+    let target = embeddingModels.find((m: any) =>
+      m.name.includes("text-embedding-004"),
+    );
+    if (!target) {
+      target = embeddingModels.find((m: any) =>
+        m.name.includes("embedding-001"),
+      );
+    }
+    if (!target && embeddingModels.length > 0) {
+      target = embeddingModels[0];
+    }
+    const modelName = target
+      ? target.name.replace("models/", "")
+      : "embedding-001";
+    return genAI.getGenerativeModel({ model: modelName });
+  } catch (e) {
+    return genAI.getGenerativeModel({ model: "embedding-001" });
+  }
+};
+
+const generateContentWithRetry = async (
+  apiKey: string,
+  promptParts: any[],
+  isJsonMode = false,
+) => {
+  try {
+    const modelName = await resolveGeminiModel(apiKey);
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const config = isJsonMode ? { responseMimeType: "application/json" } : {};
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: config,
+    });
+    const result = await model.generateContent(promptParts);
+    return result.response.text();
+  } catch (e: any) {
+    console.error("AI Generation Error (Primary):", e);
+    try {
+      console.log("Retrying with gemini-pro...");
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      const result = await model.generateContent(promptParts);
+      return result.response.text();
+    } catch (retryError: any) {
+      throw new Error("AI processing failed completely: " + retryError.message);
+    }
+  }
+};
+
+const fetchCalendarEvents = async () => {
+  return await callGoogleApi(async (token) => {
+    const now = new Date().toISOString();
+    const response = await axios.get(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${now}&maxResults=10&orderBy=startTime&singleEvents=true`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const events = response.data.items || [];
+    if (events.length === 0) return "直近の予定はありません。";
+    return events
+      .map((ev: any) => {
+        const start = ev.start.dateTime || ev.start.date;
+        const summary = ev.summary || "(タイトルなし)";
+        return `- ${start}: ${summary}`;
+      })
+      .join("\n");
+  });
+};
+
+// ★修正: 日時フォーマット処理を適用
+const addEventToGoogleCalendar = async (
+  title: string,
+  startDateTime: string,
+  endDateTime: string,
+  colorId?: string,
+) => {
+  // ISO形式 + タイムゾーン (+09:00) にここで強制変換
+  const finalStart = formatIsoDate(startDateTime);
+  const finalEnd = formatIsoDate(endDateTime);
+
+  await callGoogleApi(async (token) => {
+    const event = {
+      summary: title,
+      start: { dateTime: finalStart },
+      end: { dateTime: finalEnd },
+      colorId: colorId || "9",
+    };
+    await axios.post(
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+      event,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  });
+};
+
+const deleteCalendarEvent = async (query: string) => {
+  return await callGoogleApi(async (token) => {
+    const searchRes = await axios.get(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { q: query, maxResults: 5, singleEvents: true },
+      },
+    );
+    const events = searchRes.data.items || [];
+    if (events.length === 0) return false;
+
+    const target = events[0];
+    await axios.delete(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${target.id}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    return target.summary;
+  });
+};
+
+const deleteTodoByTitle = async (title: string) => {
+  const todosRef = collection(db, "todos");
+  const q = query(
+    todosRef,
+    where("userId", "==", currentUser.value!.uid),
+    orderBy("createdAt", "desc"),
+  );
+  const snap = await getDocs(q);
+  const target = snap.docs.find((d) => d.data().title.includes(title));
+
+  if (target) {
+    await deleteDoc(doc(db, "todos", target.id));
+    return target.data().title;
+  }
+  return null;
+};
+
+const speakText = (text: string) => {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "ja-JP";
+  utterance.rate = 1.2;
+  utterance.pitch = 1.0;
+  utterance.onstart = () => {
+    isSpeaking.value = true;
+  };
+  utterance.onend = () => {
+    isSpeaking.value = false;
+  };
+  utterance.onerror = () => {
+    isSpeaking.value = false;
+  };
+  window.speechSynthesis.speak(utterance);
+};
+
+// ---------------- Main Composable ----------------
+
+export function useMyBrain() {
+  const checkAndIncrementUsage = async (): Promise<boolean> => {
+    if (!currentUser.value) return false;
+    if (currentUser.value.isPro) return true;
+    const todayStr = new Date().toISOString().split("T")[0];
+    const userRef = doc(db, "users", currentUser.value.uid);
+    const snap = await getDoc(userRef);
+    const data = snap.data();
+    let currentCount = 0;
+    if (data?.lastUsageDate !== todayStr) {
+      currentCount = 0;
+      await updateDoc(userRef, { dailyUsage: 0, lastUsageDate: todayStr });
+    } else {
+      currentCount = data?.dailyUsage || 0;
+    }
+    if (currentCount >= 5) {
+      alert("本日の無料枠（5回）を使い切りました。");
+      return false;
+    }
+    await updateDoc(userRef, {
+      dailyUsage: increment(1),
+      lastUsageDate: todayStr,
+    });
+    return true;
+  };
+
+  const generateTasksFromMemory = async (memoryId: string, text: string) => {
+    if (!currentUser.value) return;
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const prompt = `以下のメモから「やるべきこと（ToDo）」を抽出しJSONで返して。
+        { "tasks": ["タスク1", "タスク2"] }
+        メモ: ${text}`;
+      const rawText = await generateContentWithRetry(apiKey, [prompt], true);
+      const data = JSON.parse(extractJson(rawText));
+      const tasks: string[] = data.tasks || [];
+      if (tasks.length > 0) {
+        const batch = writeBatch(db);
+        tasks.forEach((taskTitle) => {
+          const newRef = doc(collection(db, "todos"));
+          batch.set(newRef, {
+            userId: currentUser.value!.uid,
+            title: taskTitle,
+            isCompleted: false,
+            sourceMemoryId: memoryId,
+            createdAt: serverTimestamp(),
+          });
+        });
+        await batch.commit();
+      }
+    } catch (e) {
+      console.error("ToDo generation failed:", e);
+    }
+  };
+
+  const addManualTodo = async (title: string) => {
+    if (!currentUser.value || !title.trim()) return;
+    try {
+      await addDoc(collection(db, "todos"), {
+        userId: currentUser.value.uid,
+        title: title,
+        isCompleted: false,
+        sourceMemoryId: null,
+        createdAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const generateDailyReport = async () => {
+    if (!currentUser.value) return;
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dateStr = yesterday.toISOString().split("T")[0];
+
+    const q = query(
+      collection(db, "daily_reports"),
+      where("userId", "==", currentUser.value.uid),
+      where("date", "==", dateStr),
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) return;
+
+    const start = new Date(dateStr);
+    const end = new Date(dateStr);
+    end.setDate(end.getDate() + 1);
+
+    const memQ = query(
+      collection(db, "memories"),
+      where("userId", "==", currentUser.value.uid),
+      where("createdAt", ">=", start),
+      where("createdAt", "<", end),
+    );
+    const memSnap = await getDocs(memQ);
+    const dailyMemories = memSnap.docs
+      .map((d) => d.data().text)
+      .join("\n---\n");
+    if (!dailyMemories) return;
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const prompt = `昨日のメモを元に日刊レポートを作成。出力JSON: { "content": "総括", "highlights": ["要点1"] }\nメモ: ${dailyMemories}`;
+      const rawText = await generateContentWithRetry(apiKey, [prompt], true);
+      const data = JSON.parse(extractJson(rawText));
+
+      await addDoc(collection(db, "daily_reports"), {
+        userId: currentUser.value.uid,
+        date: dateStr,
+        content: data.content,
+        highlights: data.highlights || [],
+        createdAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const startSubscription = async () => {
+    if (!currentUser.value) return;
+    if (confirm("PROプラン（月額980円）の決済画面へ移動しますか？")) {
+      window.location.href = STRIPE_PAYMENT_LINK;
+    }
+  };
+
+  const fetchMemories = async () => {
+    if (!currentUser.value) return;
+    loading.value = true;
+    try {
+      let q = query(
+        collection(db, "memories"),
+        where("userId", "==", currentUser.value.uid),
+        orderBy("createdAt", "desc"),
+      );
+      const snap = await getDocs(q);
+      memories.value = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as Memory,
+      );
+    } catch (e) {
+      console.error(e);
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const fetchChatLogs = async () => {
+    if (!currentUser.value) return;
+    const q = query(
+      collection(db, "chat_logs"),
+      where("userId", "==", currentUser.value.uid),
+      orderBy("createdAt", "desc"),
+      limit(50),
+    );
+    const snap = await getDocs(q);
+    chatLogs.value = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as ChatLog)
+      .reverse();
+  };
+
+  const fetchTodos = async () => {
+    if (!currentUser.value) return;
+    const q = query(
+      collection(db, "todos"),
+      where("userId", "==", currentUser.value.uid),
+      orderBy("createdAt", "desc"),
+    );
+    onSnapshot(q, (snap) => {
+      todos.value = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Todo);
+    });
+  };
+
+  const fetchReports = async () => {
+    if (!currentUser.value) return;
+    const q = query(
+      collection(db, "daily_reports"),
+      where("userId", "==", currentUser.value.uid),
+      orderBy("createdAt", "desc"),
+      limit(5),
+    );
+    onSnapshot(q, (snap) => {
+      dailyReports.value = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as DailyReport,
+      );
+    });
+  };
+
+  const initAuth = () => {
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        currentUser.value = {
+          uid: user.uid,
+          email: user.email || "",
+          displayName: user.displayName || undefined,
+          photoURL: user.photoURL || undefined,
+          isPro: false,
+          dailyUsage: 0,
+          isLineLinked: false,
+        };
+        onSnapshot(doc(db, "users", user.uid), (docSnap) => {
+          const data = docSnap.data();
+          if (data && currentUser.value) {
+            const isAdmin = ADMIN_EMAILS.includes(user.email || "");
+            const isSubscribed =
+              !!data.stripeId || data.role === "pro" || isAdmin;
+            currentUser.value = {
+              ...currentUser.value,
+              displayName: data.displayName || currentUser.value.displayName,
+              isPro: isSubscribed,
+              dailyUsage: data.dailyUsage || 0,
+              lastUsageDate: data.lastUsageDate,
+              stripeId: data.stripeId,
+              role: data.role,
+              isLineLinked: data.isLineLinked || false,
+            };
+          }
+        });
+        await Promise.all([
+          fetchMemories(),
+          fetchChatLogs(),
+          fetchTodos(),
+          fetchReports(),
+        ]);
+        generateDailyReport();
+      } else {
+        currentUser.value = null;
+        memories.value = [];
+        chatLogs.value = [];
+        todos.value = [];
+        dailyReports.value = [];
+        localStorage.removeItem("last_memory_id");
+        lastReferencedMemoryId.value = null;
+      }
+    });
+  };
+
+  const logout = async () => {
+    await signOut(auth);
+    localStorage.removeItem("google_calendar_token");
+    localStorage.removeItem("last_memory_id");
+    window.location.reload();
+  };
+
+  const selectTag = async (tag: string | null) => {
+    activeTag.value = tag;
+  };
+  const filteredMemories = computed(() => {
+    if (!activeTag.value) return memories.value;
+    return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
+  });
+
+  const allTags = computed(() => {
+    const tags = new Set<string>();
+    memories.value.forEach((m) => m.tags?.forEach((t) => tags.add(t)));
+    return Array.from(tags);
+  });
+
+  const findRelatedMemories = async (text: string): Promise<Memory[]> => {
+    if (!text.trim() || memories.value.length === 0) return [];
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) return [];
+
+      const embedModel = await getEmbeddingModel(apiKey);
+      const result = await embedModel.embedContent(text);
+      const vec = result.embedding.values;
+
+      const threshold = 0.55;
+
+      const vecCandidates = memories.value
+        .map((m) => ({
+          ...m,
+          score: m.embedding ? cosineSimilarity(vec, m.embedding) : 0,
+        }))
+        .filter((m) => m.score && m.score > threshold)
+        .sort((a, b) => (b.score || 0) - (a.score || 0))
+        .slice(0, 5);
+
+      const latestMemories = memories.value
+        .slice(0, 5)
+        .map((m) => ({ ...m, score: 1.0 }));
+
+      const keywords = text.split(/[\s,、　]+/);
+      const keywordCandidates = memories.value
+        .filter((m) => keywords.some((k) => k.length > 1 && m.text.includes(k)))
+        .slice(0, 3)
+        .map((m) => ({ ...m, score: 0.9 }));
+
+      const allCandidates = [
+        ...latestMemories,
+        ...vecCandidates,
+        ...keywordCandidates,
+      ];
+      const uniqueCandidates = Array.from(
+        new Map(allCandidates.map((item) => [item.id, item])).values(),
+      );
+
+      if (uniqueCandidates.length === 0) return [];
+
+      const verifyPrompt = `
+        以下の【検索クエリ】に対して、【候補メモ】の中から本当に関連性が高いものだけを選んでください。
+        「買い物リスト」や「タスク」などのキーワードがある場合は、日付が新しくても古くても関連するものを選んでください。
+        全く関係ない場合は空の配列を返してください。
+
+        【検索クエリ】
+        ${text}
+        【候補メモ】
+        ${uniqueCandidates.map((c, i) => `${i} (ID:${c.id}): ${c.text}`).join("\n")}
+        
+        出力はJSON形式のみ: { "indices": [0, 2] } 
+      `;
+
+      const verifyRes = await generateContentWithRetry(
+        apiKey,
+        [{ text: verifyPrompt }],
+        true,
+      );
+      const verifyJson = JSON.parse(extractJson(verifyRes));
+      const validIndices: number[] = verifyJson.indices || [];
+
+      return uniqueCandidates.filter((_, i) => validIndices.includes(i));
+    } catch (e) {
+      console.error("Search Error:", e);
+      return [];
+    }
+  };
+
+  const addMemory = async (text: string, files?: File[] | null) => {
+    if (!(await checkAndIncrementUsage())) return null;
+    isSaving.value = true;
+    try {
+      const hasImages = files && files.length > 0;
+      const docRef = await addDoc(collection(db, "memories"), {
+        userId: currentUser.value!.uid,
+        text: hasImages ? `(解析中...) ${text}` : text,
+        createdAt: serverTimestamp(),
+        tags: [],
+        aiSummary: "保存中...",
+        hasImage: !!hasImages,
+        fileType: hasImages ? "image/jpeg" : null,
+      });
+
+      // ★ID記憶
+      setLastMemoryId(docRef.id);
+
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+      let promptParts: any[] = [];
+      if (hasImages) {
+        const imageParts = await Promise.all(
+          files!.map((f) => fileToGenerativePart(f)),
+        );
+        promptParts.push(...imageParts);
+        promptParts.push({
+          text: `画像を分析して。出力JSON:{summary, tags, fullText}`,
+        });
+      } else {
+        promptParts.push({
+          text: `以下のテキストを整理して。${text} 出力JSON:{summary, tags, fullText}`,
+        });
+      }
+
+      const resText = await generateContentWithRetry(apiKey, promptParts, true);
+      const aiData = JSON.parse(extractJson(resText));
+
+      const finalText = hasImages
+        ? `【解析済み】${text}\n\n${aiData.fullText || ""}`
+        : text;
+
+      const embModel = await getEmbeddingModel(apiKey);
+      const embResult = await embModel.embedContent(finalText);
+      const embedding = embResult.embedding.values;
+
+      await updateDoc(docRef, {
+        text: finalText,
+        aiSummary: aiData.summary,
+        tags: aiData.tags,
+        embedding: embedding,
+      });
+
+      memories.value.unshift({
+        id: docRef.id,
+        userId: currentUser.value!.uid,
+        text: finalText,
+        aiSummary: aiData.summary,
+        tags: aiData.tags,
+        createdAt: new Date(),
+        hasImage: !!hasImages,
+        fileType: hasImages ? "image/jpeg" : null,
+        embedding: embedding,
+      });
+      generateTasksFromMemory(docRef.id, finalText);
+      return [];
+    } catch (e) {
+      alert("保存エラー");
+      return null;
+    } finally {
+      isSaving.value = false;
+    }
+  };
+
+  const addUrlMemory = async (url: string) => {
+    if (!(await checkAndIncrementUsage())) return;
+    isSaving.value = true;
+    try {
+      const func = httpsCallable(
+        getFunctions(getApp(), "asia-northeast1"),
+        "scrapeUrl",
+      );
+      const res: any = await func({ url });
+      if (res.data.success) {
+        await addMemory(
+          `【WEB記事】${res.data.title}\nURL: ${url}\n\n${res.data.content}`,
+          null,
+        );
+      }
+    } catch (e: any) {
+      alert("エラー: " + e.message);
+    } finally {
+      isSaving.value = false;
+    }
+  };
+
+  const askBrain = async (
+    question: string,
+    voiceMode: boolean = false,
+  ): Promise<string> => {
+    if (!(await checkAndIncrementUsage())) return "";
+    isAiThinking.value = true;
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error("APIキー未設定");
+
+      const embedModel = await getEmbeddingModel(apiKey);
+      const qEmbed = await embedModel.embedContent(question);
+      const qVec = qEmbed.embedding.values;
+
+      const threshold = 0.55;
+
+      const vecCandidates = memories.value
+        .map((m) => ({
+          ...m,
+          score: m.embedding ? cosineSimilarity(qVec, m.embedding) : 0,
+        }))
+        .filter((m) => m.score && m.score > threshold)
+        .sort((a, b) => (b.score || 0) - (a.score || 0))
+        .slice(0, 5);
+
+      const latestMemories = memories.value
+        .slice(0, 5)
+        .map((m) => ({ ...m, score: 1.0 }));
+
+      const keywords = question.split(/[\s,、　]+/);
+      const keywordCandidates = memories.value
+        .filter((m) => keywords.some((k) => k.length > 1 && m.text.includes(k)))
+        .slice(0, 3)
+        .map((m) => ({ ...m, score: 0.9 }));
+
+      const allCandidates = [
+        ...latestMemories,
+        ...vecCandidates,
+        ...keywordCandidates,
+      ];
+      const uniqueCandidates = Array.from(
+        new Map(allCandidates.map((item) => [item.id, item])).values(),
+      );
+
+      const context = uniqueCandidates
+        .map((m) => `ID:${m.id} | ${m.text.slice(0, 300)}`)
+        .join("\n");
+
+      const recentHistory = chatLogs.value
+        .slice(-5)
+        .map((log) => `User: ${log.question}\nAI: ${log.answer}`)
+        .join("\n---\n");
+
+      const calendarEvents = await fetchCalendarEvents();
+      const calendarContext = calendarEvents
+        ? `\n【直近の予定】\n${calendarEvents}\n`
+        : "";
+      const nowStr = new Date().toLocaleString("ja-JP", {
+        timeZone: "Asia/Tokyo",
+      });
+
+      const prompt = `
+        あなたはユーザーの「第2の脳」です。現在日時: ${nowStr}
+        ${calendarContext}
+        
+        【直近の会話履歴】
+        ${recentHistory}
+
+        【参照する記憶(ID付き)】
+        ${context}
+        
+        【直前に触ったメモID】: ${lastReferencedMemoryId.value ? `<<<${lastReferencedMemoryId.value}>>>` : "なし"}
+
+        【ユーザー入力】
+        ${question}
+
+        【指示】
+        ユーザーの意図を汲み取り、適切なアクションを選択してください。
+        「これ」「あれ」「さっきの」といった指示語がある場合、「直前に触ったメモID」を優先して対象にしてください。
+        
+        ★重要:
+        - 予定を追加する場合 (CALENDAR_ADD)、日時は必ず **ISO 8601形式 (YYYY-MM-DDTHH:mm:ss+09:00)** で出力してください。
+        - ユーザーが「明日10時」と言ったら、現在日時から計算した正確な日時（タイムゾーン+09:00付）を入れてください。
+        
+        判断基準:
+        - 【編集・削除】 "メモの〇〇を消して" "〜に変更して" -> MEMORY_EDIT
+        - 【メモ追記】 "これ追加して" "買っておいて" -> MEMORY_APPEND
+        - 【タスク削除】 "タスク消して" "完了した" -> TASK_DELETE
+        - 【タスク追加】 "タスク" "ToDo" "〜する" -> TASK_ADD
+        - 【予定削除】 "予定消して" "キャンセル" -> CALENDAR_DELETE
+        - 【予定追加】 日時指定("明日10時"など) -> CALENDAR_ADD
+        - 【メモ保存】 ただの記録 -> MEMORY_ADD
+        - それ以外 -> CHAT (メモを参照した場合は targetId を入れること)
+
+        出力はJSON形式のみ:
+        {
+          "action": "CALENDAR_ADD" | "CALENDAR_DELETE" | "TASK_ADD" | "TASK_DELETE" | "MEMORY_APPEND" | "MEMORY_EDIT" | "MEMORY_ADD" | "CHAT",
+          "data": {
+            "title": "予定/タスク名",
+            "start": "2024-02-01T10:00:00+09:00", 
+            "end": "2024-02-01T11:00:00+09:00",
+            "targetId": "対象メモID",
+            "content": "追記内容",
+            "newContent": "編集後のメモ全文",
+            "summary": "メモ要約"
+          },
+          "answer": "ユーザーへの回答テキスト",
+          "mermaid": null,
+          "calendarAction": null
+        }
+      `;
+
+      const text = await generateContentWithRetry(apiKey, [prompt], true);
+      const data = JSON.parse(extractJson(text));
+
+      // ★AIが勝手にシステム文言を入れないようにクリーニング
+      let finalAnswer = cleanAiReply(data.answer);
+
+      const targetId =
+        cleanId(data.data.targetId) || lastReferencedMemoryId.value;
+
+      if (data.action === "MEMORY_EDIT" && targetId && data.data.newContent) {
+        try {
+          const finalId = cleanId(targetId);
+          const docRef = doc(db, "memories", finalId);
+          await updateDoc(docRef, { text: data.data.newContent });
+          // ★ここで1回だけ追加（重複防止）
+          finalAnswer += `\n\n📝 メモを更新しました`;
+
+          setLastMemoryId(finalId);
+          const idx = memories.value.findIndex((m) => m.id === finalId);
+          if (idx !== -1) memories.value[idx].text = data.data.newContent;
+        } catch {
+          finalAnswer += `\n⚠️ 更新失敗`;
+        }
+      } else if (data.action === "MEMORY_APPEND" && targetId) {
+        try {
+          const finalId = cleanId(targetId);
+          const docRef = doc(db, "memories", finalId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const oldText = docSnap.data().text;
+            const newText = `${oldText}\n(追記) ${data.data.content}`;
+            await updateDoc(docRef, { text: newText });
+            finalAnswer += `\n\n📝 メモに追記しました`;
+            setLastMemoryId(finalId);
+            const idx = memories.value.findIndex((m) => m.id === finalId);
+            if (idx !== -1) memories.value[idx].text = newText;
+          }
+        } catch {
+          finalAnswer += `\n⚠️ 追記に失敗しました`;
+        }
+      } else if (data.action === "TASK_DELETE") {
+        const deletedTitle = await deleteTodoByTitle(data.data.title);
+        finalAnswer += deletedTitle
+          ? `\n\n✅ タスク削除: ${deletedTitle}`
+          : `\n⚠️ タスクが見つかりませんでした`;
+      } else if (data.action === "CALENDAR_DELETE") {
+        const deletedTitle = await deleteCalendarEvent(data.data.title);
+        finalAnswer += deletedTitle
+          ? `\n\n🗑️ 予定削除: ${deletedTitle}`
+          : `\n⚠️ 予定が見つかりませんでした`;
+      } else if (data.action === "CALENDAR_ADD") {
+        try {
+          await addEventToGoogleCalendar(
+            data.data.title,
+            data.data.start,
+            data.data.end,
+            "9",
+          );
+          finalAnswer += `\n\n✅ 予定を登録しました: ${data.data.title}`;
+        } catch {
+          finalAnswer += `\n⚠️ 予定登録に失敗しました`;
+        }
+      } else if (data.action === "TASK_ADD") {
+        await addManualTodo(data.data.title);
+        finalAnswer += `\n\n✅ タスクに追加しました: ${data.data.title}`;
+      } else if (data.action === "MEMORY_ADD") {
+        await addMemory(data.data.content || question, null);
+        finalAnswer += `\n\n📝 メモしました`;
+      } else if (data.action === "CHAT" && targetId) {
+        setLastMemoryId(cleanId(targetId));
+      }
+
+      // チャットログ保存
+      const logData = {
+        userId: currentUser.value!.uid,
+        question,
+        answer: finalAnswer,
+        mermaidCode: data.mermaid || null,
+        createdAt: serverTimestamp(),
+        displayAnswer: "",
+        isAnimating: true,
+      };
+      const logRef = await addDoc(collection(db, "chat_logs"), logData);
+      chatLogs.value.push({
+        id: logRef.id,
+        ...logData,
+        createdAt: new Date(),
+        displayAnswer: "",
+        isAnimating: true,
+      } as any);
+
+      if (voiceMode) speakText(finalAnswer);
+      return finalAnswer;
+    } catch (e: any) {
+      return "エラー: " + e.message;
+    } finally {
+      isAiThinking.value = false;
+    }
+  };
+
+  const updateMemory = async (id: string, newText: string) => {
+    await updateDoc(doc(db, "memories", id), { text: newText });
+    setLastMemoryId(id); // 手動更新時も記憶
+    const index = memories.value.findIndex((m) => m.id === id);
+    if (index !== -1) {
+      memories.value[index].text = newText;
+    }
+  };
+  const deleteMemory = async (id: string) => {
+    if (confirm("削除?")) {
+      await deleteDoc(doc(db, "memories", id));
+      if (lastReferencedMemoryId.value === id) setLastMemoryId(null); // 記憶消去
+      memories.value = memories.value.filter((m) => m.id !== id);
+    }
+  };
+  const deleteChatLog = async (id: string) => {
+    await deleteDoc(doc(db, "chat_logs", id));
+    chatLogs.value = chatLogs.value.filter((l) => l.id !== id);
+  };
+  const toggleTodo = async (id: string, currentStatus: boolean) => {
+    await updateDoc(doc(db, "todos", id), { isCompleted: !currentStatus });
+  };
+  const deleteTodo = async (id: string) => {
+    await deleteDoc(doc(db, "todos", id));
+  };
+
+  const startLineAuth = () => {
+    const channelId = import.meta.env.VITE_LINE_LOGIN_CHANNEL_ID;
+    const redirectUri = window.location.origin + "/app";
+    const state = Math.random().toString(36).substring(7);
+
+    if (!channelId) {
+      alert("LINEチャネルIDが設定されていません(.envを確認)");
+      return;
+    }
+
+    const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${channelId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=profile%20openid`;
+    window.location.href = url;
+  };
+
+  const unlinkLine = async () => {
+    if (!confirm("LINE連携を解除しますか？")) return;
+    loading.value = true;
+    try {
+      const functions = getFunctions(getApp(), "asia-northeast1");
+      const unlinkFunc = httpsCallable(functions, "unlinkLineAccount");
+      await unlinkFunc();
+
+      if (currentUser.value) {
+        currentUser.value.isLineLinked = false;
+      }
+      alert("解除しました");
+    } catch (e: any) {
+      console.error(e);
+      alert("解除に失敗しました");
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  return {
+    currentUser,
+    memories,
+    filteredMemories,
+    chatLogs,
+    todos,
+    dailyReports,
+    loading,
+    isAiThinking,
+    isSaving,
+    isSpeaking,
+    activeTag,
+    allTags,
+    isCalendarConnected,
+    initAuth,
+    logout,
+    addMemory,
+    addUrlMemory,
+    askBrain,
+    selectTag,
+    startSubscription,
+    updateMemory,
+    deleteMemory,
+    deleteChatLog,
+    findRelatedMemories,
+    toggleTodo,
+    deleteTodo,
+    speakText,
+    addManualTodo,
+    callGoogleApi,
+    reconnectCalendar,
+    startLineAuth,
+    unlinkLine,
+  };
+}
+</file>
+
 <file path=".firebase/hosting.ZGlzdA.cache">
-sw.js,1769779624787,51d655e7d844b23b4a64b51dd5ddb2bcc9c25362d81528cff60b201175ad253e
-registerSW.js,1769779624062,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-index.html,1769779624062,e9730d83ba30adb2d4952aa4550b7ce5ffb57c1c692aea37f249ac73fdacc6b4
-workbox-8c29f6e4.js,1769779624787,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-firebase-messaging-sw.js,1769779623606,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-lp.html,1769779623608,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/stateDiagram-v2-4FDKWEC3-C8cnV7JN.js,1769779624061,c0f8a5f61c4b7dd5a1ccee67dbcc057a46d9461bc4f5c80855cb8449926b5e16
-assets/stateDiagram-FKZM4ZOC-CTZNdbiw.js,1769779624061,75818253de127fee9a4b2cebaf930662c3277cef931953ee6a85589dbaa1b6f7
-manifest.webmanifest,1769779624062,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-assets/timeline-definition-IT6M3QCI-BMrhgRry.js,1769779624062,78719689f2d67f5b69494eb11cc260c2bd7238c76d426a5e93c27db9ace2d1ea
-assets/sankeyDiagram-TZEHDZUN-Bk37oe0I.js,1769779624062,c83d473f680cc53c13404776cb423ef200e0923eea5ffd41a6fd43e5902ff7b9
-assets/pieDiagram-ADFJNKIX-BzPi4ZaQ.js,1769779624062,d57a09473392b9f1bb1c064b99167f0cde51101c1ba7ce83a991cd8203eb7e83
-assets/ordinal-Cboi1Yqb.js,1769779624062,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/min-DjLXBtw1.js,1769779624062,9785bf37818e4eca21390113971ce14fa06ecbdb0559371066abcecf52daa818
-assets/requirementDiagram-UZGBJVZJ-CUGhuwT3.js,1769779624061,680931fb966172af92e2f09b88e0bac174af6381a58ea4ffe3fca05516f34095
-assets/linear-C2ZTesWu.js,1769779624062,95a09fc41266fec76e9e0a678660feebea86b3f5fcfaca6f4d4db60db0a4a8bb
-assets/xychartDiagram-PRI3JC2R-mNaVXLUX.js,1769779624062,3d66582cd9dfe94faef2e2db191dd7d61284e16e95669d034e1d1d8849bb72e8
-assets/mindmap-definition-VGOIOE7T-BScNXMHq.js,1769779624062,7a6465ebcf464337457dd66f6fec703f16554f845e48132af9ec6c5a8dadca87
-assets/init-Gi6I4Gst.js,1769779624062,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/quadrantDiagram-AYHSOK5B-9CO0fIid.js,1769779624061,742d2b49e916dcb004c8833b92b59ce3ca53c0981be8059a4336caed9da3e7d1
-assets/kanban-definition-3W4ZIXB7-DAWmpbzq.js,1769779624062,22270228a284b7ae5ecda4bb016defb4bdeb0be71be9bc920d149605c1713d40
-assets/infoDiagram-WHAUD3N6-CUNNEsk_.js,1769779624061,98e344940cbe672ed9bdf0493deb1892bbfca02cdbc349f1db5fb3b6e5f1e4ff
-assets/graph-DfzfhSXY.js,1769779624062,51d4267bcab5427f4fe482d3da6b1a96b9ae9cdcc42e3fc44c341d9ba076ede1
-assets/layout-B4E822xn.js,1769779624062,948b0dd3e82c4fa158d1b8f906f59b6b64e27132b782762a8af9929de927e1df
-assets/journeyDiagram-XKPGCS4Q-hFLw3LC5.js,1769779624062,cb6921f81528ad7b7dd8a55ac970129550a9f699920f1b828325d1e68cfbb429
-assets/gitGraphDiagram-NY62KEGX-Dw4xIEg4.js,1769779624061,f4b3b3f46aed8b4d4fa534ff3c477adf424e075699d3ecba19868dcf45fcba4f
-assets/diagram-S2PKOQOG-CI6Y1iJH.js,1769779624062,a8ab0e55576922bc2e52efeb5c9f6c05fc3233ca1c5260f27091649deac9f77f
-assets/diagram-QEK2KX5R-BWWajfIB.js,1769779624062,8659b40c4201b3d4b5d70001efc7a3b1618e4fa6f34a047b75103dfb550383f8
-assets/defaultLocale-DX6XiGOO.js,1769779624062,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/diagram-PSM6KHXK-Dyr9--3c.js,1769779624062,bc70339b91583a0099dff16655356674adca8a47e6b3b6cccabd1c9d0fa0e546
-assets/clone-2DyTmTLu.js,1769779624062,97e471f88f1910e3b478f3cfc22b7b0c13e9272a3f4212536825796bea7ed541
-assets/chunk-QZHKN3VN-CKHzDaTA.js,1769779624062,383ad8707a9442cbd6f7d91e838c4ea6786a520a017ac17f21292dc75255be1d
-assets/classDiagram-v2-WZHVMYZB-CLeniJHB.js,1769779624062,79f74712d296d948ceb6cb7d377c43f6908115e843e6e80a1dab3383e05ffbf5
-assets/chunk-TZMSLE5B-7FVt7Rrz.js,1769779624061,5da4a2b3036cf88436c07bcb985dacb46035e9203e6ec30c5daf80de8043b038
-assets/dagre-6UL2VRFP-DPW7vnUQ.js,1769779624062,048f84fc664c58011dd1a87687f72f2ccdf181f0fa3493901daf9fcab21e48c4
-assets/classDiagram-2ON5EDUG-CLeniJHB.js,1769779624061,79f74712d296d948ceb6cb7d377c43f6908115e843e6e80a1dab3383e05ffbf5
-assets/erDiagram-Q2GNP2WA-CZwP5iJf.js,1769779624061,0102c1ec94ad33cda48c3b0419775ef89d6ad9a4d41f663cfdfbc754883fa418
-assets/index-DkmZYhlE.css,1769779624061,ed6d94fb20a6e23c57a90bbcb097333bdf284a9669b5bc68d05a2372b6de48d7
-assets/flowDiagram-NV44I4VS-DlTtn8eP.js,1769779624058,f8d739be3f3a677fed2b821e55212e31f586fe523d3aef2b762074397006c4fd
-assets/ganttDiagram-JELNMOA3-Bb1us8HW.js,1769779624062,f13af614c7edd0c53d99e55e458587a93604fd4b8ff6eeb8e6b8c78b1463d598
-assets/sequenceDiagram-WL72ISMW-B6RRQEFu.js,1769779624061,f588c867b3426e65fbae53cabec1f4477eb64d68c9ab0957f2b53f441215d655
-assets/cose-bilkent-S5V4N54A--oR43DMq.js,1769779624062,4b88979bc815654b8e570de17f4cd7360a9ff42caa5c4aaf8ec048c0a7c85c0b
-assets/chunk-FMBD7UC4-BQteHW8y.js,1769779624062,16da93c74d1e64e60c8d58a71f68b4d888cc9cf36f72b25c7ffbad1973dc7c43
-assets/chunk-QN33PNHL-BvcNIqfE.js,1769779624062,9c2952d98a95fb6c5bea831f4bf8c05dec205f59b4c2819a64f3375a69b4a9e7
-assets/chunk-55IACEB6-DCUYQgbr.js,1769779624062,2602c639b4beab795a5606ffbb144d0c0b6db632e9413073f560a19c5320ffb5
-assets/chunk-DI55MBZ5-efmXaQky.js,1769779624062,c48483db6dbbcc87d415d27ff8647a1d0b0f16b08b821bbc0e997f141f33e4f1
-assets/chunk-4BX2VUAB-BThpIoYm.js,1769779624062,e49d10da4783687099e518363490d07e25a150692642faa5c47820798028b149
-assets/channel-D-PZdCPF.js,1769779624062,3026e32bac263d1d5aa22d47b956960ff0aeba3e5305e166dbdf143b2ec15f1a
-assets/chunk-B4BG7PRW-CM0pFhnN.js,1769779624061,30cfb96bac633825a77390dc947c88ae94799b0bbbe04523129404ff70a25f26
-assets/arc-Ba_PbCOY.js,1769779624062,095f7d730cdde669eace60ed68cd2ab7773a52a23473c3f62e1141821baa309c
-assets/_baseUniq-D4HHB1Wl.js,1769779624062,3008ee2b32829502473f1b01a2f1ee2740054435c67c33d6a820d66c6e039a1d
-assets/c4Diagram-YG6GDRKO-_T75Rkgi.js,1769779624061,5053114b61ddc4a30bb59876a778486cbf2a70a85f452d716f5eaa8607aa1152
-assets/blockDiagram-VD42YOAC-hjKbO6WI.js,1769779624062,f2b2e9c0bb220c74837ca3c5e887709f46d88456227780c1e9aa35777ea5310c
-assets/architectureDiagram-VXUJARFQ-BH7zHOzt.js,1769779624062,d6411f874606a95cf9c78d64048c44d25fd5cbca848a7ae49eff9aa8738b9ff0
-assets/katex-Cu_Erd72.js,1769779624062,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-C3KCu4iZ.js,1769779624062,6510c62e30ee385c03b6930a9ee5ebedcee39deea21fd141a4c91bee49af6d54
-assets/cytoscape.esm-CyJtwmzi.js,1769779624062,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-DqacwwtI.js,1769779624063,f037e805b20265149c9bdc5c0bdae24d4062d9c8d798926d1416f45ab9d995d4
-pwa-512x512.png,1769779623619,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-logo.png,1769779623607,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-192x192.png,1769779623613,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-apple-touch-icon.png,1769779623605,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+sw.js,1769935939135,b69dbe49dad1bc817f65d9f8e003d247369fdb12e6004c6d66c7e92d2eb5051d
+registerSW.js,1769935938435,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+workbox-8c29f6e4.js,1769935939135,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+manifest.webmanifest,1769935938435,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+index.html,1769935938435,052cd8686270cea30b257f9c082ff3e4581c1f88e6a4dba21a614d5d6c15d3d1
+firebase-messaging-sw.js,1769935937991,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+lp.html,1769935937995,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/xychartDiagram-PRI3JC2R-DoOt8VT3.js,1769935938433,73fd59336185502ee0362f4d42cc7a329fafce11feb9413a63008f5e47240d9d
+assets/stateDiagram-v2-4FDKWEC3-CW2Ek47N.js,1769935938433,64ad71be53aa9d112b7910eef9339ee56841d2293c73d87000a671a0db608315
+assets/stateDiagram-FKZM4ZOC-DGSPh6XH.js,1769935938433,87dbde6374da08f3ee98cce0b630bc8fa17379e6b98bd47803f608a4ef052da4
+assets/timeline-definition-IT6M3QCI-CXTPTYDi.js,1769935938433,8a87c62b07108b87b0409cc8b50680333415303d62610855425bd03062de2e96
+assets/sankeyDiagram-TZEHDZUN-DRLUpmKy.js,1769935938434,7fb3917e6bd4f617e31bd7dac6a367de15ac8c80c50dc8390c4ac07d0bab0766
+assets/requirementDiagram-UZGBJVZJ-CzZYJGFR.js,1769935938433,a4092a750ce482eda7184e893f5f96099d81cc7529440a9c69e01d7d6117d6b4
+assets/pieDiagram-ADFJNKIX-B5MnU9Im.js,1769935938433,a6bef4032c86661e1b95df161388303c633e4942819d32638eadb262cad31936
+assets/ordinal-Cboi1Yqb.js,1769935938433,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/min-C916zwpt.js,1769935938433,e8b17ac6a30a1109381d1a1851b01a85e1d8668fc4745f47273f35d5c6b468a5
+assets/quadrantDiagram-AYHSOK5B-B2bpqHAz.js,1769935938433,419c5937a1588f952e63b9b30be11669138e56488c21d5f90f3697a9e79416c4
+assets/linear-CUUoh7oA.js,1769935938434,7c05fb99d5589c0bdee42bbf8f6aa51677c87332efeaaf56284ec3392abfe8fc
+assets/mindmap-definition-VGOIOE7T-B048XRc_.js,1769935938433,ebe588c09d16560dc9b21b672314247e36e151932e958fab2dc71ea2211fa71c
+assets/init-Gi6I4Gst.js,1769935938433,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/infoDiagram-WHAUD3N6-CJfeNW89.js,1769935938433,0dcd8098a841e35aa86caf66bb422dacceda2df683653642830c4682587f07f0
+assets/journeyDiagram-XKPGCS4Q-CZ0vtzUF.js,1769935938433,43dacc8dc3b2e948828c615521fa05980a9fd552e1029bd4cb33ea8dc98f0c7d
+assets/kanban-definition-3W4ZIXB7-B3IPgtzb.js,1769935938433,534dc2a5f978306956807eef0c054732e2ab9b670479f1a224706f963c7891c4
+assets/layout-DrAmXhAc.js,1769935938435,647012ff3bd5e1a1439a48afbb6d8b592d680020bd611afd73e8cf765962705e
+assets/graph-Dm9GPOhp.js,1769935938435,7320aac98ebd1c6e9fe84417503713358f3150090903c75b6a140324ad40bc6e
+assets/gitGraphDiagram-NY62KEGX-BbTmMDkv.js,1769935938433,faa886807dff68aeb938894e41b2cb03ef3b6f0552c1a08ac4a3b9945e5cd39b
+assets/index-BaW0m7bc.css,1769935938432,73661e02f35ce68e6f314d8b0e6a8323499b0cec00fdd0fef44ff40024e00a93
+assets/diagram-QEK2KX5R-CjLZjwQm.js,1769935938433,af4360363bca348e9da71bc5bbfe06fe07aac9a6c8b073d57e9bfff55e820a8a
+assets/defaultLocale-DX6XiGOO.js,1769935938434,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/diagram-PSM6KHXK--IFo0p_3.js,1769935938434,70df175479067327cb5b7694f06e05b0534ba87eecdd5bf47a0727776bf3a725
+assets/dagre-6UL2VRFP-BTMJGu7P.js,1769935938435,4b6eb27599114e3aeb2a50928a2bd56b1fcd1324ae28e61f42121dffa0bdd879
+assets/erDiagram-Q2GNP2WA-CVfWaZ-H.js,1769935938435,328054d23a303a7e957f81beadfdb6d0e5b3d827eca50145810e5327516f40b1
+assets/clone-J1ceF0kC.js,1769935938433,3496ad48ca1a67a52b76f5b460cbd6c4db715a5409c8b9f60632cfbe013b6bbf
+assets/classDiagram-v2-WZHVMYZB-CsU3TBBa.js,1769935938433,0f02ab3dc115581c21de961acea04da2174656c4abb17d897320f727e688d45d
+assets/chunk-TZMSLE5B-kOO0OGwR.js,1769935938433,6389f068c8d5b2816a37fed98d4e4f4512e24f06537ae8aac6cfa13badf30ddd
+assets/classDiagram-2ON5EDUG-CsU3TBBa.js,1769935938433,0f02ab3dc115581c21de961acea04da2174656c4abb17d897320f727e688d45d
+assets/chunk-QZHKN3VN-rq0uhJxH.js,1769935938433,d748ffb6d226f3a48a330ac27229ea8cea97c836b5d67a2c67d4befba7b2aae1
+assets/flowDiagram-NV44I4VS-CZhh0W_4.js,1769935938433,2023796511297d9173fdbe3477389db4bf58f09fc6432216814124cd970a3fce
+assets/diagram-S2PKOQOG--0u-JTQR.js,1769935938433,08e388c781dca89b514b3dccc2c5a0f52597ce4b8e7515a83088314448f86883
+assets/sequenceDiagram-WL72ISMW-TQ5vBTHk.js,1769935938433,8163ae5a3d7e9635c17bcc2c79ce370ec1bc5ef35116b0ddb33a2fda277df597
+assets/cose-bilkent-S5V4N54A-DoHzUy3f.js,1769935938433,595c0690fb59eda1d36b8795bda6f1e20e22f0e922d337a7746c7fb53731fdec
+assets/chunk-FMBD7UC4-4qBAsB2C.js,1769935938433,0abef51acef3ca3daf3d8e4ceb12c4af025c5e4b5394c4d9f00eeb5ca6f9328e
+assets/chunk-QN33PNHL-D2ScCJlo.js,1769935938433,495628c5e682d0b909dda8c3ebb25d342a698154d61d6aa3ad605c79fbbc8440
+assets/chunk-DI55MBZ5-DKo-e8b3.js,1769935938433,d262fe47b2499ed441b924a0a843f37cec68e9968b4a2421693a1c4421ad6735
+assets/chunk-55IACEB6-D48_lvbD.js,1769935938433,625475bdec353258c31ddf5f700f2122eb172fa775f1a965ad082279e9323322
+assets/chunk-4BX2VUAB-CV4XZA-U.js,1769935938433,244e7cea6602372a48ccbdc4395526c5c5bc63f05b5b4d2fed7ecc07fea795f8
+assets/channel-BWNlCycP.js,1769935938433,84405b1d4c7ff9b8f9e7ba48b0b016f53c05ee3f34b9fae52b7b460d8aa713d8
+assets/chunk-B4BG7PRW-Cprfdz9W.js,1769935938433,cde37e63d697facc6344ba28e15dbf876ff0958a70c915c09d2d3da5eb67d3c5
+assets/ganttDiagram-JELNMOA3-CrkW67uj.js,1769935938435,1d0644ad5cab33dc80e39e815b878a4512045c93f7a1371fe0aee113ab5b09c7
+assets/arc-vBGfALxv.js,1769935938433,83ae70fe37e6955d3bdd6a59ece1c62833bd5973df434470cf9a0209dcd67635
+assets/_baseUniq-DEmgYck2.js,1769935938435,0911cda6c60c11c0ecbe6301278ac2d744b91de13dc382f0d090ffde35af46d8
+assets/blockDiagram-VD42YOAC-C-P1orhw.js,1769935938433,34079a2950e1ac3a8cd326da32fb6459d17a220a81dbb40213b69ccee4d6363e
+assets/c4Diagram-YG6GDRKO-C3eUdBrL.js,1769935938432,2700cb074f41b6c790fa26dd10d990b8c49001a3747f373109e306cb104c32c3
+assets/architectureDiagram-VXUJARFQ-Bfm3ohIA.js,1769935938433,95b73b3f2fb0b2754b4524c17b4ca735d0bfd8e2a3b352ab4d2636b3243bb942
+assets/katex-Cu_Erd72.js,1769935938433,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-BFKTQ5oi.js,1769935938435,7a3addd6d4225f6f503629b1fcbcea1fcd9296e36f98b978e2e0691b772ce92c
+assets/cytoscape.esm-CyJtwmzi.js,1769935938433,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-BUCbwdMz.js,1769935938435,c722bba80c3fac00f54c4a5b6588637d9db441c6760c5d7902350b75366ea2d0
+pwa-512x512.png,1769935938008,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+logo.png,1769935937994,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1769935937990,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-192x192.png,1769935938002,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>

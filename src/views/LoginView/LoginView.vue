@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
+import { getFirestore, doc, setDoc } from "firebase/firestore";
 import { useRouter } from "vue-router";
 
 const router = useRouter();
@@ -17,27 +17,53 @@ const handleGoogleLogin = async () => {
 
     // ★重要: カレンダーへの読み書き権限
     provider.addScope("https://www.googleapis.com/auth/calendar.events");
-    provider.addScope("https://www.googleapis.com/auth/calendar.readonly"); // 読み取り用
+    provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
 
-    // ★重要: リフレッシュトークンを取得するための設定
+    // ★修正: リフレッシュトークンを強制的に取得するための設定
     provider.setCustomParameters({
-      prompt: "consent", // 毎回承認画面を出す（これがないとリフレッシュトークンが来ない場合がある）
-      access_type: "offline", // バックエンドアクセスのために必須
+      prompt: "consent",
+      access_type: "offline",
+      include_granted_scopes: "true",
     });
 
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
 
-    // ★ここがハック: Firebase SDKの隠しプロパティからOAuthのリフレッシュトークンを取得
-    // ※通常の credential.accessToken は1時間で切れるため、バックグラウンド処理には使えない
+    // フロントエンド用トークン保存
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    const tokenResponse = (result as any)._tokenResponse; // 型定義にはないが実在する
+    const accessToken = credential?.accessToken;
+    if (accessToken) {
+      localStorage.setItem("google_calendar_token", accessToken);
+    }
+
+    // トークン情報の取得
+    const tokenResponse = (result as any)._tokenResponse;
     const refreshToken = tokenResponse?.oauthRefreshToken;
 
-    // ユーザー基本情報保存
-    const userRef = doc(db, "users", user.uid);
+    // ★修正: アクセストークンもDBに保存する（リフレッシュトークンがない場合の保険）
+    const tokenData: any = { updatedAt: new Date() };
+    if (refreshToken) tokenData.refreshToken = refreshToken;
+    if (accessToken) tokenData.accessToken = accessToken; // ★ここを追加
+
+    // どちらか片方でもあれば保存
+    if (refreshToken || accessToken) {
+      try {
+        await setDoc(
+          doc(db, "users", user.uid, "system", "tokens"),
+          tokenData,
+          { merge: true },
+        );
+        console.log("Tokens saved successfully.");
+      } catch (saveError: any) {
+        console.error("Token save error:", saveError);
+      }
+    } else {
+      console.warn("No tokens retrieved from Google.");
+    }
+
+    // ユーザー情報保存
     await setDoc(
-      userRef,
+      doc(db, "users", user.uid),
       {
         email: user.email,
         displayName: user.displayName,
@@ -46,15 +72,6 @@ const handleGoogleLogin = async () => {
       },
       { merge: true },
     );
-
-    // ★重要: リフレッシュトークンを保存 (バックエンドがカレンダーを見るため)
-    if (refreshToken) {
-      await setDoc(doc(db, "users", user.uid, "system", "tokens"), {
-        refreshToken: refreshToken,
-        updatedAt: new Date(),
-      });
-      console.log("Offline token saved.");
-    }
 
     router.push("/app");
   } catch (e: any) {
