@@ -220,6 +220,14 @@ const goToLogin = () => {
         </button>
 
         <div class="fade-in-up delay-500 footer-container">
+          <div class="flex gap-4 text-xs text-slate-500 mb-2 justify-center">
+            <router-link to="/privacy" class="hover:text-white transition"
+              >プライバシーポリシー</router-link
+            >
+            <router-link to="/legal" class="hover:text-white transition"
+              >利用規約</router-link
+            >
+          </div>
           <p class="footer-text">Designed by Takumi Yoshioka</p>
         </div>
       </section>
@@ -359,7 +367,7 @@ h2 {
 }
 
 .phone {
-  width: 280px;
+  width: 280px; /* 基本サイズ */
   height: 560px;
   background: #1e293b;
   border-radius: 40px;
@@ -373,8 +381,8 @@ h2 {
 
 @media (max-width: 400px) {
   .phone {
-    width: 260px;
-    height: 500px;
+    width: 240px; /* 小さい画面用に縮小 */
+    height: 480px;
     border-width: 6px;
   }
 }

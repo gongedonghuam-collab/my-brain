@@ -98,9 +98,6 @@ const COLORS = {
 /**
  * ⚠️ [警告カード] を作る関数
  * ダブルブッキングや移動時間が足りない時に表示します。
- * @param title 警告のタイトル
- * @param message 警告の本文
- * @param suggestion AIからの提案（あれば）
  */
 function createAlertFlex(title, message, suggestion) {
     return {
@@ -187,11 +184,6 @@ function createAlertFlex(title, message, suggestion) {
 /**
  * 📅 [カレンダー登録カード] を作る関数
  * 予定の日時や場所、天気予報の警告をきれいに表示します。
- * @param title 予定名
- * @param start 開始時間
- * @param end 終了時間
- * @param location 場所
- * @param weatherInfo 天気情報（雨予報など）
  */
 function createCalendarFlex(title, start, end, location, weatherInfo) {
     // コンピュータ用の日時文字を、人間が読みやすい形（例: 12/25）に変換
@@ -718,7 +710,7 @@ async function callGeminiJson(apiKey, prompt) {
         return extractJson(text);
     }
     catch (e) {
-        // ★修正: エラーメッセージを人間に優しくする
+        // エラーメッセージを人間に優しくする
         return {
             action: "CHAT",
             reply: `💦 ちょっと考えすぎて疲れちゃいました...。もう一度お願いできますか？ (Error: ${e.message})`,
@@ -752,6 +744,7 @@ async function refreshAccessToken(refreshToken) {
             refresh_token: refreshToken,
             grant_type: "refresh_token",
         });
+        // 新しいアクセストークンを返す
         return res.data.access_token;
     }
     catch (_a) {
@@ -773,12 +766,41 @@ async function getValidAccessToken(uid) {
         if (!docSnap.exists)
             return null;
         const data = docSnap.data();
-        if (data === null || data === void 0 ? void 0 : data.refreshToken) {
-            const newToken = await refreshAccessToken(data.refreshToken);
-            if (newToken)
-                return newToken;
+        const accessToken = data === null || data === void 0 ? void 0 : data.accessToken;
+        const refreshToken = data === null || data === void 0 ? void 0 : data.refreshToken;
+        if (!accessToken)
+            return null;
+        // ★修正: まず今のトークンが使えるか軽くテストする
+        // (カレンダーリスト取得APIを叩いてみる)
+        try {
+            await axios_1.default.get("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                params: { maxResults: 1 }, // 最小限の通信量で済ませる
+            });
+            // エラーが出なければトークンは有効
+            return accessToken;
         }
-        return (data === null || data === void 0 ? void 0 : data.accessToken) || null;
+        catch (e) {
+            // 401 Unauthorized (期限切れ) ならリフレッシュを試みる
+            if (e.response && e.response.status === 401 && refreshToken) {
+                console.log(`User ${uid}: Token expired. Refreshing...`);
+                const newToken = await refreshAccessToken(refreshToken);
+                if (newToken) {
+                    // 新しいトークンをDBに保存
+                    await db
+                        .collection("users")
+                        .doc(uid)
+                        .collection("system")
+                        .doc("tokens")
+                        .set({
+                        accessToken: newToken,
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    }, { merge: true });
+                    return newToken;
+                }
+            }
+            return null;
+        }
     }
     catch (_a) {
         return null;
@@ -894,7 +916,8 @@ async function checkWeather(location, dateStr) {
         return null;
     }
 }
-// --- 削除ロジック (★修正: 安全性強化＆検索ヒット率向上) ---
+// --- 削除ロジック (安全版) ---
+// カレンダー削除
 async function deleteCalendarEvent(uid, query) {
     try {
         const token = await getValidAccessToken(uid);
@@ -916,9 +939,11 @@ async function deleteCalendarEvent(uid, query) {
         return null;
     }
 }
+// タスク削除
 async function deleteTodoByTitle(uid, title) {
     try {
         const ref = db.collection("todos");
+        // 全件取得してからプログラム側で探す
         const snap = await ref
             .where("userId", "==", uid)
             .where("isCompleted", "==", false)
@@ -939,6 +964,7 @@ async function deleteTodoByTitle(uid, title) {
         return null;
     }
 }
+// メモ削除
 async function deleteMemoryByContent(uid, content) {
     try {
         const ref = db.collection("memories");
@@ -1085,7 +1111,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 });
                 return;
             }
-            // ★修正: getOpenTodosを追加して、現在のタスク一覧をAIにカンペとして渡す
+            // ★ 修正: getOpenTodos を追加してタスク一覧もAIに渡す
             const [contextSnap, memoryContext, chatHistory, calendarEvents, openTodos,] = await Promise.all([
                 userRef.collection("system").doc("user_context").get(),
                 getRecentMemories(uid, message),

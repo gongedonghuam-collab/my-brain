@@ -20,30 +20,27 @@ const handleGoogleLogin = async () => {
     provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
 
     // ★修正: リフレッシュトークンを強制的に取得するための設定
+    // これがないと1時間で期限切れになります
     provider.setCustomParameters({
-      prompt: "consent",
-      access_type: "offline",
-      include_granted_scopes: "true",
+      prompt: "consent", // 毎回承認画面を出して合鍵を確実に取得
+      access_type: "offline", // 裏側（Cloud Functions）で接続するために必須
     });
 
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
 
-    // フロントエンド用トークン保存
+    // トークン情報の取得
+    // ※ _tokenResponse は型定義に含まれていないため any でキャストして取得
+    const tokenResponse = (result as any)._tokenResponse;
+    const refreshToken =
+      tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const accessToken = credential?.accessToken;
-    if (accessToken) {
-      localStorage.setItem("google_calendar_token", accessToken);
-    }
 
-    // トークン情報の取得
-    const tokenResponse = (result as any)._tokenResponse;
-    const refreshToken = tokenResponse?.oauthRefreshToken;
-
-    // ★修正: アクセストークンもDBに保存する（リフレッシュトークンがない場合の保険）
+    // ★トークンをDBに保存（システム用）
     const tokenData: any = { updatedAt: new Date() };
-    if (refreshToken) tokenData.refreshToken = refreshToken;
-    if (accessToken) tokenData.accessToken = accessToken; // ★ここを追加
+    if (accessToken) tokenData.accessToken = accessToken; // 今すぐ使える鍵
+    if (refreshToken) tokenData.refreshToken = refreshToken; // 期限が切れた時のための合鍵
 
     // どちらか片方でもあれば保存
     if (refreshToken || accessToken) {
@@ -51,7 +48,7 @@ const handleGoogleLogin = async () => {
         await setDoc(
           doc(db, "users", user.uid, "system", "tokens"),
           tokenData,
-          { merge: true },
+          { merge: true }, // 既存のデータを消さないようにマージ保存
         );
         console.log("Tokens saved successfully.");
       } catch (saveError: any) {
@@ -61,7 +58,7 @@ const handleGoogleLogin = async () => {
       console.warn("No tokens retrieved from Google.");
     }
 
-    // ユーザー情報保存
+    // ユーザー基本情報の保存
     await setDoc(
       doc(db, "users", user.uid),
       {
@@ -73,6 +70,7 @@ const handleGoogleLogin = async () => {
       { merge: true },
     );
 
+    // ログイン成功したらアプリ画面へ
     router.push("/app");
   } catch (e: any) {
     console.error(e);
@@ -109,11 +107,12 @@ const handleGoogleLogin = async () => {
 
       <div class="w-full space-y-6">
         <p class="text-slate-300 text-sm text-center leading-relaxed mb-4">
-          LINEに投げるだけ。<br />
-          カレンダーと記憶をAIが勝手に整理。<br />
-          <span class="text-indigo-400 font-bold">「予定直前のカンペ通知」</span
-          >で<br />
-          もう準備はいりません。
+          LINEで全てを完結させるために、<br />
+          <span class="text-indigo-400 font-bold">Google連携</span>
+          が必要です。<br />
+          <span class="text-xs text-slate-500"
+            >※一度連携すれば、あとはログイン不要です。</span
+          >
         </p>
 
         <button
@@ -143,8 +142,24 @@ const handleGoogleLogin = async () => {
               fill="#EA4335"
             />
           </svg>
-          Googleで始める
+          Googleで連携する
         </button>
+
+        <div class="mt-6 flex justify-center gap-4 text-[10px] text-slate-500">
+          <router-link
+            to="/privacy"
+            class="hover:text-slate-300 transition underline"
+          >
+            プライバシーポリシー
+          </router-link>
+          <span class="text-slate-700">|</span>
+          <router-link
+            to="/legal"
+            class="hover:text-slate-300 transition underline"
+          >
+            利用規約
+          </router-link>
+        </div>
       </div>
     </div>
   </div>

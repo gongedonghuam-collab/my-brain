@@ -3465,6 +3465,653 @@ export function useInputFooter(inputMode: Ref<InputMode>) {
 }
 </file>
 
+<file path="src/views/LegalView/LegalView.vue">
+<script setup lang="ts">
+import { useRouter } from "vue-router";
+const router = useRouter();
+</script>
+
+<template>
+  <div
+    class="min-h-screen bg-slate-950 text-slate-300 p-6 md:p-12 font-sans overflow-y-auto"
+  >
+    <div class="max-w-3xl mx-auto pb-20">
+      <button
+        @click="router.back()"
+        class="mb-6 text-sm text-slate-500 hover:text-white transition"
+      >
+        ← 戻る
+      </button>
+
+      <h1 class="text-2xl font-bold text-white mb-8">
+        特定商取引法に基づく表記
+      </h1>
+
+      <div class="space-y-8 text-sm leading-relaxed">
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
+          <p>吉岡 拓海 (BlueCode)</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">運営統括責任者</h2>
+          <p>吉岡 拓海</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">所在地</h2>
+          <p>〒815-0041 福岡県福岡市南区野間1丁目19-1</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
+          <p>080-6423-6435</p>
+          <p class="text-xs text-slate-500 mt-1">
+            受付時間 10:00-18:00（土日祝を除く）
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">メールアドレス</h2>
+          <p>gongedonghuam@gmail.com</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">販売価格</h2>
+          <p>PROプラン: 月額980円（税込）</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">商品代金以外の必要料金</h2>
+          <p>
+            当サイトの閲覧、コンテンツのダウンロード、お問い合わせ等の際の電子メールの送受信時などに、所定の通信料が発生いたします。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">お支払方法</h2>
+          <p>クレジットカード決済（Stripe）</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">お支払時期</h2>
+          <p>
+            初回お申込み時に即時決済され、以降毎月同日に自動的に決済が行われます。<br />
+            実際の引き落とし時期は、ご利用のクレジットカード会社の締め日や契約内容により異なります。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">商品の引渡時期</h2>
+          <p>決済手続き完了後、直ちにご利用いただけます。</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">
+            返品・キャンセルについて
+          </h2>
+          <p>
+            デジタルコンテンツの性質上、決済完了後の返品・返金には応じられません。<br />
+            解約はいつでも可能です。次回更新日の前日までにお手続きください。なお、日割り計算による返金は行われません。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">動作環境</h2>
+          <p>
+            推奨ブラウザ：Google Chrome 最新版、Safari 最新版、Microsoft Edge
+            最新版<br />
+            ※インターネット接続環境が必要です。
+          </p>
+        </section>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
+<file path="firestore.rules">
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ヘルパー関数: 本人かどうか
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // ★ここが変更点: ユーザー配下のデータ(system含む)をすべて無条件で許可
+    match /users/{userId}/{document=**} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // その他のデータもシンプルに許可
+    match /memories/{memoryId} {
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
+    }
+
+    match /chat_logs/{logId} {
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
+    }
+
+    match /todos/{todoId} {
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
+    }
+
+    match /daily_reports/{reportId} {
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
+    }
+  }
+}
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="google-site-verification"
+      content="qpuJVeg2XkDd1ieycUl-LOQkD3MDEH7wVKmlPE3NdEI"
+    />
+    <link rel="icon" href="/logo.png?v=3" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>My Brain</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0f172a;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+      }
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #0f172a;
+        color: white;
+        z-index: 9999;
+        transition: opacity 0.5s ease;
+      }
+      .loader {
+        margin-top: 32px;
+        width: 32px;
+        height: 32px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        border-top-color: #3b82f6;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="loading-screen">
+      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
+      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
+      <div class="loader"></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+</file>
+
+<file path="src/router/index.ts">
+import { createRouter, createWebHistory } from "vue-router";
+import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
+import HomeView from "../views/HomeView/HomeView.vue";
+import LoginView from "../views/LoginView/LoginView.vue";
+import VerifyEmailView from "../views/VerifyEmailView/VerifyEmailView.vue";
+import LandingView from "../views/LandingView/LandingView.vue";
+import LegalView from "../views/LegalView/LegalView.vue"; // 追加
+import PrivacyPolicy from "../views/PrivacyPolicy/PrivacyPolicy.vue";
+
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    {
+      path: "/",
+      name: "landing",
+      component: LandingView,
+      meta: { public: true },
+    },
+    {
+      path: "/app",
+      name: "home",
+      component: HomeView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/login",
+      name: "login",
+      component: LoginView,
+      meta: { public: true },
+    },
+    {
+      path: "/verify-email",
+      name: "verify-email",
+      component: VerifyEmailView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/legal",
+      name: "legal",
+      component: LegalView,
+      meta: { public: true },
+    },
+    {
+      path: "/privacy", // ★このパスを追加
+      name: "privacy",
+      component: PrivacyPolicy,
+      meta: { public: true }, // ログインしていなくても見れるようにする
+    },
+  ],
+});
+
+router.beforeEach(async (to, from, next) => {
+  const auth = getAuth();
+  const currentUser = await new Promise<User | null>((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
+
+  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
+
+  if (to.path === "/") {
+    if (currentUser) {
+      next("/app");
+      return;
+    } else {
+      next();
+      return;
+    }
+  }
+
+  if (requiresAuth && !currentUser) {
+    next("/login");
+  } else if (to.path === "/login" && currentUser) {
+    next("/app");
+  } else {
+    next();
+  }
+});
+
+export default router;
+</file>
+
+<file path="src/views/HomeView/useHomeView.ts">
+import { ref, onMounted, watch, nextTick, computed } from "vue";
+import { useMyBrain } from "@/composables/useMyBrain";
+import type { Memory } from "@/types";
+import mermaid from "mermaid";
+import { httpsCallable, getFunctions } from "firebase/functions";
+import { getApp } from "firebase/app";
+import { useRouter, useRoute } from "vue-router";
+import axios from "axios";
+
+import dayGridPlugin from "@fullcalendar/daygrid";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import listPlugin from "@fullcalendar/list";
+import type { CalendarOptions } from "@fullcalendar/core";
+
+const GOOGLE_CALENDAR_COLORS: Record<string, string> = {
+  "1": "#7986cb",
+  "2": "#33b679",
+  "3": "#8e24aa",
+  "4": "#e67c73",
+  "5": "#f6c026",
+  "6": "#f4511e",
+  "7": "#039be5",
+  "8": "#616161",
+  "9": "#3f51b5",
+  "10": "#0b8043",
+  "11": "#d50000",
+};
+
+export function useHomeView() {
+  const {
+    initAuth,
+    chatLogs,
+    isAiThinking,
+    currentUser,
+    findRelatedMemories,
+    todos,
+    dailyReports,
+    toggleTodo,
+    deleteTodo,
+    callGoogleApi,
+    isCalendarConnected,
+    reconnectCalendar,
+  } = useMyBrain();
+  const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
+  const editingMemory = ref<Memory | null>(null);
+  const chatContainerRef = ref<HTMLElement | null>(null);
+  const showSuccessToast = ref(false);
+  const calendarLoading = ref(false);
+  const isReportModalOpen = ref(false);
+  const route = useRoute();
+  const router = useRouter();
+  const isBottomSheetOpen = ref(false);
+  const selectedDateStr = ref("");
+  const selectedDateEvents = ref<any[]>([]);
+  const relatedMemories = ref<Memory[]>([]);
+  const isSearchingMemories = ref(false);
+
+  const openBottomSheet = async (dateStr: string) => {
+    selectedDateStr.value = dateStr;
+    relatedMemories.value = [];
+    isSearchingMemories.value = false;
+    const events = (calendarOptions.value.events as any[]) || [];
+    selectedDateEvents.value = events
+      .filter((ev: any) => ev.start && ev.start.startsWith(dateStr))
+      .sort(
+        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+      );
+    isBottomSheetOpen.value = true;
+    if (selectedDateEvents.value.length > 0) {
+      isSearchingMemories.value = true;
+      const queryText = selectedDateEvents.value.map((e) => e.title).join(" ");
+      try {
+        relatedMemories.value = await findRelatedMemories(queryText);
+      } catch (e) {
+        console.error("Related search failed", e);
+      } finally {
+        isSearchingMemories.value = false;
+      }
+    }
+  };
+
+  const closeBottomSheet = () => {
+    isBottomSheetOpen.value = false;
+  };
+
+  const deleteEvent = async (eventId: string) => {
+    if (!confirm("削除しますか？")) return;
+    try {
+      await callGoogleApi(async (token) => {
+        await axios.delete(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      });
+      selectedDateEvents.value = selectedDateEvents.value.filter(
+        (e) => e.id !== eventId,
+      );
+      const currentEvents = (calendarOptions.value.events as any[]) || [];
+      calendarOptions.value.events = currentEvents.filter(
+        (e: any) => e.id !== eventId,
+      );
+    } catch (e: any) {
+      alert("削除失敗: " + e.message);
+    }
+  };
+
+  const calendarOptions = ref<CalendarOptions>({
+    plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
+    initialView: "dayGridMonth",
+    headerToolbar: { left: "prev", center: "title", right: "next" },
+    events: [] as any[],
+    locale: "ja",
+    height: "100%",
+    expandRows: true,
+    dayMaxEvents: 2,
+
+    // ★モダン化設定
+    displayEventTime: false,
+
+    eventContent: function (arg: any) {
+      const timeText = arg.event.allDay ? "" : arg.timeText;
+      return {
+        html: `
+          <div class="fc-content-custom">
+            ${timeText ? `<span class="fc-time-custom">${timeText}</span>` : ""}
+            <span class="fc-title-custom">${arg.event.title}</span>
+          </div>
+        `,
+      };
+    },
+
+    moreLinkClick: (arg) => {
+      openBottomSheet(arg.date.toISOString().split("T")[0]);
+      return "void";
+    },
+    dateClick: (info) => {
+      openBottomSheet(info.dateStr);
+    },
+    eventClick: (info) => {
+      info.jsEvent.preventDefault();
+      openBottomSheet(info.event.startStr.split("T")[0]);
+    },
+    eventTimeFormat: {
+      hour: "numeric",
+      minute: "2-digit",
+      meridiem: false,
+      hour12: false,
+    },
+    longPressDelay: 500,
+    handleWindowResize: true,
+  });
+
+  const fetchAllCalendars = async () => {
+    calendarLoading.value = true;
+    try {
+      const calendars = await callGoogleApi(async (token) => {
+        let list = [{ id: "primary", backgroundColor: "#818cf8" }];
+        try {
+          const listRes = await axios.get(
+            "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (listRes.data.items) {
+            list = listRes.data.items.map((cal: any) => ({
+              id: cal.id,
+              backgroundColor: cal.backgroundColor || "#818cf8",
+            }));
+          }
+        } catch (e: any) {
+          if (e.response && e.response.status === 401) {
+            throw e;
+          }
+          console.warn("List fetch failed, using primary only");
+        }
+        return list;
+      });
+
+      if (!calendars) return;
+
+      const now = new Date();
+      const timeMin = new Date(
+        now.getFullYear(),
+        now.getMonth() - 1,
+        1,
+      ).toISOString();
+      const timeMax = new Date(
+        now.getFullYear(),
+        now.getMonth() + 2,
+        0,
+      ).toISOString();
+
+      const promises = calendars.map((cal: any) =>
+        callGoogleApi(async (token) => {
+          return axios
+            .get(
+              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+                params: {
+                  timeMin,
+                  timeMax,
+                  singleEvents: true,
+                  maxResults: 250,
+                },
+              },
+            )
+            .catch((e) => ({ data: { items: [] } }));
+        }),
+      );
+
+      const results = await Promise.all(promises);
+      const allEvents = results.flatMap((res: any, index) => {
+        if (!res || !res.data) return [];
+        const defaultColor = calendars[index].backgroundColor;
+        return (res.data.items || []).map((ev: any) => {
+          let bgColor = defaultColor;
+          if (ev.colorId && GOOGLE_CALENDAR_COLORS[ev.colorId])
+            bgColor = GOOGLE_CALENDAR_COLORS[ev.colorId];
+          return {
+            id: ev.id,
+            title: ev.summary || "(なし)",
+            start: ev.start.dateTime || ev.start.date,
+            end: ev.end.dateTime || ev.end.date,
+            backgroundColor: bgColor,
+            allDay: !ev.start.dateTime,
+          };
+        });
+      });
+      calendarOptions.value.events = allEvents;
+    } catch (e: any) {
+      console.error("Calendar fetch global error:", e);
+      if (e.response && e.response.status === 401) {
+        localStorage.removeItem("google_calendar_token");
+        isCalendarConnected.value = false;
+      }
+    } finally {
+      calendarLoading.value = false;
+    }
+  };
+
+  const scrollToBottom = async () => {
+    if (inputMode.value !== "chat") return;
+    await nextTick();
+    setTimeout(() => {
+      if (chatContainerRef.value)
+        chatContainerRef.value.scrollTo({
+          top: chatContainerRef.value.scrollHeight,
+          behavior: "smooth",
+        });
+    }, 100);
+  };
+
+  onMounted(async () => {
+    initAuth();
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "dark",
+      securityLevel: "loose",
+      suppressErrorRendering: true,
+    });
+    const code = route.query.code as string;
+    if (code) {
+      window.history.replaceState({}, document.title, "/app");
+      try {
+        const functions = getFunctions(getApp(), "asia-northeast1");
+        const linkFunc = httpsCallable(functions, "linkLineAccount");
+        await linkFunc({ code, redirectUri: window.location.origin + "/app" });
+        showSuccessToast.value = true;
+        setTimeout(() => (showSuccessToast.value = false), 5000);
+      } catch (e) {
+        alert("LINE連携失敗");
+      }
+    }
+    if (currentUser.value) fetchAllCalendars();
+  });
+
+  watch(inputMode, (newMode) => {
+    if (newMode === "chat") {
+      nextTick(() => {
+        if (chatContainerRef.value)
+          chatContainerRef.value.scrollTop =
+            chatContainerRef.value.scrollHeight;
+      });
+      scrollToBottom();
+    } else if (newMode === "calendar") {
+      setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+        fetchAllCalendars();
+      }, 100);
+    }
+  });
+
+  watch(chatLogs, scrollToBottom, { deep: true });
+  watch(isAiThinking, scrollToBottom);
+
+  const onOpenDetail = (memo: Memory) => {
+    editingMemory.value = memo;
+  };
+  const onModeChange = (newMode: "memo" | "chat" | "url" | "calendar") => {
+    inputMode.value = newMode;
+  };
+  const formatDateHeader = (dateStr: string) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    const days = ["日", "月", "火", "水", "木", "金", "土"];
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${days[d.getDay()]})`;
+  };
+  const formatTimeRange = (ev: any) => {
+    if (ev.allDay) return "終日";
+    const start = new Date(ev.start);
+    return start.toLocaleTimeString("ja-JP", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  return {
+    inputMode,
+    editingMemory,
+    chatContainerRef,
+    showSuccessToast,
+    calendarLoading,
+    calendarOptions,
+    isBottomSheetOpen,
+    selectedDateStr,
+    selectedDateEvents,
+    openBottomSheet,
+    closeBottomSheet,
+    onOpenDetail,
+    onModeChange,
+    formatDateHeader,
+    formatTimeRange,
+    deleteEvent,
+    relatedMemories,
+    isSearchingMemories,
+    todos,
+    dailyReports,
+    toggleTodo,
+    deleteTodo,
+    isReportModalOpen,
+    isCalendarConnected,
+    reconnectCalendar,
+  };
+}
+</file>
+
 <file path="src/views/LandingView/LandingView.vue">
 <script setup lang="ts">
 import { useRouter } from "vue-router";
@@ -4168,710 +4815,6 @@ h2 {
 </style>
 </file>
 
-<file path="src/views/LegalView/LegalView.vue">
-<script setup lang="ts">
-import { useRouter } from "vue-router";
-const router = useRouter();
-</script>
-
-<template>
-  <div
-    class="min-h-screen bg-slate-950 text-slate-300 p-6 md:p-12 font-sans overflow-y-auto"
-  >
-    <div class="max-w-3xl mx-auto pb-20">
-      <button
-        @click="router.back()"
-        class="mb-6 text-sm text-slate-500 hover:text-white transition"
-      >
-        ← 戻る
-      </button>
-
-      <h1 class="text-2xl font-bold text-white mb-8">
-        特定商取引法に基づく表記
-      </h1>
-
-      <div class="space-y-8 text-sm leading-relaxed">
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
-          <p>吉岡 拓海 (BlueCode)</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">運営統括責任者</h2>
-          <p>吉岡 拓海</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">所在地</h2>
-          <p>〒815-0041 福岡県福岡市南区野間1丁目19-1</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
-          <p>080-6423-6435</p>
-          <p class="text-xs text-slate-500 mt-1">
-            受付時間 10:00-18:00（土日祝を除く）
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">メールアドレス</h2>
-          <p>gongedonghuam@gmail.com</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">販売価格</h2>
-          <p>PROプラン: 月額980円（税込）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">商品代金以外の必要料金</h2>
-          <p>
-            当サイトの閲覧、コンテンツのダウンロード、お問い合わせ等の際の電子メールの送受信時などに、所定の通信料が発生いたします。
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">お支払方法</h2>
-          <p>クレジットカード決済（Stripe）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">お支払時期</h2>
-          <p>
-            初回お申込み時に即時決済され、以降毎月同日に自動的に決済が行われます。<br />
-            実際の引き落とし時期は、ご利用のクレジットカード会社の締め日や契約内容により異なります。
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">商品の引渡時期</h2>
-          <p>決済手続き完了後、直ちにご利用いただけます。</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">
-            返品・キャンセルについて
-          </h2>
-          <p>
-            デジタルコンテンツの性質上、決済完了後の返品・返金には応じられません。<br />
-            解約はいつでも可能です。次回更新日の前日までにお手続きください。なお、日割り計算による返金は行われません。
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">動作環境</h2>
-          <p>
-            推奨ブラウザ：Google Chrome 最新版、Safari 最新版、Microsoft Edge
-            最新版<br />
-            ※インターネット接続環境が必要です。
-          </p>
-        </section>
-      </div>
-    </div>
-  </div>
-</template>
-</file>
-
-<file path="firestore.rules">
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    
-    // ヘルパー関数: 本人かどうか
-    function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
-    }
-
-    // ★ここが変更点: ユーザー配下のデータ(system含む)をすべて無条件で許可
-    match /users/{userId}/{document=**} {
-      allow read, write: if isOwner(userId);
-    }
-
-    // その他のデータもシンプルに許可
-    match /memories/{memoryId} {
-      allow read, update, delete: if isOwner(resource.data.userId);
-      allow create: if request.auth != null;
-    }
-
-    match /chat_logs/{logId} {
-      allow read, update, delete: if isOwner(resource.data.userId);
-      allow create: if request.auth != null;
-    }
-
-    match /todos/{todoId} {
-      allow read, update, delete: if isOwner(resource.data.userId);
-      allow create: if request.auth != null;
-    }
-
-    match /daily_reports/{reportId} {
-      allow read, update, delete: if isOwner(resource.data.userId);
-      allow create: if request.auth != null;
-    }
-  }
-}
-</file>
-
-<file path="index.html">
-<!doctype html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="google-site-verification"
-      content="qpuJVeg2XkDd1ieycUl-LOQkD3MDEH7wVKmlPE3NdEI"
-    />
-    <link rel="icon" href="/logo.png?v=3" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
-    <title>My Brain</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        background-color: #0f172a;
-        height: 100vh;
-        width: 100vw;
-        overflow: hidden;
-      }
-      #loading-screen {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background-color: #0f172a;
-        color: white;
-        z-index: 9999;
-        transition: opacity 0.5s ease;
-      }
-      .loader {
-        margin-top: 32px;
-        width: 32px;
-        height: 32px;
-        border: 3px solid rgba(255, 255, 255, 0.1);
-        border-radius: 50%;
-        border-top-color: #3b82f6;
-        animation: spin 1s linear infinite;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app"></div>
-
-    <div id="loading-screen">
-      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
-      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
-      <div class="loader"></div>
-    </div>
-
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
-</file>
-
-<file path="src/router/index.ts">
-import { createRouter, createWebHistory } from "vue-router";
-import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
-import HomeView from "../views/HomeView/HomeView.vue";
-import LoginView from "../views/LoginView/LoginView.vue";
-import VerifyEmailView from "../views/VerifyEmailView/VerifyEmailView.vue";
-import LandingView from "../views/LandingView/LandingView.vue";
-import LegalView from "../views/LegalView/LegalView.vue"; // 追加
-import PrivacyPolicy from "../views/PrivacyPolicy/PrivacyPolicy.vue";
-
-const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [
-    {
-      path: "/",
-      name: "landing",
-      component: LandingView,
-      meta: { public: true },
-    },
-    {
-      path: "/app",
-      name: "home",
-      component: HomeView,
-      meta: { requiresAuth: true },
-    },
-    {
-      path: "/login",
-      name: "login",
-      component: LoginView,
-      meta: { public: true },
-    },
-    {
-      path: "/verify-email",
-      name: "verify-email",
-      component: VerifyEmailView,
-      meta: { requiresAuth: true },
-    },
-    {
-      path: "/legal",
-      name: "legal",
-      component: LegalView,
-      meta: { public: true },
-    },
-    {
-      path: "/privacy", // ★このパスを追加
-      name: "privacy",
-      component: PrivacyPolicy,
-      meta: { public: true }, // ログインしていなくても見れるようにする
-    },
-  ],
-});
-
-router.beforeEach(async (to, from, next) => {
-  const auth = getAuth();
-  const currentUser = await new Promise<User | null>((resolve) => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      unsubscribe();
-      resolve(user);
-    });
-  });
-
-  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
-
-  if (to.path === "/") {
-    if (currentUser) {
-      next("/app");
-      return;
-    } else {
-      next();
-      return;
-    }
-  }
-
-  if (requiresAuth && !currentUser) {
-    next("/login");
-  } else if (to.path === "/login" && currentUser) {
-    next("/app");
-  } else {
-    next();
-  }
-});
-
-export default router;
-</file>
-
-<file path="src/views/HomeView/useHomeView.ts">
-import { ref, onMounted, watch, nextTick, computed } from "vue";
-import { useMyBrain } from "@/composables/useMyBrain";
-import type { Memory } from "@/types";
-import mermaid from "mermaid";
-import { httpsCallable, getFunctions } from "firebase/functions";
-import { getApp } from "firebase/app";
-import { useRouter, useRoute } from "vue-router";
-import axios from "axios";
-
-import dayGridPlugin from "@fullcalendar/daygrid";
-import timeGridPlugin from "@fullcalendar/timegrid";
-import interactionPlugin from "@fullcalendar/interaction";
-import listPlugin from "@fullcalendar/list";
-import type { CalendarOptions } from "@fullcalendar/core";
-
-const GOOGLE_CALENDAR_COLORS: Record<string, string> = {
-  "1": "#7986cb",
-  "2": "#33b679",
-  "3": "#8e24aa",
-  "4": "#e67c73",
-  "5": "#f6c026",
-  "6": "#f4511e",
-  "7": "#039be5",
-  "8": "#616161",
-  "9": "#3f51b5",
-  "10": "#0b8043",
-  "11": "#d50000",
-};
-
-export function useHomeView() {
-  const {
-    initAuth,
-    chatLogs,
-    isAiThinking,
-    currentUser,
-    findRelatedMemories,
-    todos,
-    dailyReports,
-    toggleTodo,
-    deleteTodo,
-    callGoogleApi,
-    isCalendarConnected,
-    reconnectCalendar,
-  } = useMyBrain();
-  const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
-  const editingMemory = ref<Memory | null>(null);
-  const chatContainerRef = ref<HTMLElement | null>(null);
-  const showSuccessToast = ref(false);
-  const calendarLoading = ref(false);
-  const isReportModalOpen = ref(false);
-  const route = useRoute();
-  const router = useRouter();
-  const isBottomSheetOpen = ref(false);
-  const selectedDateStr = ref("");
-  const selectedDateEvents = ref<any[]>([]);
-  const relatedMemories = ref<Memory[]>([]);
-  const isSearchingMemories = ref(false);
-
-  const openBottomSheet = async (dateStr: string) => {
-    selectedDateStr.value = dateStr;
-    relatedMemories.value = [];
-    isSearchingMemories.value = false;
-    const events = (calendarOptions.value.events as any[]) || [];
-    selectedDateEvents.value = events
-      .filter((ev: any) => ev.start && ev.start.startsWith(dateStr))
-      .sort(
-        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
-      );
-    isBottomSheetOpen.value = true;
-    if (selectedDateEvents.value.length > 0) {
-      isSearchingMemories.value = true;
-      const queryText = selectedDateEvents.value.map((e) => e.title).join(" ");
-      try {
-        relatedMemories.value = await findRelatedMemories(queryText);
-      } catch (e) {
-        console.error("Related search failed", e);
-      } finally {
-        isSearchingMemories.value = false;
-      }
-    }
-  };
-
-  const closeBottomSheet = () => {
-    isBottomSheetOpen.value = false;
-  };
-
-  const deleteEvent = async (eventId: string) => {
-    if (!confirm("削除しますか？")) return;
-    try {
-      await callGoogleApi(async (token) => {
-        await axios.delete(
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-      });
-      selectedDateEvents.value = selectedDateEvents.value.filter(
-        (e) => e.id !== eventId,
-      );
-      const currentEvents = (calendarOptions.value.events as any[]) || [];
-      calendarOptions.value.events = currentEvents.filter(
-        (e: any) => e.id !== eventId,
-      );
-    } catch (e: any) {
-      alert("削除失敗: " + e.message);
-    }
-  };
-
-  const calendarOptions = ref<CalendarOptions>({
-    plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
-    initialView: "dayGridMonth",
-    headerToolbar: { left: "prev", center: "title", right: "next" },
-    events: [] as any[],
-    locale: "ja",
-    height: "100%",
-    expandRows: true,
-    dayMaxEvents: 2,
-
-    // ★モダン化設定
-    displayEventTime: false,
-
-    eventContent: function (arg: any) {
-      const timeText = arg.event.allDay ? "" : arg.timeText;
-      return {
-        html: `
-          <div class="fc-content-custom">
-            ${timeText ? `<span class="fc-time-custom">${timeText}</span>` : ""}
-            <span class="fc-title-custom">${arg.event.title}</span>
-          </div>
-        `,
-      };
-    },
-
-    moreLinkClick: (arg) => {
-      openBottomSheet(arg.date.toISOString().split("T")[0]);
-      return "void";
-    },
-    dateClick: (info) => {
-      openBottomSheet(info.dateStr);
-    },
-    eventClick: (info) => {
-      info.jsEvent.preventDefault();
-      openBottomSheet(info.event.startStr.split("T")[0]);
-    },
-    eventTimeFormat: {
-      hour: "numeric",
-      minute: "2-digit",
-      meridiem: false,
-      hour12: false,
-    },
-    longPressDelay: 500,
-    handleWindowResize: true,
-  });
-
-  const fetchAllCalendars = async () => {
-    calendarLoading.value = true;
-    try {
-      const calendars = await callGoogleApi(async (token) => {
-        let list = [{ id: "primary", backgroundColor: "#818cf8" }];
-        try {
-          const listRes = await axios.get(
-            "https://www.googleapis.com/calendar/v3/users/me/calendarList",
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
-          if (listRes.data.items) {
-            list = listRes.data.items.map((cal: any) => ({
-              id: cal.id,
-              backgroundColor: cal.backgroundColor || "#818cf8",
-            }));
-          }
-        } catch (e: any) {
-          if (e.response && e.response.status === 401) {
-            throw e;
-          }
-          console.warn("List fetch failed, using primary only");
-        }
-        return list;
-      });
-
-      if (!calendars) return;
-
-      const now = new Date();
-      const timeMin = new Date(
-        now.getFullYear(),
-        now.getMonth() - 1,
-        1,
-      ).toISOString();
-      const timeMax = new Date(
-        now.getFullYear(),
-        now.getMonth() + 2,
-        0,
-      ).toISOString();
-
-      const promises = calendars.map((cal: any) =>
-        callGoogleApi(async (token) => {
-          return axios
-            .get(
-              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`,
-              {
-                headers: { Authorization: `Bearer ${token}` },
-                params: {
-                  timeMin,
-                  timeMax,
-                  singleEvents: true,
-                  maxResults: 250,
-                },
-              },
-            )
-            .catch((e) => ({ data: { items: [] } }));
-        }),
-      );
-
-      const results = await Promise.all(promises);
-      const allEvents = results.flatMap((res: any, index) => {
-        if (!res || !res.data) return [];
-        const defaultColor = calendars[index].backgroundColor;
-        return (res.data.items || []).map((ev: any) => {
-          let bgColor = defaultColor;
-          if (ev.colorId && GOOGLE_CALENDAR_COLORS[ev.colorId])
-            bgColor = GOOGLE_CALENDAR_COLORS[ev.colorId];
-          return {
-            id: ev.id,
-            title: ev.summary || "(なし)",
-            start: ev.start.dateTime || ev.start.date,
-            end: ev.end.dateTime || ev.end.date,
-            backgroundColor: bgColor,
-            allDay: !ev.start.dateTime,
-          };
-        });
-      });
-      calendarOptions.value.events = allEvents;
-    } catch (e: any) {
-      console.error("Calendar fetch global error:", e);
-      if (e.response && e.response.status === 401) {
-        localStorage.removeItem("google_calendar_token");
-        isCalendarConnected.value = false;
-      }
-    } finally {
-      calendarLoading.value = false;
-    }
-  };
-
-  const scrollToBottom = async () => {
-    if (inputMode.value !== "chat") return;
-    await nextTick();
-    setTimeout(() => {
-      if (chatContainerRef.value)
-        chatContainerRef.value.scrollTo({
-          top: chatContainerRef.value.scrollHeight,
-          behavior: "smooth",
-        });
-    }, 100);
-  };
-
-  onMounted(async () => {
-    initAuth();
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: "dark",
-      securityLevel: "loose",
-      suppressErrorRendering: true,
-    });
-    const code = route.query.code as string;
-    if (code) {
-      window.history.replaceState({}, document.title, "/app");
-      try {
-        const functions = getFunctions(getApp(), "asia-northeast1");
-        const linkFunc = httpsCallable(functions, "linkLineAccount");
-        await linkFunc({ code, redirectUri: window.location.origin + "/app" });
-        showSuccessToast.value = true;
-        setTimeout(() => (showSuccessToast.value = false), 5000);
-      } catch (e) {
-        alert("LINE連携失敗");
-      }
-    }
-    if (currentUser.value) fetchAllCalendars();
-  });
-
-  watch(inputMode, (newMode) => {
-    if (newMode === "chat") {
-      nextTick(() => {
-        if (chatContainerRef.value)
-          chatContainerRef.value.scrollTop =
-            chatContainerRef.value.scrollHeight;
-      });
-      scrollToBottom();
-    } else if (newMode === "calendar") {
-      setTimeout(() => {
-        window.dispatchEvent(new Event("resize"));
-        fetchAllCalendars();
-      }, 100);
-    }
-  });
-
-  watch(chatLogs, scrollToBottom, { deep: true });
-  watch(isAiThinking, scrollToBottom);
-
-  const onOpenDetail = (memo: Memory) => {
-    editingMemory.value = memo;
-  };
-  const onModeChange = (newMode: "memo" | "chat" | "url" | "calendar") => {
-    inputMode.value = newMode;
-  };
-  const formatDateHeader = (dateStr: string) => {
-    if (!dateStr) return "";
-    const d = new Date(dateStr);
-    const days = ["日", "月", "火", "水", "木", "金", "土"];
-    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${days[d.getDay()]})`;
-  };
-  const formatTimeRange = (ev: any) => {
-    if (ev.allDay) return "終日";
-    const start = new Date(ev.start);
-    return start.toLocaleTimeString("ja-JP", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  return {
-    inputMode,
-    editingMemory,
-    chatContainerRef,
-    showSuccessToast,
-    calendarLoading,
-    calendarOptions,
-    isBottomSheetOpen,
-    selectedDateStr,
-    selectedDateEvents,
-    openBottomSheet,
-    closeBottomSheet,
-    onOpenDetail,
-    onModeChange,
-    formatDateHeader,
-    formatTimeRange,
-    deleteEvent,
-    relatedMemories,
-    isSearchingMemories,
-    todos,
-    dailyReports,
-    toggleTodo,
-    deleteTodo,
-    isReportModalOpen,
-    isCalendarConnected,
-    reconnectCalendar,
-  };
-}
-</file>
-
-<file path="src/components/AppHeader/AppHeader.vue">
-<script setup lang="ts">
-import { useAppHeader } from "./useAppHeader";
-import { useMyBrain } from "@/composables/useMyBrain";
-import NotificationBell from "@/components/NotificationBell/NotificationBell.vue"; // ★追加
-
-const { logout } = useAppHeader();
-const { currentUser, startLineAuth, unlinkLine } = useMyBrain();
-</script>
-
-<template>
-  <header
-    class="h-16 px-6 flex items-center justify-between border-b border-[#27272a] bg-[#09090b]/80 backdrop-blur-md sticky top-0 z-50"
-  >
-    <div class="flex items-center gap-3">
-      <div
-        class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20"
-      >
-        <span class="text-lg">🧠</span>
-      </div>
-      <h1 class="font-bold text-lg tracking-tight text-white">My Brain</h1>
-    </div>
-
-    <div class="flex items-center gap-2">
-      <NotificationBell />
-
-      <button
-        v-if="currentUser && !currentUser.isLineLinked"
-        @click="startLineAuth"
-        class="text-xs font-bold bg-[#06c755]/10 text-[#06c755] border border-[#06c755]/20 hover:bg-[#06c755] hover:text-white transition px-3 py-2 rounded-lg flex items-center gap-1.5"
-      >
-        <span>💬</span>
-        <span class="hidden sm:inline">LINE連携</span>
-      </button>
-
-      <button
-        v-else-if="currentUser && currentUser.isLineLinked"
-        @click="unlinkLine"
-        class="text-xs font-bold text-[#06c755] bg-[#06c755]/10 px-3 py-2 rounded-lg border border-[#06c755]/20 flex items-center gap-1 hover:bg-[#06c755]/20 transition"
-        title="クリックして連携解除"
-      >
-        <span>💬</span>
-        <span class="hidden sm:inline">連携中</span>
-        <span class="text-[10px] opacity-50 ml-1">×</span>
-      </button>
-
-      <button
-        @click="logout"
-        class="text-xs font-bold text-slate-400 hover:text-white transition px-3 py-2 hover:bg-[#18181b] rounded-lg"
-      >
-        ログアウト
-      </button>
-    </div>
-  </header>
-</template>
-</file>
-
 <file path="src/views/LoginView/LoginView.vue">
 <script setup lang="ts">
 import { ref } from "vue";
@@ -5026,6 +4969,349 @@ const handleGoogleLogin = async () => {
 </template>
 </file>
 
+<file path="src/components/AppHeader/AppHeader.vue">
+<script setup lang="ts">
+import { useAppHeader } from "./useAppHeader";
+import { useMyBrain } from "@/composables/useMyBrain";
+import NotificationBell from "@/components/NotificationBell/NotificationBell.vue";
+
+const { logout } = useAppHeader();
+const { currentUser, startLineAuth, unlinkLine, startSubscription } =
+  useMyBrain();
+</script>
+
+<template>
+  <header
+    class="h-16 px-4 md:px-6 flex items-center justify-between border-b border-[#27272a] bg-[#09090b]/80 backdrop-blur-md sticky top-0 z-50"
+  >
+    <div class="flex items-center gap-3">
+      <div
+        class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20"
+      >
+        <span class="text-lg">🧠</span>
+      </div>
+      <h1 class="font-bold text-lg tracking-tight text-white hidden md:block">
+        My Brain
+      </h1>
+    </div>
+
+    <div class="flex items-center gap-2 md:gap-4">
+      <div
+        v-if="currentUser && !currentUser.isPro"
+        class="flex items-center gap-2 mr-2"
+      >
+        <div
+          class="text-[10px] md:text-xs font-bold text-slate-400 bg-slate-800/50 px-2 py-1 rounded-md border border-slate-700"
+        >
+          あと {{ 5 - (currentUser.dailyUsage || 0) }} 回
+        </div>
+        <button
+          @click="startSubscription"
+          class="text-[10px] md:text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-600 text-white px-3 py-1.5 rounded-full shadow-lg shadow-orange-500/20 hover:scale-105 transition animate-pulse-slow"
+        >
+          💎 Proにする
+        </button>
+      </div>
+
+      <div v-else-if="currentUser && currentUser.isPro" class="mr-2">
+        <span
+          class="text-[10px] font-bold text-amber-400 border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 rounded"
+          >PRO Plan</span
+        >
+      </div>
+
+      <NotificationBell />
+
+      <button
+        v-if="currentUser && !currentUser.isLineLinked"
+        @click="startLineAuth"
+        class="text-xs font-bold bg-[#06c755]/10 text-[#06c755] border border-[#06c755]/20 hover:bg-[#06c755] hover:text-white transition px-2 md:px-3 py-2 rounded-lg flex items-center gap-1.5"
+        title="LINE連携"
+      >
+        <span class="text-lg">💬</span>
+        <span class="hidden md:inline">LINE連携</span>
+      </button>
+
+      <button
+        v-else-if="currentUser && currentUser.isLineLinked"
+        @click="unlinkLine"
+        class="text-xs font-bold text-[#06c755] bg-[#06c755]/10 px-2 md:px-3 py-2 rounded-lg border border-[#06c755]/20 flex items-center gap-1 hover:bg-[#06c755]/20 transition"
+        title="連携解除"
+      >
+        <span class="text-lg">💬</span>
+        <span class="text-[10px] opacity-50 -ml-1">×</span>
+      </button>
+
+      <button
+        @click="logout"
+        class="text-slate-400 hover:text-white transition p-2 hover:bg-[#18181b] rounded-lg"
+        title="ログアウト"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <polyline points="16 17 21 12 16 7" />
+          <line x1="21" x2="9" y1="12" y2="12" />
+        </svg>
+      </button>
+    </div>
+  </header>
+</template>
+
+<style scoped>
+.animate-pulse-slow {
+  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+</style>
+</file>
+
+<file path="src/components/InputFooter/InputFooter.vue">
+<script setup lang="ts">
+import { computed } from "vue";
+import { useInputFooter } from "./useInputFooter";
+import { useMyBrain } from "@/composables/useMyBrain";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { getApp } from "firebase/app";
+
+const props = defineProps<{
+  modelValue: "memo" | "chat" | "url" | "calendar";
+}>();
+const emit = defineEmits<{
+  (e: "update:modelValue", val: "memo" | "chat" | "url" | "calendar"): void;
+}>();
+
+const inputMode = computed({
+  get: () => props.modelValue,
+  set: (val) => emit("update:modelValue", val),
+});
+
+const {
+  inputText,
+  selectedFiles,
+  filePreviews,
+  fileInputRef,
+  handleFileSelect,
+  clearFiles,
+  handleSend,
+  isListening,
+  toggleListening,
+  handleInput,
+} = useInputFooter(inputMode);
+
+const { currentUser, isSaving, isAiThinking, isSpeaking } = useMyBrain();
+
+// バイブレーション
+const haptic = () => {
+  if (navigator.vibrate) navigator.vibrate(10);
+};
+
+// ★修正: フロントエンドにあるトークンを直接渡す
+const testNotification = async () => {
+  if (!confirm("【動画撮影用】\nLINEにテスト通知を強制送信しますか？")) return;
+
+  const functions = getFunctions(getApp(), "asia-northeast1");
+  const func = httpsCallable(functions, "forceTriggerNotification");
+
+  // ★ここが根本解決の鍵: ブラウザが持っている「有効な鍵」を渡す
+  const localToken = localStorage.getItem("google_calendar_token");
+
+  try {
+    const res: any = await func({ accessToken: localToken });
+    if (res.data.result) {
+      alert("結果: " + res.data.result);
+    }
+  } catch (e: any) {
+    console.error(e);
+    alert("失敗: " + e.message);
+  }
+};
+</script>
+
+<template>
+  <footer class="fixed bottom-0 w-full z-40 pointer-events-none">
+    <div
+      class="absolute bottom-0 w-full h-40 bg-gradient-to-t from-[#09090b] via-[#09090b]/95 to-transparent"
+    ></div>
+
+    <div class="max-w-xl mx-auto px-4 pb-6 relative pointer-events-auto">
+      <div
+        v-if="isSaving || isAiThinking || isSpeaking"
+        class="flex justify-center mb-4"
+      >
+        <div
+          class="bg-indigo-600/90 backdrop-blur text-white px-4 py-1.5 rounded-full shadow-lg font-bold text-xs flex items-center gap-2 animate-pulse border border-indigo-400/30"
+        >
+          <span class="text-sm">{{
+            isSpeaking ? "🗣️" : isSaving ? "🧠" : "✨"
+          }}</span>
+          {{
+            isSpeaking
+              ? "読み上げ中..."
+              : isSaving
+                ? "処理中..."
+                : "AIが思考中..."
+          }}
+        </div>
+      </div>
+
+      <div
+        class="bg-[#18181b] border border-[#27272a] rounded-[32px] shadow-2xl overflow-hidden transition-all duration-300 focus-within:border-indigo-500/50"
+      >
+        <div class="flex p-1 gap-1 overflow-x-auto scrollbar-hide">
+          <button
+            v-for="mode in ['memo', 'chat', 'url', 'calendar']"
+            :key="mode"
+            @click="
+              inputMode = mode as any;
+              haptic();
+            "
+            class="flex-1 py-2 rounded-full text-[10px] font-bold transition whitespace-nowrap text-center relative"
+            :class="
+              inputMode === mode
+                ? 'text-white'
+                : 'text-slate-500 hover:text-slate-300'
+            "
+          >
+            <span
+              v-if="inputMode === mode"
+              class="absolute inset-0 bg-[#27272a] rounded-full -z-10"
+            ></span>
+            {{
+              mode === "memo"
+                ? "Memo"
+                : mode === "chat"
+                  ? "Chat"
+                  : mode === "url"
+                    ? "URL"
+                    : "Schedule"
+            }}
+          </button>
+        </div>
+
+        <div
+          v-if="selectedFiles.length > 0"
+          class="flex gap-2 overflow-x-auto px-4 pb-2"
+        >
+          <div
+            v-for="(preview, idx) in filePreviews"
+            :key="idx"
+            class="relative group"
+          >
+            <img
+              :src="preview"
+              class="h-14 w-14 rounded-lg object-cover border border-[#27272a]"
+            />
+            <button
+              @click="clearFiles"
+              class="absolute -top-1 -right-1 bg-slate-800 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] border border-slate-600"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-end gap-2 px-3 pb-3 pt-1">
+          <div v-if="inputMode === 'memo'" class="pb-1.5">
+            <input
+              type="file"
+              ref="fileInputRef"
+              class="hidden"
+              multiple
+              @change="handleFileSelect"
+              accept="image/*"
+            />
+            <button
+              @click="
+                fileInputRef?.click();
+                haptic();
+              "
+              class="p-2 text-slate-400 hover:text-white hover:bg-[#27272a] rounded-full transition"
+            >
+              📎
+            </button>
+          </div>
+
+          <div class="pb-1.5 flex gap-1">
+            <button
+              @click="testNotification"
+              class="p-2 text-slate-500 hover:text-white hover:bg-[#27272a] rounded-full transition"
+              title="【撮影用】テスト通知を送る"
+            >
+              🔔
+            </button>
+
+            <button
+              v-if="inputMode === 'chat'"
+              @click="
+                toggleListening;
+                haptic();
+              "
+              class="p-2 rounded-full transition"
+              :class="
+                isListening
+                  ? 'bg-red-500/20 text-red-500 animate-pulse'
+                  : 'text-slate-400 hover:text-white hover:bg-[#27272a]'
+              "
+            >
+              🎙️
+            </button>
+          </div>
+
+          <textarea
+            v-model="inputText"
+            rows="1"
+            class="flex-1 bg-transparent text-white placeholder-slate-600 text-sm py-3 max-h-32 focus:outline-none resize-none"
+            :placeholder="
+              inputMode === 'chat'
+                ? 'AIに指示...(ワンショット入力可)'
+                : '記憶、タスク、予定を入力...'
+            "
+            @input="
+              (e) => {
+                (e.target as HTMLTextAreaElement).style.height = 'auto';
+                (e.target as HTMLTextAreaElement).style.height =
+                  (e.target as HTMLTextAreaElement).scrollHeight + 'px';
+                handleInput();
+              }
+            "
+            @keydown.enter.ctrl="handleSend(inputMode as any)"
+          ></textarea>
+
+          <button
+            @click="
+              handleSend(inputMode as any);
+              haptic();
+            "
+            :disabled="!inputText && selectedFiles.length === 0"
+            class="mb-1 p-2 bg-indigo-600 text-white rounded-full w-9 h-9 flex items-center justify-center hover:bg-indigo-500 active:scale-90 transition disabled:opacity-30 disabled:scale-100 shadow-lg shadow-indigo-500/20"
+          >
+            ↑
+          </button>
+        </div>
+      </div>
+    </div>
+  </footer>
+</template>
+</file>
+
 <file path="functions/lib/index.js">
 "use strict";
 // ==============================================================================
@@ -5127,9 +5413,6 @@ const COLORS = {
 /**
  * ⚠️ [警告カード] を作る関数
  * ダブルブッキングや移動時間が足りない時に表示します。
- * @param title 警告のタイトル
- * @param message 警告の本文
- * @param suggestion AIからの提案（あれば）
  */
 function createAlertFlex(title, message, suggestion) {
     return {
@@ -5216,11 +5499,6 @@ function createAlertFlex(title, message, suggestion) {
 /**
  * 📅 [カレンダー登録カード] を作る関数
  * 予定の日時や場所、天気予報の警告をきれいに表示します。
- * @param title 予定名
- * @param start 開始時間
- * @param end 終了時間
- * @param location 場所
- * @param weatherInfo 天気情報（雨予報など）
  */
 function createCalendarFlex(title, start, end, location, weatherInfo) {
     // コンピュータ用の日時文字を、人間が読みやすい形（例: 12/25）に変換
@@ -5747,7 +6025,7 @@ async function callGeminiJson(apiKey, prompt) {
         return extractJson(text);
     }
     catch (e) {
-        // ★修正: エラーメッセージを人間に優しくする
+        // エラーメッセージを人間に優しくする
         return {
             action: "CHAT",
             reply: `💦 ちょっと考えすぎて疲れちゃいました...。もう一度お願いできますか？ (Error: ${e.message})`,
@@ -5781,6 +6059,7 @@ async function refreshAccessToken(refreshToken) {
             refresh_token: refreshToken,
             grant_type: "refresh_token",
         });
+        // 新しいアクセストークンを返す
         return res.data.access_token;
     }
     catch (_a) {
@@ -5802,12 +6081,41 @@ async function getValidAccessToken(uid) {
         if (!docSnap.exists)
             return null;
         const data = docSnap.data();
-        if (data === null || data === void 0 ? void 0 : data.refreshToken) {
-            const newToken = await refreshAccessToken(data.refreshToken);
-            if (newToken)
-                return newToken;
+        const accessToken = data === null || data === void 0 ? void 0 : data.accessToken;
+        const refreshToken = data === null || data === void 0 ? void 0 : data.refreshToken;
+        if (!accessToken)
+            return null;
+        // ★修正: まず今のトークンが使えるか軽くテストする
+        // (カレンダーリスト取得APIを叩いてみる)
+        try {
+            await axios_1.default.get("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                params: { maxResults: 1 }, // 最小限の通信量で済ませる
+            });
+            // エラーが出なければトークンは有効
+            return accessToken;
         }
-        return (data === null || data === void 0 ? void 0 : data.accessToken) || null;
+        catch (e) {
+            // 401 Unauthorized (期限切れ) ならリフレッシュを試みる
+            if (e.response && e.response.status === 401 && refreshToken) {
+                console.log(`User ${uid}: Token expired. Refreshing...`);
+                const newToken = await refreshAccessToken(refreshToken);
+                if (newToken) {
+                    // 新しいトークンをDBに保存
+                    await db
+                        .collection("users")
+                        .doc(uid)
+                        .collection("system")
+                        .doc("tokens")
+                        .set({
+                        accessToken: newToken,
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    }, { merge: true });
+                    return newToken;
+                }
+            }
+            return null;
+        }
     }
     catch (_a) {
         return null;
@@ -5923,7 +6231,8 @@ async function checkWeather(location, dateStr) {
         return null;
     }
 }
-// --- 削除ロジック (★修正: 安全性強化＆検索ヒット率向上) ---
+// --- 削除ロジック (安全版) ---
+// カレンダー削除
 async function deleteCalendarEvent(uid, query) {
     try {
         const token = await getValidAccessToken(uid);
@@ -5945,9 +6254,11 @@ async function deleteCalendarEvent(uid, query) {
         return null;
     }
 }
+// タスク削除
 async function deleteTodoByTitle(uid, title) {
     try {
         const ref = db.collection("todos");
+        // 全件取得してからプログラム側で探す
         const snap = await ref
             .where("userId", "==", uid)
             .where("isCompleted", "==", false)
@@ -5968,6 +6279,7 @@ async function deleteTodoByTitle(uid, title) {
         return null;
     }
 }
+// メモ削除
 async function deleteMemoryByContent(uid, content) {
     try {
         const ref = db.collection("memories");
@@ -6114,7 +6426,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 });
                 return;
             }
-            // ★修正: getOpenTodosを追加して、現在のタスク一覧をAIにカンペとして渡す
+            // ★ 修正: getOpenTodos を追加してタスク一覧もAIに渡す
             const [contextSnap, memoryContext, chatHistory, calendarEvents, openTodos,] = await Promise.all([
                 userRef.collection("system").doc("user_context").get(),
                 getRecentMemories(uid, message),
@@ -6679,9 +6991,6 @@ const COLORS = {
 /**
  * ⚠️ [警告カード] を作る関数
  * ダブルブッキングや移動時間が足りない時に表示します。
- * @param title 警告のタイトル
- * @param message 警告の本文
- * @param suggestion AIからの提案（あれば）
  */
 function createAlertFlex(
   title: string,
@@ -6773,11 +7082,6 @@ function createAlertFlex(
 /**
  * 📅 [カレンダー登録カード] を作る関数
  * 予定の日時や場所、天気予報の警告をきれいに表示します。
- * @param title 予定名
- * @param start 開始時間
- * @param end 終了時間
- * @param location 場所
- * @param weatherInfo 天気情報（雨予報など）
  */
 function createCalendarFlex(
   title: string,
@@ -7326,7 +7630,7 @@ async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
     const text = await generateContentWithRetry(apiKey, prompt);
     return extractJson(text);
   } catch (e: any) {
-    // ★修正: エラーメッセージを人間に優しくする
+    // エラーメッセージを人間に優しくする
     return {
       action: "CHAT",
       reply: `💦 ちょっと考えすぎて疲れちゃいました...。もう一度お願いできますか？ (Error: ${e.message})`,
@@ -7360,6 +7664,7 @@ async function refreshAccessToken(refreshToken: string) {
       refresh_token: refreshToken,
       grant_type: "refresh_token",
     });
+    // 新しいアクセストークンを返す
     return res.data.access_token;
   } catch {
     return null;
@@ -7380,11 +7685,49 @@ async function getValidAccessToken(uid: string): Promise<string | null> {
       .get();
     if (!docSnap.exists) return null;
     const data = docSnap.data();
-    if (data?.refreshToken) {
-      const newToken = await refreshAccessToken(data.refreshToken);
-      if (newToken) return newToken;
+
+    const accessToken = data?.accessToken;
+    const refreshToken = data?.refreshToken;
+
+    if (!accessToken) return null;
+
+    // ★修正: まず今のトークンが使えるか軽くテストする
+    // (カレンダーリスト取得APIを叩いてみる)
+    try {
+      await axios.get(
+        "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          params: { maxResults: 1 }, // 最小限の通信量で済ませる
+        },
+      );
+      // エラーが出なければトークンは有効
+      return accessToken;
+    } catch (e: any) {
+      // 401 Unauthorized (期限切れ) ならリフレッシュを試みる
+      if (e.response && e.response.status === 401 && refreshToken) {
+        console.log(`User ${uid}: Token expired. Refreshing...`);
+        const newToken = await refreshAccessToken(refreshToken);
+
+        if (newToken) {
+          // 新しいトークンをDBに保存
+          await db
+            .collection("users")
+            .doc(uid)
+            .collection("system")
+            .doc("tokens")
+            .set(
+              {
+                accessToken: newToken,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+              { merge: true },
+            );
+          return newToken;
+        }
+      }
+      return null;
     }
-    return data?.accessToken || null;
   } catch {
     return null;
   }
@@ -7514,8 +7857,9 @@ async function checkWeather(
   }
 }
 
-// --- 削除ロジック (★修正: 安全性強化＆検索ヒット率向上) ---
+// --- 削除ロジック (安全版) ---
 
+// カレンダー削除
 async function deleteCalendarEvent(
   uid: string,
   query: string,
@@ -7544,12 +7888,14 @@ async function deleteCalendarEvent(
   }
 }
 
+// タスク削除
 async function deleteTodoByTitle(
   uid: string,
   title: string,
 ): Promise<string | null> {
   try {
     const ref = db.collection("todos");
+    // 全件取得してからプログラム側で探す
     const snap = await ref
       .where("userId", "==", uid)
       .where("isCompleted", "==", false)
@@ -7572,6 +7918,7 @@ async function deleteTodoByTitle(
   }
 }
 
+// メモ削除
 async function deleteMemoryByContent(
   uid: string,
   content: string,
@@ -7730,7 +8077,7 @@ export const lineWebhook = onRequest(
             return;
           }
 
-          // ★修正: getOpenTodosを追加して、現在のタスク一覧をAIにカンペとして渡す
+          // ★ 修正: getOpenTodos を追加してタスク一覧もAIに渡す
           const [
             contextSnap,
             memoryContext,
@@ -8315,235 +8662,6 @@ export const forceTriggerNotification = onCall(
     }
   },
 );
-</file>
-
-<file path="src/components/InputFooter/InputFooter.vue">
-<script setup lang="ts">
-import { computed } from "vue";
-import { useInputFooter } from "./useInputFooter";
-import { useMyBrain } from "@/composables/useMyBrain";
-import { getFunctions, httpsCallable } from "firebase/functions";
-import { getApp } from "firebase/app";
-
-const props = defineProps<{
-  modelValue: "memo" | "chat" | "url" | "calendar";
-}>();
-const emit = defineEmits<{
-  (e: "update:modelValue", val: "memo" | "chat" | "url" | "calendar"): void;
-}>();
-
-const inputMode = computed({
-  get: () => props.modelValue,
-  set: (val) => emit("update:modelValue", val),
-});
-
-const {
-  inputText,
-  selectedFiles,
-  filePreviews,
-  fileInputRef,
-  handleFileSelect,
-  clearFiles,
-  handleSend,
-  isListening,
-  toggleListening,
-  handleInput,
-} = useInputFooter(inputMode);
-
-const { currentUser, isSaving, isAiThinking, isSpeaking } = useMyBrain();
-
-// バイブレーション
-const haptic = () => {
-  if (navigator.vibrate) navigator.vibrate(10);
-};
-
-// ★修正: フロントエンドにあるトークンを直接渡す
-const testNotification = async () => {
-  if (!confirm("【動画撮影用】\nLINEにテスト通知を強制送信しますか？")) return;
-
-  const functions = getFunctions(getApp(), "asia-northeast1");
-  const func = httpsCallable(functions, "forceTriggerNotification");
-
-  // ★ここが根本解決の鍵: ブラウザが持っている「有効な鍵」を渡す
-  const localToken = localStorage.getItem("google_calendar_token");
-
-  try {
-    const res: any = await func({ accessToken: localToken });
-    if (res.data.result) {
-      alert("結果: " + res.data.result);
-    }
-  } catch (e: any) {
-    console.error(e);
-    alert("失敗: " + e.message);
-  }
-};
-</script>
-
-<template>
-  <footer class="fixed bottom-0 w-full z-40 pointer-events-none">
-    <div
-      class="absolute bottom-0 w-full h-40 bg-gradient-to-t from-[#09090b] via-[#09090b]/95 to-transparent"
-    ></div>
-
-    <div class="max-w-xl mx-auto px-4 pb-6 relative pointer-events-auto">
-      <div
-        v-if="isSaving || isAiThinking || isSpeaking"
-        class="flex justify-center mb-4"
-      >
-        <div
-          class="bg-indigo-600/90 backdrop-blur text-white px-4 py-1.5 rounded-full shadow-lg font-bold text-xs flex items-center gap-2 animate-pulse border border-indigo-400/30"
-        >
-          <span class="text-sm">{{
-            isSpeaking ? "🗣️" : isSaving ? "🧠" : "✨"
-          }}</span>
-          {{
-            isSpeaking
-              ? "読み上げ中..."
-              : isSaving
-                ? "処理中..."
-                : "AIが思考中..."
-          }}
-        </div>
-      </div>
-
-      <div
-        class="bg-[#18181b] border border-[#27272a] rounded-[32px] shadow-2xl overflow-hidden transition-all duration-300 focus-within:border-indigo-500/50"
-      >
-        <div class="flex p-1 gap-1 overflow-x-auto scrollbar-hide">
-          <button
-            v-for="mode in ['memo', 'chat', 'url', 'calendar']"
-            :key="mode"
-            @click="
-              inputMode = mode as any;
-              haptic();
-            "
-            class="flex-1 py-2 rounded-full text-[10px] font-bold transition whitespace-nowrap text-center relative"
-            :class="
-              inputMode === mode
-                ? 'text-white'
-                : 'text-slate-500 hover:text-slate-300'
-            "
-          >
-            <span
-              v-if="inputMode === mode"
-              class="absolute inset-0 bg-[#27272a] rounded-full -z-10"
-            ></span>
-            {{
-              mode === "memo"
-                ? "Memo"
-                : mode === "chat"
-                  ? "Chat"
-                  : mode === "url"
-                    ? "URL"
-                    : "Schedule"
-            }}
-          </button>
-        </div>
-
-        <div
-          v-if="selectedFiles.length > 0"
-          class="flex gap-2 overflow-x-auto px-4 pb-2"
-        >
-          <div
-            v-for="(preview, idx) in filePreviews"
-            :key="idx"
-            class="relative group"
-          >
-            <img
-              :src="preview"
-              class="h-14 w-14 rounded-lg object-cover border border-[#27272a]"
-            />
-            <button
-              @click="clearFiles"
-              class="absolute -top-1 -right-1 bg-slate-800 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] border border-slate-600"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-
-        <div class="flex items-end gap-2 px-3 pb-3 pt-1">
-          <div v-if="inputMode === 'memo'" class="pb-1.5">
-            <input
-              type="file"
-              ref="fileInputRef"
-              class="hidden"
-              multiple
-              @change="handleFileSelect"
-              accept="image/*"
-            />
-            <button
-              @click="
-                fileInputRef?.click();
-                haptic();
-              "
-              class="p-2 text-slate-400 hover:text-white hover:bg-[#27272a] rounded-full transition"
-            >
-              📎
-            </button>
-          </div>
-
-          <div class="pb-1.5 flex gap-1">
-            <button
-              @click="testNotification"
-              class="p-2 text-slate-500 hover:text-white hover:bg-[#27272a] rounded-full transition"
-              title="【撮影用】テスト通知を送る"
-            >
-              🔔
-            </button>
-
-            <button
-              v-if="inputMode === 'chat'"
-              @click="
-                toggleListening;
-                haptic();
-              "
-              class="p-2 rounded-full transition"
-              :class="
-                isListening
-                  ? 'bg-red-500/20 text-red-500 animate-pulse'
-                  : 'text-slate-400 hover:text-white hover:bg-[#27272a]'
-              "
-            >
-              🎙️
-            </button>
-          </div>
-
-          <textarea
-            v-model="inputText"
-            rows="1"
-            class="flex-1 bg-transparent text-white placeholder-slate-600 text-sm py-3 max-h-32 focus:outline-none resize-none"
-            :placeholder="
-              inputMode === 'chat'
-                ? 'AIに指示...(ワンショット入力可)'
-                : '記憶、タスク、予定を入力...'
-            "
-            @input="
-              (e) => {
-                (e.target as HTMLTextAreaElement).style.height = 'auto';
-                (e.target as HTMLTextAreaElement).style.height =
-                  (e.target as HTMLTextAreaElement).scrollHeight + 'px';
-                handleInput();
-              }
-            "
-            @keydown.enter.ctrl="handleSend(inputMode as any)"
-          ></textarea>
-
-          <button
-            @click="
-              handleSend(inputMode as any);
-              haptic();
-            "
-            :disabled="!inputText && selectedFiles.length === 0"
-            class="mb-1 p-2 bg-indigo-600 text-white rounded-full w-9 h-9 flex items-center justify-center hover:bg-indigo-500 active:scale-90 transition disabled:opacity-30 disabled:scale-100 shadow-lg shadow-indigo-500/20"
-          >
-            ↑
-          </button>
-        </div>
-      </div>
-    </div>
-  </footer>
-</template>
 </file>
 
 <file path="src/views/HomeView/HomeView.vue">
@@ -10006,68 +10124,68 @@ export function useMyBrain() {
 </file>
 
 <file path=".firebase/hosting.ZGlzdA.cache">
-sw.js,1770215640888,4ae1869834b59662478f58ba31a904a5d594b492cd6d69a2fae7523e34de0131
-registerSW.js,1770215640190,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-manifest.webmanifest,1770215640190,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-index.html,1770215640191,32e013a10e7f1f8e631ccd775892159df782835a6b43a4e4565ba6bda10fdbf0
-workbox-8c29f6e4.js,1770215640888,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-firebase-messaging-sw.js,1770215639764,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-lp.html,1770215639767,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/stateDiagram-v2-4FDKWEC3-CJ8t1nJQ.js,1770215640190,0cc58805fa724b182ee3892a45616308c601e0f8a222d9c164b7dbd3c7e99dd7
-assets/stateDiagram-FKZM4ZOC-BoHpj84L.js,1770215640190,01e047ce2784f57211825d6ea46456848471c9a7862f6f42270794dc14100c2d
-assets/timeline-definition-IT6M3QCI-DMz-150G.js,1770215640190,a84a3141e52a770167e559522325fba478ce69a6ecc9a219fc2fabf5a5ed29ec
-assets/requirementDiagram-UZGBJVZJ-DTHBvBfR.js,1770215640190,fff6e387659c263fe9f425c7bf1b63a3f08059a95e7df7c105350eed2f329ce2
-assets/xychartDiagram-PRI3JC2R-D1etutXl.js,1770215640190,849c088fac9c8803a2ddeb39e1104c3c774fc77d9844ce937968ed3d2fbb3d9b
-assets/sankeyDiagram-TZEHDZUN-CeKb87TT.js,1770215640190,5f10fee3f87707197964c9ba48d49d8ee7b5a77b9c916f108bfcea5da441a290
-assets/pieDiagram-ADFJNKIX-khIduiun.js,1770215640190,904e8aff609a01a8b7d39656f4348581b10fa13507038169f929eb78b177af9c
-assets/ordinal-Cboi1Yqb.js,1770215640190,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/min-BErr8G4L.js,1770215640190,3fe9e255b012d866af80e3eee592d7033d24b4a4f20b0a75242c042513c443e6
-assets/linear-CoB7Hcxi.js,1770215640190,2f54ec0d129e8a1dd98697c4d4b92a01392544c87c2ba893077850acfe7deb59
-assets/mindmap-definition-VGOIOE7T-BE1XaFP0.js,1770215640190,969c9a62696d8827049efa1db1df016d5e5f888addda04ce3a5cee8418220029
-assets/kanban-definition-3W4ZIXB7-CJShAig7.js,1770215640190,466335041c8c1e5eca20a4b27760aef06e7f754f1f57b4b980abff1129c9175a
-assets/quadrantDiagram-AYHSOK5B-DLWTcoVJ.js,1770215640190,df4f02e2a0f35d32da29173a39a9f3655039f475fd1057d60040f1f1867064f1
-assets/infoDiagram-WHAUD3N6-BnMJF28M.js,1770215640190,baf07d461cee54a22432d2916198e3f65b83c2c76f6aa9c92b806a842aec9d4c
-assets/init-Gi6I4Gst.js,1770215640190,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/layout-CTxorLf6.js,1770215640190,c44c4e4285241177daeb6eea909f834794c5bb93a56ff887ec722c9d4a67afaf
-assets/journeyDiagram-XKPGCS4Q-B-af54dx.js,1770215640190,5fa3064354727510a49fee8ec3271b61a127d436d25922a60334905becb9ca5b
-assets/graph-Bmefozau.js,1770215640190,751ca1be976e5326e00e1d956a363f621dfb5605a8d8bd885f6845577d6516b4
-assets/gitGraphDiagram-NY62KEGX-B58pbmco.js,1770215640190,2caf4a9d40c2a74231cb9ac8b746be845e65c29e5b73341d2a40786064cced28
-assets/index-DFn5d4pW.css,1770215640190,f2dca84e2947955db73123ff5313bf425462e52e604b7fca51ef8d3b19c61e2a
-assets/diagram-S2PKOQOG-DsBVtt5W.js,1770215640190,9ec1781fbfd02b96c61151e285da829ffa4dea9d5835c2d3afec0765716cfbc8
-assets/erDiagram-Q2GNP2WA-By47tlxn.js,1770215640190,d3355daa098885bc34233d44e2ea41ad9dd0156bdd7cdbb2def4b83f723f8658
-assets/diagram-QEK2KX5R-BwGhfZ6h.js,1770215640190,43cbcec5653e1f1251dea2faed67eecf4f3bda784b2e9e3e3cc877e854bf9e23
-assets/defaultLocale-DX6XiGOO.js,1770215640190,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/diagram-PSM6KHXK-BOWnT4Tc.js,1770215640190,a9a1e58f0df2ff6a54d534caf7e24d753646278b4383f26f88db557a104a042e
-assets/clone-BQ8Upgoh.js,1770215640190,1a00adc6317925b901fb19668f003c9149e5187f4a3885352505af43b37a6cdb
-assets/classDiagram-2ON5EDUG-BsD9lgPg.js,1770215640190,026f361cd83aaf86134490b2a19c00d4bbf2f8ad8817f5409f8812b447b689fb
-assets/chunk-QZHKN3VN-Cnj4YrjX.js,1770215640190,ed32269646efa669521e1a0c5daac846b20382fa6044efce6037d0fd24218c4a
-assets/dagre-6UL2VRFP-DiyZyBsf.js,1770215640190,37c8030ee6d45d673b83ae380b0d2d5a26d567ff9a1fc1228e4512a49c8d3673
-assets/chunk-TZMSLE5B-BZtXi22j.js,1770215640190,e6d2cb0d2dd983be79f7fae8a6e8c4c35ac0b71adf34e0f75af331e3da41e1b0
-assets/classDiagram-v2-WZHVMYZB-BsD9lgPg.js,1770215640190,026f361cd83aaf86134490b2a19c00d4bbf2f8ad8817f5409f8812b447b689fb
-assets/flowDiagram-NV44I4VS-m6MDeRrT.js,1770215640190,acee2be7413b5e6e054fe96666e370743c75bb38650e4205a3506e6be1b451c8
-assets/ganttDiagram-JELNMOA3-BVbEAcS4.js,1770215640190,ccbc70fdf6595873f81da841063b6372d4b5bcb0f58bcccaa65015c494592d8d
-assets/sequenceDiagram-WL72ISMW-C4ruKegQ.js,1770215640190,bf9d79456e91290a227353a4e03bafbd14f8182fea33777f2e270d7eef0da165
-assets/cose-bilkent-S5V4N54A-BGCXFXHN.js,1770215640190,31c417a3930a3d6b71bff10fb7bb7d106f171ee41aacc074e918d038d405a6fd
-assets/chunk-FMBD7UC4-DhvJNJZU.js,1770215640190,a20b7b557b9947f2b66a01b14217b23f7c92182adfb13141f775d8d22e4ca508
-assets/chunk-QN33PNHL-BiduQ84U.js,1770215640190,9836ee7802e1210133c0166d4cee59159ae7bdbbb23b17f845989350d022d8b8
-assets/chunk-55IACEB6-C6lfhc3-.js,1770215640190,6b56f8a00e252df2c97847b9d5c238b0f2a59acabe19ecb5c3b639087a2cdf2d
-assets/chunk-4BX2VUAB-Dv5WVT5U.js,1770215640190,bc52eb4e926e11baed9a94d729fd25dbcbf2882fd45675a63e83ed3d65204ab2
-assets/chunk-DI55MBZ5-DSssd896.js,1770215640190,af8867b8674414f501ad053cf7b753f10a5b2106a629f32d19f47be92c0d233b
-assets/channel-DWbnqk7W.js,1770215640190,e5084dbfdb83f6a0fb1e9f0f5166366105a44d296197af359d58cf7eb6299f5f
-assets/chunk-B4BG7PRW-CIRI64DX.js,1770215640190,a3de77271041dfdea73325b44d8990f1deabe6a08d819774ef7b72a5f7585b10
-assets/arc-DpJuGJT-.js,1770215640190,cb1857f54fd0f9f0b83a3735eaf92addc11ddb62fa2bff755b6c1f1e3db7353b
-assets/_baseUniq-DYZ5_F8K.js,1770215640190,744d84b1ca8f43cb6d3565987e432e4b80319f82db61faeae12fb5d5e354b418
-assets/c4Diagram-YG6GDRKO-B1khEeDK.js,1770215640187,568fb9e1b4abad82d8880f353c149f21cd43cbb78e2ad6a2fc264fa4759177b6
-assets/blockDiagram-VD42YOAC-CuDxaUOP.js,1770215640190,5a829612f2e5ac8d9296634d974a08218e798b8001e0edf1bad682ebe4f52d9b
-assets/architectureDiagram-VXUJARFQ-D0-_K_DJ.js,1770215640190,de74d5fa1caaeff697d69966cc67f655ae325d69e9d7bd287399eeffa9b0a9b0
-assets/katex-Cu_Erd72.js,1770215640190,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-tYHQz7nC.js,1770215640190,b183f11b9a86815fabe3614929224c499fe364365cff56bd80f89a37fcc2b769
-assets/cytoscape.esm-CyJtwmzi.js,1770215640190,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-B77DDQxn.js,1770215640191,a72a312a68bec22d2b6b2c237a1adc480b71c1517c9232ad88f2c893d2123877
-logo.png,1770215639766,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-192x192.png,1770215639773,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-apple-touch-icon.png,1770215639764,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1770215639779,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+registerSW.js,1770290074027,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+sw.js,1770290074751,879f4eebca4e1dd4e05700c201eafdfd3ab4f80f5cc6101d0394749d3027f436
+manifest.webmanifest,1770290074027,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+workbox-8c29f6e4.js,1770290074751,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+index.html,1770290074027,f3c9247366f7bfa7029ce38ce81eb9e62012a6b0b1eccef6327ec68ae5dec6d6
+firebase-messaging-sw.js,1770290073605,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+assets/stateDiagram-v2-4FDKWEC3-Bifx3O_z.js,1770290074026,112a92f810f72add795bbefb1be86c7997a383b781d7e3c5778d30730e484400
+lp.html,1770290073608,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/timeline-definition-IT6M3QCI-D96wtDGE.js,1770290074026,a14cd35feaf3b8c915f866580b0689fc89c5458318f2aeae233f262d900024ac
+assets/stateDiagram-FKZM4ZOC-C_AEtH-U.js,1770290074026,6ca649625b02a38451e14096624c35220731261455230bf8fa9bd03de1d49c27
+assets/sankeyDiagram-TZEHDZUN-wqZeR7sj.js,1770290074027,fb8ce50f8d3ea5f60a6bfa66087ed8e67ec9814f60a0a8c46a5165c1a1c52926
+assets/requirementDiagram-UZGBJVZJ-aK2EcWRh.js,1770290074026,11c0b89a5ee7af8fdb95c11ea723172c64d5679eca87187f8c5ebc4a324ea686
+assets/ordinal-Cboi1Yqb.js,1770290074027,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/quadrantDiagram-AYHSOK5B-9NMfcJPy.js,1770290074026,1e1d7b36d7a2762556f456ce45d5f844b849d643243a193b3c92289ccade3d27
+assets/pieDiagram-ADFJNKIX-DRJIf8Ss.js,1770290074027,ba8ea3aa5708e839751c5312847b1d971a414b77ccbfe5bf69bc9d9142a424ee
+assets/min-DEyGYFyo.js,1770290074027,78008de863f7f33daac605365779bce20bbaf4dde7f0db6b2b4f18264a3830c5
+assets/linear-Bh6D-H9h.js,1770290074027,75bb483f52be7d861a4a3f6fb89f1e13a700825fa61bc153ae33c8eb23c86f73
+assets/mindmap-definition-VGOIOE7T-BaL7r8nz.js,1770290074027,a2198e2a4381efc07537f894e65a66d87606985e4cfbc11db3c33923a4a360f0
+assets/kanban-definition-3W4ZIXB7-CUCzaWFI.js,1770290074026,3f84a5ac1ede8bbfaaa3fe8494c6a3e3fa111e46c56a67c02b49b1012256da49
+assets/infoDiagram-WHAUD3N6-BAMOjHvG.js,1770290074026,bf7a67fed9040d51c4d0e55970d77d4b3e119f6db47cf31c1b4b7b28974669cb
+assets/init-Gi6I4Gst.js,1770290074026,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/graph-Dp5zZqvA.js,1770290074027,ee3084f37d5b98827f1acfe05943c73725c4ad2e5fc293d7a7ee108b93a37282
+assets/layout-DYjrEWjB.js,1770290074027,4d1a269c24ade9e0ad1009a97684d116acc258e82a95b33e54d666b6c233d4d4
+assets/journeyDiagram-XKPGCS4Q-C4-kS3ZQ.js,1770290074026,a84f1f7be83fb743838ab7fa6b48fec86b8b01512e0ccdd505574ca00d20e06d
+assets/gitGraphDiagram-NY62KEGX-BWtm0A7f.js,1770290074026,d2d0a753af6763e7f06ff33daecfae3705fe2739c73b3ba4311cb5eeee744f12
+assets/diagram-QEK2KX5R-DwWuK1iQ.js,1770290074026,38138a279b6e245e4bc93b4ba0164c3e30ccace6d66a14f8b704eca1e8e1e977
+assets/erDiagram-Q2GNP2WA-CmJclAQq.js,1770290074027,ee8e8e4874840e535b64691b8cdf9fea15737cfb6aefa13192c4f3b73dc18552
+assets/diagram-S2PKOQOG-JB4Yy-ZJ.js,1770290074026,bcfc182d5e460f30842e9f584179cf157652044d9c4178195fe682a011d4d3fd
+assets/diagram-PSM6KHXK-BFrcqoJ-.js,1770290074027,28c834c8404226dbcbb8619f11326b2272bca9fd4ede17e8245d190858c01629
+assets/dagre-6UL2VRFP-D5niCkEN.js,1770290074027,7dd504376391f5c2095b183415c6ef3f6e23386e8035963598f9c44730d4c24e
+assets/defaultLocale-DX6XiGOO.js,1770290074027,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/clone-Bjc3onkI.js,1770290074026,76a77c52b2fd8ae99085614bfbd2101431b1dd4c469075518b2b5c6fda2d58dc
+assets/classDiagram-2ON5EDUG-ipAY8NtT.js,1770290074026,a3fc093c3497142be2657790b34594af351087e30ab1ad9b9c9585b1c6a12b78
+assets/classDiagram-v2-WZHVMYZB-ipAY8NtT.js,1770290074026,a3fc093c3497142be2657790b34594af351087e30ab1ad9b9c9585b1c6a12b78
+assets/chunk-QZHKN3VN-D-Sg3QZ2.js,1770290074026,997b867b822d7631e4118a3b356eaeba4c21441f4347475dcb341a25721dbb66
+assets/index-szjomDt6.css,1770290074026,564c727e6724a85affb7dfc2c3f35395425ab870865d87ddccad3fcc9e7e29f9
+assets/chunk-TZMSLE5B-s-BJuY60.js,1770290074026,8005e067b230e5f265f003283637a1c80602ff63652507b6d35fc41bf2b3081d
+assets/xychartDiagram-PRI3JC2R-CEE0pThP.js,1770290074027,4a073ee0cfe0b95d3aa3ca7718d2633c3a65eb3556930816df09f02fc92087ed
+assets/flowDiagram-NV44I4VS-i5Y9Kxs2.js,1770290074026,a00ca2e722e437fc62d7ee1d0d251f126ea25adf29affcbeca1dc0c547350c88
+assets/sequenceDiagram-WL72ISMW-Bn34qM-f.js,1770290074026,32dd693304b41762342cb6539a97553608e06a007c3317c811bdae7c89d10f6f
+assets/ganttDiagram-JELNMOA3-Dc5dwPwH.js,1770290074027,cc4e8ff0a552b8060f83fb06197088dc557b8acc8f29484c3eca336ba4b80324
+assets/chunk-QN33PNHL-srtdpEY0.js,1770290074026,70d643bbd8a3f4e786e331ffe433fb2966fc8e2a0b0f41f788cfb03fb30edc66
+assets/chunk-FMBD7UC4-Bre_oFsb.js,1770290074026,409344234674d3f73c68c53c435ca0f8549a95253765d4e66de204259c391ef2
+assets/cose-bilkent-S5V4N54A-0_g2iqjb.js,1770290074027,776636f0825364eed09048a7bb75741a27d60e8edf2b6c55d15cf54f608482f2
+assets/chunk-DI55MBZ5-DyytCdoO.js,1770290074026,c7b42505a37046f1523dd144a1ac9ac69682e736fb4daaba71dc9272e60be18d
+assets/chunk-55IACEB6-vc_O_yDF.js,1770290074026,6979583f9697cce13a9187f66b90a5cfcb56af065171172c80962a8cd513ba4a
+assets/chunk-4BX2VUAB-B3EzOBFR.js,1770290074026,b67ec6e02fbc001abd9ca19010b9ae61d59783096dba846e84007c739b65d96a
+assets/channel-BzdeAu95.js,1770290074026,460749adeb503c1f7922d0d67bd292488a856d47d66163e3c06d1df2c62cd091
+assets/chunk-B4BG7PRW-DO9mnfN0.js,1770290074026,a628654b8774f3719a3ee961687774ca2e9c9c950e3bef28cc5d503b32ec307b
+assets/arc-CC9-a7dT.js,1770290074026,06f7be49cbf2f35c5d1ab2254657ff38d00fea2bbafe6ba8f5092cde9e88a800
+assets/_baseUniq-wLibhZb5.js,1770290074027,5d23baf17c68d50fc57a492568f7f827463bdd775155d677d7af28d701272371
+assets/c4Diagram-YG6GDRKO-DicnsYOb.js,1770290074026,2416957ef804c97c03345e28057fb023d1d2ebaebbef6e1b88fe5f3dcc2991a4
+assets/blockDiagram-VD42YOAC-BT1Gw3V0.js,1770290074026,d4df2140a68d785b49f5a24f549cea8f3defe26d8c77e7cd0749ec5565394e14
+assets/architectureDiagram-VXUJARFQ-CBF6CnE5.js,1770290074027,a2d1ca2849ea71427a030f2284db3b747a769eb66650c772c1a329473a05fd4a
+assets/katex-Cu_Erd72.js,1770290074027,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-C_5tsveK.js,1770290074027,cb4431c5aa143003c96e662edd5bc02fea3082b450b77742790dd1d20bc08dd0
+assets/cytoscape.esm-CyJtwmzi.js,1770290074027,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-WT9uGg1p.js,1770290074028,8214eb0c3301935fa703938de910515d8a2085533af86b66a905ac4d8af64d93
+logo.png,1770290073607,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1770290073605,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-192x192.png,1770290073613,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1770290073619,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>

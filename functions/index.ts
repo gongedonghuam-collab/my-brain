@@ -67,9 +67,6 @@ const COLORS = {
 /**
  * ⚠️ [警告カード] を作る関数
  * ダブルブッキングや移動時間が足りない時に表示します。
- * @param title 警告のタイトル
- * @param message 警告の本文
- * @param suggestion AIからの提案（あれば）
  */
 function createAlertFlex(
   title: string,
@@ -161,11 +158,6 @@ function createAlertFlex(
 /**
  * 📅 [カレンダー登録カード] を作る関数
  * 予定の日時や場所、天気予報の警告をきれいに表示します。
- * @param title 予定名
- * @param start 開始時間
- * @param end 終了時間
- * @param location 場所
- * @param weatherInfo 天気情報（雨予報など）
  */
 function createCalendarFlex(
   title: string,
@@ -714,7 +706,7 @@ async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
     const text = await generateContentWithRetry(apiKey, prompt);
     return extractJson(text);
   } catch (e: any) {
-    // ★修正: エラーメッセージを人間に優しくする
+    // エラーメッセージを人間に優しくする
     return {
       action: "CHAT",
       reply: `💦 ちょっと考えすぎて疲れちゃいました...。もう一度お願いできますか？ (Error: ${e.message})`,
@@ -748,6 +740,7 @@ async function refreshAccessToken(refreshToken: string) {
       refresh_token: refreshToken,
       grant_type: "refresh_token",
     });
+    // 新しいアクセストークンを返す
     return res.data.access_token;
   } catch {
     return null;
@@ -768,11 +761,49 @@ async function getValidAccessToken(uid: string): Promise<string | null> {
       .get();
     if (!docSnap.exists) return null;
     const data = docSnap.data();
-    if (data?.refreshToken) {
-      const newToken = await refreshAccessToken(data.refreshToken);
-      if (newToken) return newToken;
+
+    const accessToken = data?.accessToken;
+    const refreshToken = data?.refreshToken;
+
+    if (!accessToken) return null;
+
+    // ★修正: まず今のトークンが使えるか軽くテストする
+    // (カレンダーリスト取得APIを叩いてみる)
+    try {
+      await axios.get(
+        "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          params: { maxResults: 1 }, // 最小限の通信量で済ませる
+        },
+      );
+      // エラーが出なければトークンは有効
+      return accessToken;
+    } catch (e: any) {
+      // 401 Unauthorized (期限切れ) ならリフレッシュを試みる
+      if (e.response && e.response.status === 401 && refreshToken) {
+        console.log(`User ${uid}: Token expired. Refreshing...`);
+        const newToken = await refreshAccessToken(refreshToken);
+
+        if (newToken) {
+          // 新しいトークンをDBに保存
+          await db
+            .collection("users")
+            .doc(uid)
+            .collection("system")
+            .doc("tokens")
+            .set(
+              {
+                accessToken: newToken,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+              { merge: true },
+            );
+          return newToken;
+        }
+      }
+      return null;
     }
-    return data?.accessToken || null;
   } catch {
     return null;
   }
@@ -902,8 +933,9 @@ async function checkWeather(
   }
 }
 
-// --- 削除ロジック (★修正: 安全性強化＆検索ヒット率向上) ---
+// --- 削除ロジック (安全版) ---
 
+// カレンダー削除
 async function deleteCalendarEvent(
   uid: string,
   query: string,
@@ -932,12 +964,14 @@ async function deleteCalendarEvent(
   }
 }
 
+// タスク削除
 async function deleteTodoByTitle(
   uid: string,
   title: string,
 ): Promise<string | null> {
   try {
     const ref = db.collection("todos");
+    // 全件取得してからプログラム側で探す
     const snap = await ref
       .where("userId", "==", uid)
       .where("isCompleted", "==", false)
@@ -960,6 +994,7 @@ async function deleteTodoByTitle(
   }
 }
 
+// メモ削除
 async function deleteMemoryByContent(
   uid: string,
   content: string,
@@ -1118,7 +1153,7 @@ export const lineWebhook = onRequest(
             return;
           }
 
-          // ★修正: getOpenTodosを追加して、現在のタスク一覧をAIにカンペとして渡す
+          // ★ 修正: getOpenTodos を追加してタスク一覧もAIに渡す
           const [
             contextSnap,
             memoryContext,
