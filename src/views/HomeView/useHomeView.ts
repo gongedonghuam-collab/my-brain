@@ -1,33 +1,36 @@
 import { ref, onMounted, watch, nextTick, computed } from "vue";
 import { useMyBrain } from "@/composables/useMyBrain";
 import type { Memory } from "@/types";
-import mermaid from "mermaid";
+import mermaid from "mermaid"; // 図解を描画するライブラリ
 import { httpsCallable, getFunctions } from "firebase/functions";
 import { getApp } from "firebase/app";
 import { useRouter, useRoute } from "vue-router";
 import axios from "axios";
 
+// カレンダープラグイン（FullCalendar）
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import listPlugin from "@fullcalendar/list";
 import type { CalendarOptions } from "@fullcalendar/core";
 
+// Googleカレンダーの色定義（IDと色の対応表）
 const GOOGLE_CALENDAR_COLORS: Record<string, string> = {
-  "1": "#7986cb",
-  "2": "#33b679",
-  "3": "#8e24aa",
-  "4": "#e67c73",
-  "5": "#f6c026",
-  "6": "#f4511e",
-  "7": "#039be5",
-  "8": "#616161",
-  "9": "#3f51b5",
-  "10": "#0b8043",
-  "11": "#d50000",
+  "1": "#7986cb", // ラベンダー
+  "2": "#33b679", // セージ
+  "3": "#8e24aa", // グレープ
+  "4": "#e67c73", // フラミンゴ
+  "5": "#f6c026", // バナナ
+  "6": "#f4511e", // みかん
+  "7": "#039be5", // ピーコック
+  "8": "#616161", // グラファイト
+  "9": "#3f51b5", // ブルーベリー（デフォルト）
+  "10": "#0b8043", // バジル
+  "11": "#d50000", // トマト
 };
 
 export function useHomeView() {
+  // `useMyBrain` から必要な機能を借りてきます
   const {
     initAuth,
     chatLogs,
@@ -42,24 +45,40 @@ export function useHomeView() {
     isCalendarConnected,
     reconnectCalendar,
   } = useMyBrain();
+
+  // --- 画面の状態管理変数 ---
+  /** 現在の入力モード（メモ/チャット/URL/カレンダー） */
   const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
+  /** 編集中のメモ（モーダルで開く用） */
   const editingMemory = ref<Memory | null>(null);
+  /** チャット画面のスクロール制御用 */
   const chatContainerRef = ref<HTMLElement | null>(null);
+  /** 成功トースト表示フラグ */
   const showSuccessToast = ref(false);
+  /** カレンダー読み込み中フラグ */
   const calendarLoading = ref(false);
+  /** 日報モーダル表示フラグ */
   const isReportModalOpen = ref(false);
+
   const route = useRoute();
   const router = useRouter();
+
+  // --- カレンダー関連の状態 ---
   const isBottomSheetOpen = ref(false);
   const selectedDateStr = ref("");
   const selectedDateEvents = ref<any[]>([]);
   const relatedMemories = ref<Memory[]>([]);
   const isSearchingMemories = ref(false);
 
+  /**
+   * カレンダーの日付をクリックした時に、下からニョキッと詳細画面を出す関数
+   */
   const openBottomSheet = async (dateStr: string) => {
     selectedDateStr.value = dateStr;
     relatedMemories.value = [];
     isSearchingMemories.value = false;
+
+    // その日の予定をフィルタリングして表示
     const events = (calendarOptions.value.events as any[]) || [];
     selectedDateEvents.value = events
       .filter((ev: any) => ev.start && ev.start.startsWith(dateStr))
@@ -67,6 +86,8 @@ export function useHomeView() {
         (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
       );
     isBottomSheetOpen.value = true;
+
+    // その日の予定に関連するメモをAI検索して表示
     if (selectedDateEvents.value.length > 0) {
       isSearchingMemories.value = true;
       const queryText = selectedDateEvents.value.map((e) => e.title).join(" ");
@@ -84,6 +105,9 @@ export function useHomeView() {
     isBottomSheetOpen.value = false;
   };
 
+  /**
+   * カレンダーの予定を削除する関数
+   */
   const deleteEvent = async (eventId: string) => {
     if (!confirm("削除しますか？")) return;
     try {
@@ -93,6 +117,7 @@ export function useHomeView() {
           { headers: { Authorization: `Bearer ${token}` } },
         );
       });
+      // 画面上のリストからも削除
       selectedDateEvents.value = selectedDateEvents.value.filter(
         (e) => e.id !== eventId,
       );
@@ -105,19 +130,23 @@ export function useHomeView() {
     }
   };
 
+  /**
+   * FullCalendarの設定オブジェクト
+   * ここでカレンダーの見た目や挙動を定義しています。
+   */
   const calendarOptions = ref<CalendarOptions>({
     plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
     initialView: "dayGridMonth",
     headerToolbar: { left: "prev", center: "title", right: "next" },
-    events: [] as any[],
-    locale: "ja",
+    events: [] as any[], // ここに予定データが入る
+    locale: "ja", // 日本語化
     height: "100%",
-    expandRows: true,
-    dayMaxEvents: 2,
+    expandRows: true, // 行の高さを均等にする
+    dayMaxEvents: 2, // 1日に表示する最大件数
 
-    // ★モダン化設定
-    displayEventTime: false,
+    displayEventTime: false, // 時間は詳細で見せるので非表示
 
+    // イベントの見た目をカスタマイズ
     eventContent: function (arg: any) {
       const timeText = arg.event.allDay ? "" : arg.timeText;
       return {
@@ -151,6 +180,9 @@ export function useHomeView() {
     handleWindowResize: true,
   });
 
+  /**
+   * Googleカレンダーから全ての予定を取得する関数
+   */
   const fetchAllCalendars = async () => {
     calendarLoading.value = true;
     try {
@@ -179,6 +211,7 @@ export function useHomeView() {
       if (!calendars) return;
 
       const now = new Date();
+      // 表示範囲: 前後数ヶ月分
       const timeMin = new Date(
         now.getFullYear(),
         now.getMonth() - 1,
@@ -239,6 +272,9 @@ export function useHomeView() {
     }
   };
 
+  /**
+   * チャット画面を一番下まで自動スクロールする関数
+   */
   const scrollToBottom = async () => {
     if (inputMode.value !== "chat") return;
     await nextTick();
@@ -253,12 +289,15 @@ export function useHomeView() {
 
   onMounted(async () => {
     initAuth();
+    // 図解ライブラリの初期化
     mermaid.initialize({
       startOnLoad: false,
       theme: "dark",
       securityLevel: "loose",
       suppressErrorRendering: true,
     });
+
+    // LINEログインからのコールバック処理
     const code = route.query.code as string;
     if (code) {
       window.history.replaceState({}, document.title, "/app");
@@ -275,6 +314,7 @@ export function useHomeView() {
     if (currentUser.value) fetchAllCalendars();
   });
 
+  // モード切替時の処理
   watch(inputMode, (newMode) => {
     if (newMode === "chat") {
       nextTick(() => {
@@ -285,6 +325,7 @@ export function useHomeView() {
       scrollToBottom();
     } else if (newMode === "calendar") {
       setTimeout(() => {
+        // カレンダーのサイズを再計算させるハック
         window.dispatchEvent(new Event("resize"));
         fetchAllCalendars();
       }, 100);

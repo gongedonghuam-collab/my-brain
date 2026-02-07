@@ -4,33 +4,38 @@ import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore, doc, setDoc } from "firebase/firestore";
 import { useRouter } from "vue-router";
 
+// ルーター（画面遷移）と認証機能の準備
 const router = useRouter();
-const loading = ref(false);
-const auth = getAuth();
-const db = getFirestore();
+const loading = ref(false); // ローディング中かどうか
+const auth = getAuth(); // Firebase Auth
+const db = getFirestore(); // Firestore Database
 
-// Googleログイン処理
+/**
+ * Googleログイン処理
+ * ここでGoogleにログインし、「合鍵」をもらってきます。
+ */
 const handleGoogleLogin = async () => {
   loading.value = true;
   try {
     const provider = new GoogleAuthProvider();
 
-    // ★重要: カレンダーへの読み書き権限
+    // ★重要: カレンダーへの読み書き権限を要求します
     provider.addScope("https://www.googleapis.com/auth/calendar.events");
     provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
 
-    // ★修正: リフレッシュトークンを強制的に取得するための設定
-    // これがないと1時間で期限切れになります
+    // ★修正ポイント: リフレッシュトークン（永続的な合鍵）を強制的に取得する設定
+    // これがないと1時間で期限切れになり、LINEで使えなくなります。
     provider.setCustomParameters({
       prompt: "consent", // 毎回承認画面を出して合鍵を確実に取得
       access_type: "offline", // 裏側（Cloud Functions）で接続するために必須
     });
 
+    // ポップアップでログイン画面を表示
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
 
     // トークン情報の取得
-    // ※ _tokenResponse は型定義に含まれていないため any でキャストして取得
+    // ※ _tokenResponse は型定義に含まれていないため any でキャストして無理やり取得します
     const tokenResponse = (result as any)._tokenResponse;
     const refreshToken =
       tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
@@ -38,6 +43,7 @@ const handleGoogleLogin = async () => {
     const accessToken = credential?.accessToken;
 
     // ★トークンをDBに保存（システム用）
+    // ユーザーには見えない場所に保存します。
     const tokenData: any = { updatedAt: new Date() };
     if (accessToken) tokenData.accessToken = accessToken; // 今すぐ使える鍵
     if (refreshToken) tokenData.refreshToken = refreshToken; // 期限が切れた時のための合鍵

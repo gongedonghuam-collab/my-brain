@@ -5,18 +5,25 @@ import { useRouter } from "vue-router";
 
 const auth = getAuth();
 const router = useRouter();
+// 現在ログイン中のユーザー（未認証状態）
 const user = auth.currentUser;
+
 const loading = ref(false);
 const message = ref("");
 
-// 再送信処理
+/**
+ * 確認メールを再送信する処理
+ * ユーザーがメールを受け取れなかった場合に実行します。
+ */
 const resendEmail = async () => {
   if (!user) return;
   loading.value = true;
   try {
+    // Firebaseの機能で本人確認メールを送る
     await sendEmailVerification(user);
     message.value = "確認メールを再送信しました。";
   } catch (e: any) {
+    // 短時間に何度も送ると制限がかかることがあるので、そのエラーハンドリング
     if (e.code === "auth/too-many-requests") {
       message.value = "少し時間を置いてから再試行してください。";
     } else {
@@ -27,15 +34,21 @@ const resendEmail = async () => {
   }
 };
 
-// 「確認しました」ボタン
+/**
+ * 「確認しました」ボタンが押された時の処理
+ * ユーザーがメールリンクをクリックした後、アプリ側で認証状態を再確認します。
+ */
 const checkVerification = async () => {
   if (!user) return;
   loading.value = true;
   try {
-    await user.reload(); // Firebaseの状態を最新に更新
+    // Firebase上のユーザー情報を最新の状態にリロード
+    // (これを行わないと、メール認証が完了していても古い情報のままになる)
+    await user.reload();
+
     if (user.emailVerified) {
       alert("認証を確認しました！");
-      // ★修正: アプリ画面へ
+      // 認証OKならアプリのメイン画面へ移動
       router.push("/app");
     } else {
       alert(
@@ -49,6 +62,10 @@ const checkVerification = async () => {
   }
 };
 
+/**
+ * ログアウトしてログイン画面に戻る処理
+ * メールアドレスを間違えた場合などに使います。
+ */
 const handleLogout = async () => {
   await signOut(auth);
   router.push("/login");

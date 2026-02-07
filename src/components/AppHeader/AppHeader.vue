@@ -4,6 +4,7 @@ import { useMyBrain } from "@/composables/useMyBrain";
 import NotificationBell from "@/components/NotificationBell/NotificationBell.vue";
 
 const { logout } = useAppHeader();
+// startSubscription: 課金画面へ飛ばす関数
 const { currentUser, startLineAuth, unlinkLine, startSubscription } =
   useMyBrain();
 </script>
@@ -96,6 +97,7 @@ const { currentUser, startLineAuth, unlinkLine, startSubscription } =
 </template>
 
 <style scoped>
+/* ゆっくり点滅するアニメーション（Proボタン用） */
 .animate-pulse-slow {
   animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
