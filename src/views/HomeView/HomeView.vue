@@ -103,8 +103,8 @@ const haptic = () => {
 
     <main
       ref="chatContainerRef"
-      class="flex-1 overflow-y-auto scrollbar-hide transition-all"
-      :class="inputMode === 'calendar' ? 'p-0' : 'p-4 pb-40'"
+      class="flex-1 overflow-y-auto scrollbar-hide transition-all pb-40"
+      :class="inputMode === 'calendar' ? 'px-0 pt-0' : 'p-4'"
     >
       <div v-if="inputMode === 'memo'" class="mb-6 animate-fade-in">
         <div class="flex gap-2 mb-6">
