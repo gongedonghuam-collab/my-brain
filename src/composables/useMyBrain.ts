@@ -156,39 +156,79 @@ function formatIsoDate(dateStr: string): string {
   return `${dateStr}+09:00`; // 簡易的な処理
 }
 
+// ★追加: トークンリフレッシュ処理を切り出し
+const attemptTokenRefresh = async (): Promise<string | null> => {
+  try {
+    const functions = getFunctions(getApp(), "asia-northeast1");
+    // Cloud Functions の "refreshCalendarToken" を呼び出す
+    const refreshFunc = httpsCallable(functions, "refreshCalendarToken");
+    const result: any = await refreshFunc(); // 引数なしで呼ぶ
+
+    if (result.data && result.data.accessToken) {
+      const newToken = result.data.accessToken;
+      // 簡易的に有効期限を設定（ここでは1時間弱とする）
+      // 正確にはexpiresInを使うが、まずは動くことを優先
+      const newExpiry = new Date().getTime() + 3500 * 1000;
+
+      localStorage.setItem("google_calendar_token", newToken);
+      localStorage.setItem(
+        "google_calendar_token_expiry",
+        newExpiry.toString(),
+      );
+      console.log("Token refreshed successfully via Cloud Functions.");
+      return newToken;
+    }
+  } catch (e) {
+    console.error("Token auto-refresh failed:", e);
+  }
+  return null;
+};
+
 /**
  * Google APIを呼び出すためのラッパー関数（共通処理）
- * トークン切れチェックとエラーハンドリングを行います。
+ * ★修正: 401エラー時にCloud Functions経由でリフレッシュを試みる
  * @param callback 実行したいAPI処理
  */
 const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
   let token = localStorage.getItem("google_calendar_token");
-  const expiry = localStorage.getItem("google_calendar_token_expiry");
 
-  // ★トークンが無い、または有効期限切れの場合
-  if (!token || (expiry && new Date().getTime() > Number(expiry))) {
-    console.warn("Access token expired or missing. Triggering reconnection.");
-    isCalendarConnected.value = false;
-    localStorage.removeItem("google_calendar_token");
-    localStorage.removeItem("google_calendar_token_expiry");
-    return null; // 無理にAPIを呼ばずに終了
+  // トークンがない場合は即座にリフレッシュを試みる
+  if (!token) {
+    token = await attemptTokenRefresh();
+    if (!token) return null; // リフレッシュ失敗なら終了
   }
 
   try {
-    const res = await callback(token);
+    // トークンがある前提でコールバック実行（型安全のため ! を使用）
+    const res = await callback(token!);
     isCalendarConnected.value = true;
     return res;
   } catch (e: any) {
-    // 401エラー（トークン切れ）なら強制ログアウトしてログイン画面へ
+    // 401エラー（トークン切れ）ならリフレッシュして再試行
     if (e.response && e.response.status === 401) {
-      console.warn("Calendar token expired (401). Redirecting to login...");
-      localStorage.removeItem("google_calendar_token");
-      localStorage.removeItem("google_calendar_token_expiry");
-      isCalendarConnected.value = false;
+      console.warn("Calendar token expired (401). Refreshing...");
 
-      await signOut(auth);
-      window.location.href = "/login";
-      return null;
+      const newToken = await attemptTokenRefresh();
+
+      if (newToken) {
+        // 新しいトークンでリトライ
+        try {
+          const retryRes = await callback(newToken);
+          isCalendarConnected.value = true;
+          return retryRes;
+        } catch (retryError) {
+          console.error("Retry failed:", retryError);
+          return null;
+        }
+      } else {
+        // リフレッシュも失敗したら強制ログアウト
+        localStorage.removeItem("google_calendar_token");
+        localStorage.removeItem("google_calendar_token_expiry");
+        isCalendarConnected.value = false;
+        await signOut(auth);
+        window.location.href = "/login";
+        return null;
+      }
     }
     throw e;
   }

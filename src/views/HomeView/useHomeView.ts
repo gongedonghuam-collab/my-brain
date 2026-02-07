@@ -8,10 +8,10 @@ import { useRouter, useRoute } from "vue-router";
 import axios from "axios";
 
 // FullCalendar（カレンダーライブラリ）のプラグイン
-import dayGridPlugin from "@fullcalendar/daygrid"; // 月表示用
-import timeGridPlugin from "@fullcalendar/timegrid"; // 週/日表示用
-import interactionPlugin from "@fullcalendar/interaction"; // クリック操作用
-import listPlugin from "@fullcalendar/list"; // リスト表示用
+import dayGridPlugin from "@fullcalendar/daygrid";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import listPlugin from "@fullcalendar/list";
 import type { CalendarOptions } from "@fullcalendar/core";
 
 // Googleカレンダーの色ID定義
@@ -62,6 +62,9 @@ export function useHomeView() {
   const selectedDateEvents = ref<any[]>([]);
   const relatedMemories = ref<Memory[]>([]);
   const isSearchingMemories = ref(false);
+
+  // 初期ロード済みフラグ（無限ループ防止）
+  const isInitialLoaded = ref(false);
 
   const openBottomSheet = async (dateStr: string) => {
     selectedDateStr.value = dateStr;
@@ -116,10 +119,11 @@ export function useHomeView() {
 
   /**
    * Googleカレンダーから全ての予定を取得する関数
-   * 引数で期間を指定できるように変更
-   * ★重要: calendarOptionsで使うため、上に移動しました
    */
   const fetchAllCalendars = async (startStr?: string, endStr?: string) => {
+    // 既にロード中ならスキップ（重複防止）
+    if (calendarLoading.value) return;
+
     calendarLoading.value = true;
     try {
       const calendars = await callGoogleApi(async (token) => {
@@ -144,8 +148,10 @@ export function useHomeView() {
 
       if (!calendars) return;
 
-      // 期間指定がない場合は前後1年を取得 (デフォルト)
+      // 期間のデフォルト値を設定（前後3ヶ月程度に広げて取得）
+      // FullCalendarのstartStr/endStrは表示範囲なので、少し広めに取るとスクロール時にスムーズです
       const now = new Date();
+
       const timeMin = startStr
         ? new Date(startStr).toISOString()
         : new Date(now.getFullYear() - 1, now.getMonth(), 1).toISOString();
@@ -191,7 +197,10 @@ export function useHomeView() {
           };
         });
       });
+
+      // ★修正: 重複取得を防ぐため、eventsを上書きする
       calendarOptions.value.events = allEvents;
+      isInitialLoaded.value = true;
     } catch (e: any) {
       if (e.response && e.response.status === 401) {
         localStorage.removeItem("google_calendar_token");
@@ -252,7 +261,6 @@ export function useHomeView() {
       }
     },
 
-    // ★修正: CSS変数(--event-color)に色情報を渡す
     eventContent: function (arg: any) {
       if (arg.view.type === "listMonth") {
         return {
@@ -276,10 +284,10 @@ export function useHomeView() {
       openBottomSheet(info.event.startStr.split("T")[0]);
     },
 
-    // ★追加: 表示期間（月など）が変わった時にデータを再取得する
+    // ★修正: 表示期間が変わった時にデータを再取得
     datesSet: (arg) => {
-      // カレンダーモードで、かつローディング中でなければ再取得
-      if (inputMode.value === "calendar" && !calendarLoading.value) {
+      // カレンダーモードで、まだ初期ロードしていないか、ユーザー操作で期間が変わった場合に実行
+      if (inputMode.value === "calendar") {
         fetchAllCalendars(arg.startStr, arg.endStr);
       }
     },
@@ -320,8 +328,11 @@ export function useHomeView() {
         alert("LINE連携失敗");
       }
     }
-    // 初期ロードはdatesSetが自動で発火するのでここでは呼ばない（重複防止）
-    // if (currentUser.value) fetchAllCalendars();
+
+    // ★修正: 明示的に初期ロードを行う（datesSetだけに頼るとタイミングによっては呼ばれないことがあるため）
+    if (currentUser.value && !isInitialLoaded.value) {
+      fetchAllCalendars();
+    }
   });
 
   watch(inputMode, (newMode) => {
@@ -335,8 +346,10 @@ export function useHomeView() {
     } else if (newMode === "calendar") {
       setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
-        // モード切替時は明示的にリロード（datesSetの発火を期待しても良いが、念のため）
-        fetchAllCalendars();
+        // モード切替時にデータをリフレッシュ
+        if (!calendarLoading.value) {
+          fetchAllCalendars();
+        }
       }, 100);
     }
   });

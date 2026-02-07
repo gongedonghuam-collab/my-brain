@@ -43,7 +43,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.forceTriggerNotification = exports.scrapeUrl = exports.unlinkLineAccount = exports.linkLineAccount = exports.sendMorningBriefing = exports.checkRoutinePatterns = exports.checkUpcomingMeetings = exports.lineWebhook = void 0;
+exports.forceTriggerNotification = exports.scrapeUrl = exports.unlinkLineAccount = exports.linkLineAccount = exports.sendMorningBriefing = exports.checkRoutinePatterns = exports.checkUpcomingMeetings = exports.lineWebhook = exports.refreshCalendarToken = void 0;
 // --- 1. 道具箱 (ライブラリのインポート) ---
 const https_1 = require("firebase-functions/v2/https"); // ウェブからの通信(HTTP)を受け取る機能
 const scheduler_1 = require("firebase-functions/v2/scheduler"); // 時間指定で定期実行する機能
@@ -1085,6 +1085,50 @@ async function getChatHistory(uid) {
         return "";
     }
 }
+// --- ★追加箇所: アクセストークンリフレッシュ用API ---
+// これをフロントエンドから呼ぶことで、期限切れのトークンを更新します。
+exports.refreshCalendarToken = (0, https_1.onCall)({
+    secrets: [googleClientId, googleClientSecret],
+    cors: true,
+}, async (req) => {
+    if (!req.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    }
+    const uid = req.auth.uid;
+    // DBからリフレッシュトークンを取得
+    const docSnap = await db
+        .collection("users")
+        .doc(uid)
+        .collection("system")
+        .doc("tokens")
+        .get();
+    if (!docSnap.exists) {
+        throw new https_1.HttpsError("not-found", "No tokens found");
+    }
+    const data = docSnap.data();
+    const refreshToken = data === null || data === void 0 ? void 0 : data.refreshToken;
+    if (!refreshToken) {
+        throw new https_1.HttpsError("failed-precondition", "No refresh token available");
+    }
+    // 定義済みの refreshAccessToken 関数を使って更新
+    // (内部でGoogleのOAuthエンドポイントを叩く)
+    const newToken = await refreshAccessToken(refreshToken);
+    if (!newToken) {
+        throw new https_1.HttpsError("internal", "Failed to refresh token from Google");
+    }
+    // 新しいトークンをDBに保存（次回以降も使えるように）
+    await db
+        .collection("users")
+        .doc(uid)
+        .collection("system")
+        .doc("tokens")
+        .set({
+        accessToken: newToken,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    // 新しいトークンを返す
+    return { accessToken: newToken };
+});
 // =========================================================
 // 5. メイン処理: LINE Webhook
 // [司令塔] LINEからのメッセージを受け取る一番大事な場所
@@ -1199,7 +1243,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     "現在は早朝です。爽やかで元気なトーンで接してください。";
             }
             // 6. AIへの指令書 (プロンプト) 作成
-            // ★修正: 返信のフォーマットに関する指示を具体的に追加
+            // ★修正: 返信のフォーマットに関する指示を厳格化
             const routerPrompt = `
       あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr}
       
@@ -1220,13 +1264,19 @@ exports.lineWebhook = (0, https_1.onRequest)({
 
       【指示】
       1. ユーザーの意図を汲み取り、JSON形式でアクションを出力してください。
-      2. **返信の口調**:
+      2. **返信の口調・フォーマット（厳守）**:
          - ユーザーの口調に合わせ、${emotionPrompt}
          - 「承知いたしました」等の定型句は禁止。人間味のある反応をしてください。
-         - **フォーマット指示**: 
-           - 長文になる場合は適宜改行を入れてください。
-           - 重要な情報は **太字** ではなく「【 】」や「■」などの記号を使って目立たせてください（LINEは見出し記法がないため）。
-           - 感情表現として絵文字（😊, 👍, ✅, 📅 など）を適度に使用してください。
+         - **改行と箇条書きを積極的に使い、見やすく整形してください。**
+         - **重要な情報は【 】や■などの記号を使って目立たせてください。**
+         - 例:
+           「了解です！👍
+            
+            📅 **予定を登録**
+            ・日時: 2/25 10:00~
+            ・内容: 会議
+            
+            あと、昨日のメモにも関連情報があったので確認しておいてね！」
 
       3. **削除アクション (重要)**: 
          - ユーザーが「〇〇を削除」「消して」と言ったら、言い訳せず必ず削除アクションを選んでください。
@@ -1249,7 +1299,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
           "instruction": "編集指示",
           "suggestion": "提案メッセージ"
         },
-        "reply": "パートナーとしての人間味ある返信"
+        "reply": "パートナーとしての人間味ある返信（改行・絵文字必須）"
       }
       `;
             // 7. AIに判断させる

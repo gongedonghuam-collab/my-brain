@@ -2519,293 +2519,6 @@ export function useTagFilter() {
 }
 </file>
 
-<file path="src/env.d.ts">
-/// <reference types="vite/client" />
-
-interface ImportMetaEnv {
-  readonly VITE_FIREBASE_API_KEY: string;
-  readonly VITE_FIREBASE_AUTH_DOMAIN: string;
-  readonly VITE_FIREBASE_PROJECT_ID: string;
-  readonly VITE_FIREBASE_STORAGE_BUCKET: string;
-  readonly VITE_FIREBASE_MESSAGING_SENDER_ID: string;
-  readonly VITE_FIREBASE_APP_ID: string;
-  readonly VITE_FIREBASE_MEASUREMENT_ID: string;
-  readonly VITE_GEMINI_API_KEY: string;
-  readonly VITE_LINE_LOGIN_CHANNEL_ID: string;
-  // ★追加: Stripe関連
-  readonly VITE_STRIPE_PAYMENT_LINK: string;
-  readonly VITE_STRIPE_PORTAL_LINK: string;
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
-
-declare module "*.vue" {
-  import type { DefineComponent } from "vue";
-  const component: DefineComponent<{}, {}, any>;
-  export default component;
-}
-</file>
-
-<file path="src/style.css">
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-:root {
-  /* モダンSaaS ダークテーマ (Notion/Cron風) */
-  --bg-main: #09090b; /* 漆黒の背景 */
-  --bg-sub: #18181b; /* カード背景 */
-  --bg-hover: #27272a; /* ホバー時 */
-  --border: #27272a; /* 境界線 */
-  --primary: #6366f1; /* Indigo 500 (知的で落ち着いた青紫) */
-  --text-main: #f8fafc; /* ほぼ白 */
-  --text-muted: #94a3b8; /* グレー */
-
-  /* FullCalendar カスタマイズ変数 */
-  --fc-border-color: #27272a;
-  --fc-today-bg-color: rgba(99, 102, 241, 0.05); /* 今日の背景は極薄く */
-  --fc-page-bg-color: transparent;
-  --fc-neutral-bg-color: transparent;
-  --fc-list-event-hover-bg-color: #27272a;
-}
-
-body {
-  background-color: var(--bg-main);
-  color: var(--text-main);
-  font-family:
-    "Inter",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  overflow: hidden; /* アプリライクな挙動 */
-}
-
-/* スクロールバー隠し */
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-/* --- FullCalendar モダンUIカスタマイズ --- */
-
-.fc {
-  font-family: inherit;
-}
-
-/* ヘッダー全体の余白と背景 */
-.fc .fc-toolbar {
-  padding: 0 4px;
-  margin-bottom: 1rem !important;
-  flex-wrap: nowrap; /* ボタンが改行しないように */
-  gap: 8px;
-}
-
-/* タイトルのスタイル（年月） */
-.fc .fc-toolbar-title {
-  font-size: 1.1rem !important;
-  font-weight: 800 !important;
-  color: var(--text-main);
-}
-
-/* ボタン（今日、月、一覧）のデザイン刷新 */
-.fc .fc-button {
-  background-color: #27272a !important; /* ダークグレー */
-  border: 1px solid #3f3f46 !important;
-  color: #a1a1aa !important; /* 薄い文字色 */
-  font-size: 0.75rem !important;
-  font-weight: bold !important;
-  padding: 6px 10px !important;
-  border-radius: 8px !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
-  transition: all 0.2s ease !important;
-}
-.fc .fc-button:hover {
-  background-color: #3f3f46 !important;
-  color: #fff !important;
-}
-
-/* アクティブなボタン（現在選択中のビュー） */
-.fc .fc-button-active {
-  background-color: var(--primary) !important; /* ブランドカラー */
-  border-color: var(--primary) !important;
-  color: white !important;
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4) !important;
-}
-
-/* カレンダーグリッド */
-.fc-theme-standard td,
-.fc-theme-standard th {
-  border-color: var(--border) !important;
-}
-
-/* 曜日ヘッダー */
-.fc .fc-col-header-cell-cushion {
-  color: var(--text-muted);
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 12px 0 !important;
-}
-
-/* 日付 */
-.fc-daygrid-day-top {
-  justify-content: center;
-  padding-top: 6px;
-}
-.fc-daygrid-day-number {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  padding: 4px 6px;
-}
-/* 今日の日付 */
-.fc-day-today .fc-daygrid-day-number {
-  background-color: var(--primary);
-  color: white;
-  font-weight: 700;
-  border-radius: 50%;
-  width: 32px; /* 24pxから拡大 */
-  height: 32px; /* 24pxから拡大 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
-  line-height: 1; /* 行間をリセットして垂直中央揃えを確実に */
-}
-
-/* --- ★ここから下がカレンダーイベントのデザイン修正 --- */
-
-/* イベントの枠（コンテナ） */
-.fc-content-custom {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 6px;
-  overflow: hidden;
-  border-radius: 4px;
-
-  /* 背景色: JSから渡された変数を使い、透明度を下げる */
-  background-color: color-mix(in srgb, var(--event-color) 20%, transparent);
-
-  /* 左端のライン: 元の色をそのまま使う */
-  border-left: 3px solid var(--event-color);
-
-  transition: all 0.1s ease;
-}
-
-.fc-content-custom:hover {
-  /* ホバー時は少し濃くする */
-  background-color: color-mix(in srgb, var(--event-color) 30%, transparent);
-}
-
-/* 色付きのドット（今回はボーダーラインで色を出すのでドットは廃止） */
-.fc-event-dot {
-  display: none;
-}
-
-/* イベントタイトル */
-.fc-title-custom {
-  font-size: 0.75rem;
-  /* 文字色: 背景が薄いので、逆に「元の色を明るくした色」を使う */
-  color: color-mix(in srgb, var(--event-color) 100%, white);
-  /* もしくはシンプルに白にするなら color: #fff; */
-
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 700;
-  line-height: 1.2;
-
-  /* 文字をくっきりさせる影 */
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-}
-
-/* デフォルトのイベント背景リセット */
-.fc-daygrid-event {
-  background-color: transparent !important;
-  border: none !important;
-  margin-top: 2px !important;
-}
-
-/* --- リスト表示 (listMonth) の調整 --- */
-
-/* リスト全体のボーダーを消してスッキリさせる */
-.fc-theme-standard .fc-list {
-  border: none !important;
-}
-
-/* 日付ヘッダー（例: 2月7日 土曜日） */
-.fc-list-day-cushion {
-  background-color: #18181b !important; /* カード背景色 */
-  border-bottom: 1px solid #27272a;
-}
-.fc-list-day-text,
-.fc-list-day-side-text {
-  color: #fff !important;
-  font-size: 0.9rem !important;
-  font-weight: bold;
-}
-
-/* イベント行 */
-.fc-list-event {
-  background-color: transparent !important;
-  border-bottom: 1px solid #27272a;
-  cursor: pointer;
-}
-.fc-list-event:hover td {
-  background-color: #27272a !important; /* ホバー時の色 */
-}
-
-/* 時間 */
-.fc-list-event-time {
-  color: #a1a1aa !important;
-  font-size: 0.8rem !important;
-  font-weight: 500;
-}
-
-/* ★修正: リスト表示のタイトル */
-.fc-list-custom-title {
-  color: #f4f4f5 !important;
-  font-size: 0.95rem !important; /* 少し大きく */
-  font-weight: 700; /* 太く */
-  padding-left: 4px;
-}
-
-/* イベントの色丸 */
-.fc-list-event-dot {
-  border-width: 4px !important;
-}
-
-/* 「予定がありません」のメッセージ */
-.fc-list-empty-cushion {
-  background-color: transparent !important;
-  color: var(--text-muted) !important;
-}
-
-/* アニメーション */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.animate-fade-in {
-  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-</file>
-
 <file path="vite.config.ts">
 import { fileURLToPath, URL } from "node:url";
 
@@ -3233,6 +2946,35 @@ const handleLogout = async () => {
 </template>
 </file>
 
+<file path="src/env.d.ts">
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_FIREBASE_API_KEY: string;
+  readonly VITE_FIREBASE_AUTH_DOMAIN: string;
+  readonly VITE_FIREBASE_PROJECT_ID: string;
+  readonly VITE_FIREBASE_STORAGE_BUCKET: string;
+  readonly VITE_FIREBASE_MESSAGING_SENDER_ID: string;
+  readonly VITE_FIREBASE_APP_ID: string;
+  readonly VITE_FIREBASE_MEASUREMENT_ID: string;
+  readonly VITE_GEMINI_API_KEY: string;
+  readonly VITE_LINE_LOGIN_CHANNEL_ID: string;
+  // ★追加: Stripe関連
+  readonly VITE_STRIPE_PAYMENT_LINK: string;
+  readonly VITE_STRIPE_PORTAL_LINK: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
+declare module "*.vue" {
+  import type { DefineComponent } from "vue";
+  const component: DefineComponent<{}, {}, any>;
+  export default component;
+}
+</file>
+
 <file path="src/firebase.ts">
 /**
  * Firebase（バックエンドサービス）の初期化設定ファイル
@@ -3330,6 +3072,264 @@ if (loader) {
       loader.remove();
     }, 500);
   }, 500);
+}
+</file>
+
+<file path="src/style.css">
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* モダンSaaS ダークテーマ (Notion/Cron風) */
+  --bg-main: #09090b; /* 漆黒の背景 */
+  --bg-sub: #18181b; /* カード背景 */
+  --bg-hover: #27272a; /* ホバー時 */
+  --border: #27272a; /* 境界線 */
+  --primary: #6366f1; /* Indigo 500 (知的で落ち着いた青紫) */
+  --text-main: #f8fafc; /* ほぼ白 */
+  --text-muted: #94a3b8; /* グレー */
+
+  /* FullCalendar カスタマイズ変数 */
+  --fc-border-color: #27272a;
+  --fc-today-bg-color: rgba(99, 102, 241, 0.05); /* 今日の背景は極薄く */
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: transparent;
+  --fc-list-event-hover-bg-color: #27272a;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden; /* アプリライクな挙動 */
+}
+
+/* スクロールバー隠し */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* --- FullCalendar モダンUIカスタマイズ --- */
+
+.fc {
+  font-family: inherit;
+}
+
+/* ヘッダー全体の余白と背景 */
+.fc .fc-toolbar {
+  padding: 0 4px;
+  margin-bottom: 1rem !important;
+  flex-wrap: nowrap; /* ボタンが改行しないように */
+  gap: 8px;
+}
+
+/* タイトルのスタイル（年月） */
+.fc .fc-toolbar-title {
+  font-size: 1.1rem !important;
+  font-weight: 800 !important;
+  color: var(--text-main);
+}
+
+/* ボタン（今日、月、一覧）のデザイン刷新 */
+.fc .fc-button {
+  background-color: #27272a !important; /* ダークグレー */
+  border: 1px solid #3f3f46 !important;
+  color: #a1a1aa !important; /* 薄い文字色 */
+  font-size: 0.75rem !important;
+  font-weight: bold !important;
+  padding: 6px 10px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+  transition: all 0.2s ease !important;
+}
+.fc .fc-button:hover {
+  background-color: #3f3f46 !important;
+  color: #fff !important;
+}
+
+/* アクティブなボタン（現在選択中のビュー） */
+.fc .fc-button-active {
+  background-color: var(--primary) !important; /* ブランドカラー */
+  border-color: var(--primary) !important;
+  color: white !important;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4) !important;
+}
+
+/* カレンダーグリッド */
+.fc-theme-standard td,
+.fc-theme-standard th {
+  border-color: var(--border) !important;
+}
+
+/* 曜日ヘッダー */
+.fc .fc-col-header-cell-cushion {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 0 !important;
+}
+
+/* 日付 */
+.fc-daygrid-day-top {
+  justify-content: center;
+  padding-top: 6px;
+}
+.fc-daygrid-day-number {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 4px 6px;
+}
+/* 今日の日付 */
+.fc-day-today .fc-daygrid-day-number {
+  background-color: var(--primary);
+  color: white;
+  font-weight: 700;
+  border-radius: 50%;
+  width: 32px; /* 24pxから拡大 */
+  height: 32px; /* 24pxから拡大 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+  line-height: 1; /* 行間をリセットして垂直中央揃えを確実に */
+}
+
+/* --- ★ここから下がカレンダーイベントのデザイン修正 --- */
+
+/* イベントの枠（コンテナ） */
+.fc-content-custom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  overflow: hidden;
+  border-radius: 4px;
+
+  /* 背景色: JSから渡された変数を使い、透明度を下げる */
+  background-color: color-mix(in srgb, var(--event-color) 20%, transparent);
+
+  /* 左端のライン: 元の色をそのまま使う */
+  border-left: 3px solid var(--event-color);
+
+  transition: all 0.1s ease;
+}
+
+.fc-content-custom:hover {
+  /* ホバー時は少し濃くする */
+  background-color: color-mix(in srgb, var(--event-color) 30%, transparent);
+}
+
+/* 色付きのドット（今回はボーダーラインで色を出すのでドットは廃止） */
+.fc-event-dot {
+  display: none;
+}
+
+/* イベントタイトル */
+.fc-title-custom {
+  font-size: 0.75rem;
+  /* 文字色: 背景が薄いので、逆に「元の色を明るくした色」を使う */
+  color: color-mix(in srgb, var(--event-color) 100%, white);
+  /* もしくはシンプルに白にするなら color: #fff; */
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  line-height: 1.2;
+
+  /* 文字をくっきりさせる影 */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* デフォルトのイベント背景リセット */
+.fc-daygrid-event {
+  background-color: transparent !important;
+  border: none !important;
+  margin-top: 2px !important;
+}
+
+/* --- リスト表示 (listMonth) の調整 --- */
+
+/* リスト全体のボーダーを消してスッキリさせる */
+.fc-theme-standard .fc-list {
+  border: none !important;
+}
+
+/* 日付ヘッダー（例: 2月7日 土曜日） */
+.fc-list-day-cushion {
+  background-color: #18181b !important; /* カード背景色 */
+  border-bottom: 1px solid #27272a;
+}
+.fc-list-day-text,
+.fc-list-day-side-text {
+  color: #fff !important;
+  font-size: 0.9rem !important;
+  font-weight: bold;
+}
+
+/* イベント行 */
+.fc-list-event {
+  background-color: transparent !important;
+  border-bottom: 1px solid #27272a;
+  cursor: pointer;
+}
+.fc-list-event:hover td {
+  background-color: #27272a !important; /* ホバー時の色 */
+}
+
+/* 時間 */
+.fc-list-event-time {
+  color: #a1a1aa !important;
+  font-size: 0.8rem !important;
+  font-weight: 500;
+}
+
+/* ★修正: リスト表示のタイトル */
+.fc-list-custom-title {
+  color: #f4f4f5 !important;
+  font-size: 0.95rem !important; /* 少し大きく */
+  font-weight: 700; /* 太く */
+  padding-left: 4px;
+}
+
+/* イベントの色丸 */
+.fc-list-event-dot {
+  border-width: 4px !important;
+}
+
+/* 「予定がありません」のメッセージ */
+.fc-list-empty-cushion {
+  background-color: transparent !important;
+  color: var(--text-muted) !important;
+}
+
+/* アニメーション */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 </file>
 
@@ -4753,10 +4753,10 @@ import { useRouter, useRoute } from "vue-router";
 import axios from "axios";
 
 // FullCalendar（カレンダーライブラリ）のプラグイン
-import dayGridPlugin from "@fullcalendar/daygrid"; // 月表示用
-import timeGridPlugin from "@fullcalendar/timegrid"; // 週/日表示用
-import interactionPlugin from "@fullcalendar/interaction"; // クリック操作用
-import listPlugin from "@fullcalendar/list"; // リスト表示用
+import dayGridPlugin from "@fullcalendar/daygrid";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import listPlugin from "@fullcalendar/list";
 import type { CalendarOptions } from "@fullcalendar/core";
 
 // Googleカレンダーの色ID定義
@@ -4807,6 +4807,9 @@ export function useHomeView() {
   const selectedDateEvents = ref<any[]>([]);
   const relatedMemories = ref<Memory[]>([]);
   const isSearchingMemories = ref(false);
+
+  // 初期ロード済みフラグ（無限ループ防止）
+  const isInitialLoaded = ref(false);
 
   const openBottomSheet = async (dateStr: string) => {
     selectedDateStr.value = dateStr;
@@ -4861,10 +4864,11 @@ export function useHomeView() {
 
   /**
    * Googleカレンダーから全ての予定を取得する関数
-   * 引数で期間を指定できるように変更
-   * ★重要: calendarOptionsで使うため、上に移動しました
    */
   const fetchAllCalendars = async (startStr?: string, endStr?: string) => {
+    // 既にロード中ならスキップ（重複防止）
+    if (calendarLoading.value) return;
+
     calendarLoading.value = true;
     try {
       const calendars = await callGoogleApi(async (token) => {
@@ -4889,8 +4893,10 @@ export function useHomeView() {
 
       if (!calendars) return;
 
-      // 期間指定がない場合は前後1年を取得 (デフォルト)
+      // 期間のデフォルト値を設定（前後3ヶ月程度に広げて取得）
+      // FullCalendarのstartStr/endStrは表示範囲なので、少し広めに取るとスクロール時にスムーズです
       const now = new Date();
+
       const timeMin = startStr
         ? new Date(startStr).toISOString()
         : new Date(now.getFullYear() - 1, now.getMonth(), 1).toISOString();
@@ -4936,7 +4942,10 @@ export function useHomeView() {
           };
         });
       });
+
+      // ★修正: 重複取得を防ぐため、eventsを上書きする
       calendarOptions.value.events = allEvents;
+      isInitialLoaded.value = true;
     } catch (e: any) {
       if (e.response && e.response.status === 401) {
         localStorage.removeItem("google_calendar_token");
@@ -4997,7 +5006,6 @@ export function useHomeView() {
       }
     },
 
-    // ★修正: CSS変数(--event-color)に色情報を渡す
     eventContent: function (arg: any) {
       if (arg.view.type === "listMonth") {
         return {
@@ -5021,10 +5029,10 @@ export function useHomeView() {
       openBottomSheet(info.event.startStr.split("T")[0]);
     },
 
-    // ★追加: 表示期間（月など）が変わった時にデータを再取得する
+    // ★修正: 表示期間が変わった時にデータを再取得
     datesSet: (arg) => {
-      // カレンダーモードで、かつローディング中でなければ再取得
-      if (inputMode.value === "calendar" && !calendarLoading.value) {
+      // カレンダーモードで、まだ初期ロードしていないか、ユーザー操作で期間が変わった場合に実行
+      if (inputMode.value === "calendar") {
         fetchAllCalendars(arg.startStr, arg.endStr);
       }
     },
@@ -5065,8 +5073,11 @@ export function useHomeView() {
         alert("LINE連携失敗");
       }
     }
-    // 初期ロードはdatesSetが自動で発火するのでここでは呼ばない（重複防止）
-    // if (currentUser.value) fetchAllCalendars();
+
+    // ★修正: 明示的に初期ロードを行う（datesSetだけに頼るとタイミングによっては呼ばれないことがあるため）
+    if (currentUser.value && !isInitialLoaded.value) {
+      fetchAllCalendars();
+    }
   });
 
   watch(inputMode, (newMode) => {
@@ -5080,8 +5091,10 @@ export function useHomeView() {
     } else if (newMode === "calendar") {
       setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
-        // モード切替時は明示的にリロード（datesSetの発火を期待しても良いが、念のため）
-        fetchAllCalendars();
+        // モード切替時にデータをリフレッシュ
+        if (!calendarLoading.value) {
+          fetchAllCalendars();
+        }
       }, 100);
     }
   });
@@ -5138,131 +5151,6 @@ export function useHomeView() {
     reconnectCalendar,
   };
 }
-</file>
-
-<file path="src/components/AppHeader/AppHeader.vue">
-<script setup lang="ts">
-import { useAppHeader } from "./useAppHeader";
-import { useMyBrain } from "@/composables/useMyBrain";
-import NotificationBell from "@/components/NotificationBell/NotificationBell.vue";
-
-const { logout } = useAppHeader();
-// ★修正: manageSubscription を追加で取得して使えるようにする
-const {
-  currentUser,
-  startLineAuth,
-  unlinkLine,
-  startSubscription,
-  manageSubscription,
-} = useMyBrain();
-</script>
-
-<template>
-  <header
-    class="h-16 px-4 md:px-6 flex items-center justify-between border-b border-[#27272a] bg-[#09090b]/80 backdrop-blur-md sticky top-0 z-50"
-  >
-    <div class="flex items-center gap-3">
-      <div
-        class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20"
-      >
-        <span class="text-lg">🧠</span>
-      </div>
-      <h1 class="font-bold text-lg tracking-tight text-white hidden md:block">
-        My Brain
-      </h1>
-    </div>
-
-    <div class="flex items-center gap-2 md:gap-4">
-      <div
-        v-if="currentUser && !currentUser.isPro"
-        class="flex items-center gap-2 mr-2"
-      >
-        <div
-          class="text-[10px] md:text-xs font-bold text-slate-400 bg-slate-800/50 px-2 py-1 rounded-md border border-slate-700"
-        >
-          あと {{ 5 - (currentUser.dailyUsage || 0) }} 回
-        </div>
-        <button
-          @click="startSubscription"
-          class="text-[10px] md:text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-600 text-white px-3 py-1.5 rounded-full shadow-lg shadow-orange-500/20 hover:scale-105 transition animate-pulse-slow"
-        >
-          💎 Proにする
-        </button>
-      </div>
-
-      <div v-else-if="currentUser && currentUser.isPro" class="mr-2">
-        <button
-          @click="manageSubscription"
-          class="text-[10px] font-bold text-amber-400 border border-amber-400/30 bg-amber-400/10 px-2 py-1 rounded transition hover:bg-amber-400/20 cursor-pointer flex items-center gap-1"
-          title="プラン管理・解約"
-        >
-          <span>PRO Plan</span>
-          <span class="text-[8px] opacity-60">⚙️</span>
-        </button>
-      </div>
-
-      <NotificationBell />
-
-      <button
-        v-if="currentUser && !currentUser.isLineLinked"
-        @click="startLineAuth"
-        class="text-xs font-bold bg-[#06c755]/10 text-[#06c755] border border-[#06c755]/20 hover:bg-[#06c755] hover:text-white transition px-2 md:px-3 py-2 rounded-lg flex items-center gap-1.5"
-        title="LINE連携"
-      >
-        <span class="text-lg">💬</span>
-        <span class="hidden md:inline">LINE連携</span>
-      </button>
-
-      <button
-        v-else-if="currentUser && currentUser.isLineLinked"
-        @click="unlinkLine"
-        class="text-xs font-bold text-[#06c755] bg-[#06c755]/10 px-2 md:px-3 py-2 rounded-lg border border-[#06c755]/20 flex items-center gap-1 hover:bg-[#06c755]/20 transition"
-        title="連携解除"
-      >
-        <span class="text-lg">💬</span>
-        <span class="text-[10px] opacity-50 -ml-1">×</span>
-      </button>
-
-      <button
-        @click="logout"
-        class="text-slate-400 hover:text-white transition p-2 hover:bg-[#18181b] rounded-lg"
-        title="ログアウト"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-          <polyline points="16 17 21 12 16 7" />
-          <line x1="21" x2="9" y1="12" y2="12" />
-        </svg>
-      </button>
-    </div>
-  </header>
-</template>
-
-<style scoped>
-/* ゆっくり点滅するアニメーション（Proボタン用） */
-.animate-pulse-slow {
-  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.8;
-  }
-}
-</style>
 </file>
 
 <file path="src/components/InputFooter/InputFooter.vue">
@@ -5494,6 +5382,131 @@ const testNotification = async () => {
 </template>
 </file>
 
+<file path="src/components/AppHeader/AppHeader.vue">
+<script setup lang="ts">
+import { useAppHeader } from "./useAppHeader";
+import { useMyBrain } from "@/composables/useMyBrain";
+import NotificationBell from "@/components/NotificationBell/NotificationBell.vue";
+
+const { logout } = useAppHeader();
+// ★修正: manageSubscription を追加で取得して使えるようにする
+const {
+  currentUser,
+  startLineAuth,
+  unlinkLine,
+  startSubscription,
+  manageSubscription,
+} = useMyBrain();
+</script>
+
+<template>
+  <header
+    class="h-16 px-4 md:px-6 flex items-center justify-between border-b border-[#27272a] bg-[#09090b]/80 backdrop-blur-md sticky top-0 z-50"
+  >
+    <div class="flex items-center gap-3">
+      <div
+        class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20"
+      >
+        <span class="text-lg">🧠</span>
+      </div>
+      <h1 class="font-bold text-lg tracking-tight text-white hidden md:block">
+        My Brain
+      </h1>
+    </div>
+
+    <div class="flex items-center gap-2 md:gap-4">
+      <div
+        v-if="currentUser && !currentUser.isPro"
+        class="flex items-center gap-2 mr-2"
+      >
+        <div
+          class="text-[10px] md:text-xs font-bold text-slate-400 bg-slate-800/50 px-2 py-1 rounded-md border border-slate-700"
+        >
+          あと {{ 5 - (currentUser.dailyUsage || 0) }} 回
+        </div>
+        <button
+          @click="startSubscription"
+          class="text-[10px] md:text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-600 text-white px-3 py-1.5 rounded-full shadow-lg shadow-orange-500/20 hover:scale-105 transition animate-pulse-slow"
+        >
+          💎 Proにする
+        </button>
+      </div>
+
+      <div v-else-if="currentUser && currentUser.isPro" class="mr-2">
+        <button
+          @click="manageSubscription"
+          class="text-[10px] font-bold text-amber-400 border border-amber-400/30 bg-amber-400/10 px-2 py-1 rounded transition hover:bg-amber-400/20 cursor-pointer flex items-center gap-1"
+          title="プラン管理・解約"
+        >
+          <span>PRO Plan</span>
+          <span class="text-[8px] opacity-60">⚙️</span>
+        </button>
+      </div>
+
+      <NotificationBell />
+
+      <button
+        v-if="currentUser && !currentUser.isLineLinked"
+        @click="startLineAuth"
+        class="text-xs font-bold bg-[#06c755]/10 text-[#06c755] border border-[#06c755]/20 hover:bg-[#06c755] hover:text-white transition px-2 md:px-3 py-2 rounded-lg flex items-center gap-1.5"
+        title="LINE連携"
+      >
+        <span class="text-lg">💬</span>
+        <span class="hidden md:inline">LINE連携</span>
+      </button>
+
+      <button
+        v-else-if="currentUser && currentUser.isLineLinked"
+        @click="unlinkLine"
+        class="text-xs font-bold text-[#06c755] bg-[#06c755]/10 px-2 md:px-3 py-2 rounded-lg border border-[#06c755]/20 flex items-center gap-1 hover:bg-[#06c755]/20 transition"
+        title="連携解除"
+      >
+        <span class="text-lg">💬</span>
+        <span class="text-[10px] opacity-50 -ml-1">×</span>
+      </button>
+
+      <button
+        @click="logout"
+        class="text-slate-400 hover:text-white transition p-2 hover:bg-[#18181b] rounded-lg"
+        title="ログアウト"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <polyline points="16 17 21 12 16 7" />
+          <line x1="21" x2="9" y1="12" y2="12" />
+        </svg>
+      </button>
+    </div>
+  </header>
+</template>
+
+<style scoped>
+/* ゆっくり点滅するアニメーション（Proボタン用） */
+.animate-pulse-slow {
+  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+</style>
+</file>
+
 <file path="src/views/LoginView/LoginView.vue">
 <script setup lang="ts">
 import { ref } from "vue";
@@ -5685,353 +5698,6 @@ const handleGoogleLogin = async () => {
           >
             利用規約
           </router-link>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-</file>
-
-<file path="src/views/HomeView/HomeView.vue">
-<script setup lang="ts">
-/**
- * HomeView.vue
- * アプリのメイン画面です。ヘッダー、メインコンテンツ、フッターを統括します。
- * 入力モード（inputMode）によって表示内容（メモ、チャット、カレンダー）を切り替えます。
- */
-import { ref } from "vue";
-import { useHomeView } from "./useHomeView";
-import { useMyBrain } from "@/composables/useMyBrain";
-
-// コンポーネント群のインポート
-import AppHeader from "@/components/AppHeader/AppHeader.vue";
-import TagFilter from "@/components/TagFilter/TagFilter.vue";
-import MemoList from "@/components/MemoList/MemoList.vue";
-import ChatList from "@/components/ChatList/ChatList.vue";
-import InputFooter from "@/components/InputFooter/InputFooter.vue";
-import MemoryModal from "@/components/MemoryModal/MemoryModal.vue";
-import FullCalendar from "@fullcalendar/vue3"; // カレンダーコンポーネント
-
-const {
-  inputMode,
-  editingMemory,
-  chatContainerRef,
-  showSuccessToast,
-  calendarLoading,
-  calendarOptions,
-  isBottomSheetOpen,
-  selectedDateStr,
-  selectedDateEvents,
-  closeBottomSheet,
-  onOpenDetail,
-  onModeChange,
-  formatTimeRange,
-  deleteEvent,
-  relatedMemories,
-  isSearchingMemories,
-  todos,
-  toggleTodo,
-  deleteTodo,
-  dailyReports,
-  isReportModalOpen,
-  isCalendarConnected,
-  reconnectCalendar,
-} = useHomeView();
-
-// ユーザー情報と手動タスク追加ロジック
-const { addManualTodo, currentUser, startLineAuth } = useMyBrain();
-const newTaskTitle = ref("");
-
-const submitTask = async () => {
-  if (!newTaskTitle.value.trim()) return;
-  await addManualTodo(newTaskTitle.value);
-  newTaskTitle.value = "";
-};
-
-const latestReport =
-  dailyReports.value.length > 0 ? dailyReports.value[0] : null;
-
-// バイブレーション機能（UX向上）
-const haptic = () => {
-  if (navigator.vibrate) navigator.vibrate(10);
-};
-</script>
-
-<template>
-  <div
-    class="h-[100dvh] flex flex-col bg-[#09090b] text-[#f8fafc] font-sans relative overflow-hidden"
-  >
-    <AppHeader />
-    <TagFilter />
-
-    <div
-      v-if="latestReport && !isReportModalOpen && inputMode === 'memo'"
-      class="px-4 pt-4 pb-2 animate-fade-in"
-    >
-      <button
-        @click="
-          isReportModalOpen = true;
-          haptic();
-        "
-        class="w-full bg-gradient-to-r from-slate-900 to-[#121214] border border-[#27272a] rounded-2xl p-4 flex items-center justify-between shadow-lg shadow-black/20 group active:scale-[0.98] transition-transform"
-      >
-        <div class="flex items-center gap-3">
-          <div
-            class="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400"
-          >
-            📰
-          </div>
-          <div class="text-left">
-            <div
-              class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5"
-            >
-              Daily Insight
-            </div>
-            <div class="text-sm font-bold text-slate-200">
-              {{ latestReport.date }} の振り返り
-            </div>
-          </div>
-        </div>
-        <span class="text-slate-600 text-lg">→</span>
-      </button>
-    </div>
-
-    <main
-      ref="chatContainerRef"
-      class="flex-1 overflow-y-auto scrollbar-hide transition-all"
-      :class="inputMode === 'calendar' ? 'p-0' : 'p-4 pb-40'"
-    >
-      <div v-if="inputMode === 'memo'" class="mb-6 animate-fade-in">
-        <div class="flex gap-2 mb-6">
-          <input
-            v-model="newTaskTitle"
-            @keydown.enter="submitTask"
-            type="text"
-            placeholder="タスクを追加..."
-            class="flex-1 bg-[#18181b] border border-[#27272a] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition placeholder-slate-600"
-          />
-          <button
-            @click="
-              submitTask();
-              haptic();
-            "
-            class="bg-indigo-600 text-white w-12 h-auto rounded-xl flex items-center justify-center hover:bg-indigo-500 active:scale-95 transition shadow-lg shadow-indigo-900/30"
-          >
-            ＋
-          </button>
-        </div>
-
-        <div v-if="todos.length > 0" class="space-y-2 mb-8">
-          <h3 class="text-xs font-bold text-slate-500 tracking-wider mb-2 px-1">
-            TASKS
-          </h3>
-          <div
-            v-for="todo in todos"
-            :key="todo.id"
-            class="flex items-center gap-3 bg-[#18181b] p-3.5 rounded-xl border border-[#27272a] transition active:scale-[0.99]"
-            :class="{ 'opacity-50 grayscale': todo.isCompleted }"
-          >
-            <button
-              @click="
-                toggleTodo(todo.id, todo.isCompleted);
-                haptic();
-              "
-              class="w-5 h-5 rounded-md border-2 flex items-center justify-center transition"
-              :class="
-                todo.isCompleted
-                  ? 'bg-indigo-500 border-indigo-500'
-                  : 'border-slate-600 hover:border-indigo-400'
-              "
-            >
-              <span
-                v-if="todo.isCompleted"
-                class="text-[10px] text-white font-bold"
-                >✓</span
-              >
-            </button>
-            <span
-              class="flex-1 text-sm font-medium truncate text-slate-300"
-              :class="{ 'line-through': todo.isCompleted }"
-            >
-              {{ todo.title }}
-            </span>
-            <button
-              @click="deleteTodo(todo.id)"
-              class="text-slate-600 hover:text-red-400 px-2"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-
-        <h3 class="text-xs font-bold text-slate-500 tracking-wider mb-2 px-1">
-          MEMORIES
-        </h3>
-        <MemoList @openDetail="onOpenDetail" />
-      </div>
-
-      <div v-if="inputMode === 'url'" class="animate-fade-in">
-        <div class="text-center py-10 text-slate-600 text-sm">
-          URLを貼り付けると、AIが要約してここに保存します。
-        </div>
-        <MemoList @openDetail="onOpenDetail" />
-      </div>
-
-      <ChatList v-if="inputMode === 'chat'" />
-
-      <div
-        v-if="inputMode === 'calendar'"
-        class="w-full h-full flex flex-col animate-fade-in relative bg-[#09090b]"
-      >
-        <div class="flex-1 p-2 md:p-6 overflow-hidden relative">
-          <div
-            class="absolute top-14 left-4 right-4 z-20 flex flex-col gap-2 pointer-events-none"
-          >
-            <div
-              v-if="!isCalendarConnected"
-              class="bg-red-500/10 border border-red-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between pointer-events-auto"
-            >
-              <span class="text-red-400 text-xs font-bold">未接続</span>
-              <button
-                @click="reconnectCalendar"
-                class="bg-red-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold"
-              >
-                再接続
-              </button>
-            </div>
-
-            <div
-              v-if="currentUser && !currentUser.isLineLinked"
-              class="bg-green-500/10 border border-green-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between animate-fade-in pointer-events-auto"
-            >
-              <div class="flex items-center gap-2">
-                <span class="text-xl">💬</span>
-                <span class="text-green-400 text-xs font-bold"
-                  >LINEで通知を受け取る</span
-                >
-              </div>
-              <button
-                @click="startLineAuth"
-                class="bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold hover:bg-green-400 transition"
-              >
-                連携する
-              </button>
-            </div>
-          </div>
-
-          <FullCalendar
-            :options="calendarOptions"
-            class="w-full h-full font-sans cyber-calendar"
-          />
-        </div>
-      </div>
-    </main>
-
-    <MemoryModal :memory="editingMemory" @close="editingMemory = null" />
-    <InputFooter :modelValue="inputMode" @update:modelValue="onModeChange" />
-
-    <div
-      v-if="isBottomSheetOpen"
-      class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity"
-      @click="closeBottomSheet"
-    ></div>
-    <div
-      class="fixed bottom-0 left-0 w-full z-50 bg-[#121214] rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] transform transition-transform duration-300 ease-out flex flex-col max-h-[85vh] border-t border-[#27272a]"
-      :class="isBottomSheetOpen ? 'translate-y-0' : 'translate-y-full'"
-    >
-      <div
-        class="w-full flex justify-center pt-3 pb-2"
-        @click="closeBottomSheet"
-      >
-        <div class="w-12 h-1.5 bg-slate-700/50 rounded-full"></div>
-      </div>
-
-      <div
-        class="px-6 pb-4 pt-2 border-b border-[#27272a] flex justify-between items-end"
-      >
-        <div>
-          <div class="text-xs font-bold text-indigo-400 mb-0.5 tracking-wider">
-            SELECTED DATE
-          </div>
-          <div class="text-2xl font-bold text-white tracking-tight">
-            {{ selectedDateStr }}
-          </div>
-        </div>
-        <button
-          @click="closeBottomSheet"
-          class="bg-[#27272a] p-2 rounded-full text-slate-400 hover:text-white"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div class="flex-1 overflow-y-auto p-6 pb-12">
-        <div
-          v-if="selectedDateEvents.length === 0"
-          class="text-center py-12 text-slate-600"
-        >
-          <p class="text-sm font-bold">No Events</p>
-        </div>
-        <div v-else class="space-y-3">
-          <div
-            v-for="(ev, idx) in selectedDateEvents"
-            :key="idx"
-            class="bg-[#18181b] p-4 rounded-xl border border-[#27272a] flex gap-4 hover:border-indigo-500/30 transition"
-          >
-            <div
-              class="w-1 h-auto rounded-full"
-              :style="{ backgroundColor: ev.backgroundColor }"
-            ></div>
-            <div class="flex-1">
-              <div class="text-xs text-slate-400 font-mono mb-1">
-                {{ formatTimeRange(ev) }}
-              </div>
-              <div class="text-sm font-bold text-white">{{ ev.title }}</div>
-            </div>
-            <button
-              @click.stop="deleteEvent(ev.id)"
-              class="text-slate-600 hover:text-red-500"
-            >
-              🗑️
-            </button>
-          </div>
-        </div>
-
-        <div
-          v-if="relatedMemories.length > 0"
-          class="mt-8 pt-8 border-t border-[#27272a]"
-        >
-          <h4
-            class="text-xs font-bold text-slate-500 mb-4 tracking-wider flex items-center gap-2"
-          >
-            <span>🧠</span> 関連する記憶
-          </h4>
-          <div class="grid gap-2">
-            <div
-              v-for="m in relatedMemories"
-              :key="m.id"
-              @click="onOpenDetail(m)"
-              class="bg-[#18181b] border border-[#27272a] p-3 rounded-xl text-xs text-slate-300 hover:bg-[#27272a] cursor-pointer leading-relaxed"
-            >
-              {{ m.aiSummary || m.text.substring(0, 50) }}
-            </div>
-          </div>
-        </div>
-
-        <div
-          v-else-if="selectedDateEvents.length > 0 && !isSearchingMemories"
-          class="mt-8 pt-8 border-t border-[#27272a] text-center"
-        >
-          <p class="text-xs text-slate-600">関連する記憶はありませんでした</p>
-        </div>
-
-        <div
-          v-else-if="isSearchingMemories"
-          class="mt-8 pt-8 border-t border-[#27272a] text-center"
-        >
-          <p class="text-xs text-slate-500 animate-pulse">
-            関連情報を検索中...
-          </p>
         </div>
       </div>
     </div>
@@ -7241,6 +6907,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     "現在は早朝です。爽やかで元気なトーンで接してください。";
             }
             // 6. AIへの指令書 (プロンプト) 作成
+            // ★修正: 返信のフォーマットに関する指示を具体的に追加
             const routerPrompt = `
       あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr}
       
@@ -7264,6 +6931,10 @@ exports.lineWebhook = (0, https_1.onRequest)({
       2. **返信の口調**:
          - ユーザーの口調に合わせ、${emotionPrompt}
          - 「承知いたしました」等の定型句は禁止。人間味のある反応をしてください。
+         - **フォーマット指示**: 
+           - 長文になる場合は適宜改行を入れてください。
+           - 重要な情報は **太字** ではなく「【 】」や「■」などの記号を使って目立たせてください（LINEは見出し記法がないため）。
+           - 感情表現として絵文字（😊, 👍, ✅, 📅 など）を適度に使用してください。
 
       3. **削除アクション (重要)**: 
          - ユーザーが「〇〇を削除」「消して」と言ったら、言い訳せず必ず削除アクションを選んでください。
@@ -8971,6 +8642,7 @@ export const lineWebhook = onRequest(
           }
 
           // 6. AIへの指令書 (プロンプト) 作成
+          // ★修正: 返信のフォーマットに関する指示を具体的に追加
           const routerPrompt = `
       あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr}
       
@@ -8994,6 +8666,10 @@ export const lineWebhook = onRequest(
       2. **返信の口調**:
          - ユーザーの口調に合わせ、${emotionPrompt}
          - 「承知いたしました」等の定型句は禁止。人間味のある反応をしてください。
+         - **フォーマット指示**: 
+           - 長文になる場合は適宜改行を入れてください。
+           - 重要な情報は **太字** ではなく「【 】」や「■」などの記号を使って目立たせてください（LINEは見出し記法がないため）。
+           - 感情表現として絵文字（😊, 👍, ✅, 📅 など）を適度に使用してください。
 
       3. **削除アクション (重要)**: 
          - ユーザーが「〇〇を削除」「消して」と言ったら、言い訳せず必ず削除アクションを選んでください。
@@ -9529,6 +9205,353 @@ export const forceTriggerNotification = onCall(
 );
 </file>
 
+<file path="src/views/HomeView/HomeView.vue">
+<script setup lang="ts">
+/**
+ * HomeView.vue
+ * アプリのメイン画面です。ヘッダー、メインコンテンツ、フッターを統括します。
+ * 入力モード（inputMode）によって表示内容（メモ、チャット、カレンダー）を切り替えます。
+ */
+import { ref } from "vue";
+import { useHomeView } from "./useHomeView";
+import { useMyBrain } from "@/composables/useMyBrain";
+
+// コンポーネント群のインポート
+import AppHeader from "@/components/AppHeader/AppHeader.vue";
+import TagFilter from "@/components/TagFilter/TagFilter.vue";
+import MemoList from "@/components/MemoList/MemoList.vue";
+import ChatList from "@/components/ChatList/ChatList.vue";
+import InputFooter from "@/components/InputFooter/InputFooter.vue";
+import MemoryModal from "@/components/MemoryModal/MemoryModal.vue";
+import FullCalendar from "@fullcalendar/vue3"; // カレンダーコンポーネント
+
+const {
+  inputMode,
+  editingMemory,
+  chatContainerRef,
+  showSuccessToast,
+  calendarLoading,
+  calendarOptions,
+  isBottomSheetOpen,
+  selectedDateStr,
+  selectedDateEvents,
+  closeBottomSheet,
+  onOpenDetail,
+  onModeChange,
+  formatTimeRange,
+  deleteEvent,
+  relatedMemories,
+  isSearchingMemories,
+  todos,
+  toggleTodo,
+  deleteTodo,
+  dailyReports,
+  isReportModalOpen,
+  isCalendarConnected,
+  reconnectCalendar,
+} = useHomeView();
+
+// ユーザー情報と手動タスク追加ロジック
+const { addManualTodo, currentUser, startLineAuth } = useMyBrain();
+const newTaskTitle = ref("");
+
+const submitTask = async () => {
+  if (!newTaskTitle.value.trim()) return;
+  await addManualTodo(newTaskTitle.value);
+  newTaskTitle.value = "";
+};
+
+const latestReport =
+  dailyReports.value.length > 0 ? dailyReports.value[0] : null;
+
+// バイブレーション機能（UX向上）
+const haptic = () => {
+  if (navigator.vibrate) navigator.vibrate(10);
+};
+</script>
+
+<template>
+  <div
+    class="h-[100dvh] flex flex-col bg-[#09090b] text-[#f8fafc] font-sans relative overflow-hidden"
+  >
+    <AppHeader />
+    <TagFilter />
+
+    <div
+      v-if="latestReport && !isReportModalOpen && inputMode === 'memo'"
+      class="px-4 pt-4 pb-2 animate-fade-in"
+    >
+      <button
+        @click="
+          isReportModalOpen = true;
+          haptic();
+        "
+        class="w-full bg-gradient-to-r from-slate-900 to-[#121214] border border-[#27272a] rounded-2xl p-4 flex items-center justify-between shadow-lg shadow-black/20 group active:scale-[0.98] transition-transform"
+      >
+        <div class="flex items-center gap-3">
+          <div
+            class="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400"
+          >
+            📰
+          </div>
+          <div class="text-left">
+            <div
+              class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5"
+            >
+              Daily Insight
+            </div>
+            <div class="text-sm font-bold text-slate-200">
+              {{ latestReport.date }} の振り返り
+            </div>
+          </div>
+        </div>
+        <span class="text-slate-600 text-lg">→</span>
+      </button>
+    </div>
+
+    <main
+      ref="chatContainerRef"
+      class="flex-1 overflow-y-auto scrollbar-hide transition-all pb-40"
+      :class="inputMode === 'calendar' ? 'px-0 pt-0' : 'p-4'"
+    >
+      <div v-if="inputMode === 'memo'" class="mb-6 animate-fade-in">
+        <div class="flex gap-2 mb-6">
+          <input
+            v-model="newTaskTitle"
+            @keydown.enter="submitTask"
+            type="text"
+            placeholder="タスクを追加..."
+            class="flex-1 bg-[#18181b] border border-[#27272a] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition placeholder-slate-600"
+          />
+          <button
+            @click="
+              submitTask();
+              haptic();
+            "
+            class="bg-indigo-600 text-white w-12 h-auto rounded-xl flex items-center justify-center hover:bg-indigo-500 active:scale-95 transition shadow-lg shadow-indigo-900/30"
+          >
+            ＋
+          </button>
+        </div>
+
+        <div v-if="todos.length > 0" class="space-y-2 mb-8">
+          <h3 class="text-xs font-bold text-slate-500 tracking-wider mb-2 px-1">
+            TASKS
+          </h3>
+          <div
+            v-for="todo in todos"
+            :key="todo.id"
+            class="flex items-center gap-3 bg-[#18181b] p-3.5 rounded-xl border border-[#27272a] transition active:scale-[0.99]"
+            :class="{ 'opacity-50 grayscale': todo.isCompleted }"
+          >
+            <button
+              @click="
+                toggleTodo(todo.id, todo.isCompleted);
+                haptic();
+              "
+              class="w-5 h-5 rounded-md border-2 flex items-center justify-center transition"
+              :class="
+                todo.isCompleted
+                  ? 'bg-indigo-500 border-indigo-500'
+                  : 'border-slate-600 hover:border-indigo-400'
+              "
+            >
+              <span
+                v-if="todo.isCompleted"
+                class="text-[10px] text-white font-bold"
+                >✓</span
+              >
+            </button>
+            <span
+              class="flex-1 text-sm font-medium truncate text-slate-300"
+              :class="{ 'line-through': todo.isCompleted }"
+            >
+              {{ todo.title }}
+            </span>
+            <button
+              @click="deleteTodo(todo.id)"
+              class="text-slate-600 hover:text-red-400 px-2"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <h3 class="text-xs font-bold text-slate-500 tracking-wider mb-2 px-1">
+          MEMORIES
+        </h3>
+        <MemoList @openDetail="onOpenDetail" />
+      </div>
+
+      <div v-if="inputMode === 'url'" class="animate-fade-in">
+        <div class="text-center py-10 text-slate-600 text-sm">
+          URLを貼り付けると、AIが要約してここに保存します。
+        </div>
+        <MemoList @openDetail="onOpenDetail" />
+      </div>
+
+      <ChatList v-if="inputMode === 'chat'" />
+
+      <div
+        v-if="inputMode === 'calendar'"
+        class="w-full h-full flex flex-col animate-fade-in relative bg-[#09090b]"
+      >
+        <div class="flex-1 p-2 md:p-6 overflow-hidden relative">
+          <div
+            class="absolute top-14 left-4 right-4 z-20 flex flex-col gap-2 pointer-events-none"
+          >
+            <div
+              v-if="!isCalendarConnected"
+              class="bg-red-500/10 border border-red-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between pointer-events-auto"
+            >
+              <span class="text-red-400 text-xs font-bold">未接続</span>
+              <button
+                @click="reconnectCalendar"
+                class="bg-red-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold"
+              >
+                再接続
+              </button>
+            </div>
+
+            <div
+              v-if="currentUser && !currentUser.isLineLinked"
+              class="bg-green-500/10 border border-green-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between animate-fade-in pointer-events-auto"
+            >
+              <div class="flex items-center gap-2">
+                <span class="text-xl">💬</span>
+                <span class="text-green-400 text-xs font-bold"
+                  >LINEで通知を受け取る</span
+                >
+              </div>
+              <button
+                @click="startLineAuth"
+                class="bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold hover:bg-green-400 transition"
+              >
+                連携する
+              </button>
+            </div>
+          </div>
+
+          <FullCalendar
+            :options="calendarOptions"
+            class="w-full h-full font-sans cyber-calendar"
+          />
+        </div>
+      </div>
+    </main>
+
+    <MemoryModal :memory="editingMemory" @close="editingMemory = null" />
+    <InputFooter :modelValue="inputMode" @update:modelValue="onModeChange" />
+
+    <div
+      v-if="isBottomSheetOpen"
+      class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity"
+      @click="closeBottomSheet"
+    ></div>
+    <div
+      class="fixed bottom-0 left-0 w-full z-50 bg-[#121214] rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] transform transition-transform duration-300 ease-out flex flex-col max-h-[85vh] border-t border-[#27272a]"
+      :class="isBottomSheetOpen ? 'translate-y-0' : 'translate-y-full'"
+    >
+      <div
+        class="w-full flex justify-center pt-3 pb-2"
+        @click="closeBottomSheet"
+      >
+        <div class="w-12 h-1.5 bg-slate-700/50 rounded-full"></div>
+      </div>
+
+      <div
+        class="px-6 pb-4 pt-2 border-b border-[#27272a] flex justify-between items-end"
+      >
+        <div>
+          <div class="text-xs font-bold text-indigo-400 mb-0.5 tracking-wider">
+            SELECTED DATE
+          </div>
+          <div class="text-2xl font-bold text-white tracking-tight">
+            {{ selectedDateStr }}
+          </div>
+        </div>
+        <button
+          @click="closeBottomSheet"
+          class="bg-[#27272a] p-2 rounded-full text-slate-400 hover:text-white"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-6 pb-12">
+        <div
+          v-if="selectedDateEvents.length === 0"
+          class="text-center py-12 text-slate-600"
+        >
+          <p class="text-sm font-bold">No Events</p>
+        </div>
+        <div v-else class="space-y-3">
+          <div
+            v-for="(ev, idx) in selectedDateEvents"
+            :key="idx"
+            class="bg-[#18181b] p-4 rounded-xl border border-[#27272a] flex gap-4 hover:border-indigo-500/30 transition"
+          >
+            <div
+              class="w-1 h-auto rounded-full"
+              :style="{ backgroundColor: ev.backgroundColor }"
+            ></div>
+            <div class="flex-1">
+              <div class="text-xs text-slate-400 font-mono mb-1">
+                {{ formatTimeRange(ev) }}
+              </div>
+              <div class="text-sm font-bold text-white">{{ ev.title }}</div>
+            </div>
+            <button
+              @click.stop="deleteEvent(ev.id)"
+              class="text-slate-600 hover:text-red-500"
+            >
+              🗑️
+            </button>
+          </div>
+        </div>
+
+        <div
+          v-if="relatedMemories.length > 0"
+          class="mt-8 pt-8 border-t border-[#27272a]"
+        >
+          <h4
+            class="text-xs font-bold text-slate-500 mb-4 tracking-wider flex items-center gap-2"
+          >
+            <span>🧠</span> 関連する記憶
+          </h4>
+          <div class="grid gap-2">
+            <div
+              v-for="m in relatedMemories"
+              :key="m.id"
+              @click="onOpenDetail(m)"
+              class="bg-[#18181b] border border-[#27272a] p-3 rounded-xl text-xs text-slate-300 hover:bg-[#27272a] cursor-pointer leading-relaxed"
+            >
+              {{ m.aiSummary || m.text.substring(0, 50) }}
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-else-if="selectedDateEvents.length > 0 && !isSearchingMemories"
+          class="mt-8 pt-8 border-t border-[#27272a] text-center"
+        >
+          <p class="text-xs text-slate-600">関連する記憶はありませんでした</p>
+        </div>
+
+        <div
+          v-else-if="isSearchingMemories"
+          class="mt-8 pt-8 border-t border-[#27272a] text-center"
+        >
+          <p class="text-xs text-slate-500 animate-pulse">
+            関連情報を検索中...
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
 <file path="src/composables/useMyBrain.ts">
 import { ref, computed } from "vue";
 import { db, auth } from "@/firebase";
@@ -9690,20 +9713,16 @@ function formatIsoDate(dateStr: string): string {
 
 /**
  * Google APIを呼び出すためのラッパー関数（共通処理）
- * トークン切れチェックとエラーハンドリングを行います。
+ * ★修正: 401エラー時にCloud Functions経由でリフレッシュを試みる
  * @param callback 実行したいAPI処理
  */
 const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
   let token = localStorage.getItem("google_calendar_token");
-  const expiry = localStorage.getItem("google_calendar_token_expiry");
 
-  // ★トークンが無い、または有効期限切れの場合
-  if (!token || (expiry && new Date().getTime() > Number(expiry))) {
-    console.warn("Access token expired or missing. Triggering reconnection.");
-    isCalendarConnected.value = false;
-    localStorage.removeItem("google_calendar_token");
-    localStorage.removeItem("google_calendar_token_expiry");
-    return null; // 無理にAPIを呼ばずに終了
+  // トークンがない場合は即座にリフレッシュを試みる
+  if (!token) {
+    token = await attemptTokenRefresh();
+    if (!token) return null; // リフレッシュ失敗なら終了
   }
 
   try {
@@ -9711,19 +9730,60 @@ const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
     isCalendarConnected.value = true;
     return res;
   } catch (e: any) {
-    // 401エラー（トークン切れ）なら強制ログアウトしてログイン画面へ
+    // 401エラー（トークン切れ）ならリフレッシュして再試行
     if (e.response && e.response.status === 401) {
-      console.warn("Calendar token expired (401). Redirecting to login...");
-      localStorage.removeItem("google_calendar_token");
-      localStorage.removeItem("google_calendar_token_expiry");
-      isCalendarConnected.value = false;
+      console.warn("Calendar token expired (401). Refreshing...");
 
-      await signOut(auth);
-      window.location.href = "/login";
-      return null;
+      const newToken = await attemptTokenRefresh();
+
+      if (newToken) {
+        // 新しいトークンでリトライ
+        try {
+          const retryRes = await callback(newToken);
+          isCalendarConnected.value = true;
+          return retryRes;
+        } catch (retryError) {
+          console.error("Retry failed:", retryError);
+          return null;
+        }
+      } else {
+        // リフレッシュも失敗したら強制ログアウト
+        localStorage.removeItem("google_calendar_token");
+        localStorage.removeItem("google_calendar_token_expiry");
+        isCalendarConnected.value = false;
+        await signOut(auth);
+        window.location.href = "/login";
+        return null;
+      }
     }
     throw e;
   }
+};
+
+// ★追加: トークンリフレッシュ処理を切り出し
+const attemptTokenRefresh = async (): Promise<string | null> => {
+  try {
+    const functions = getFunctions(getApp(), "asia-northeast1");
+    const refreshFunc = httpsCallable(functions, "refreshCalendarToken");
+    const result: any = await refreshFunc(); // 引数なしで呼ぶ
+
+    if (result.data && result.data.accessToken) {
+      const newToken = result.data.accessToken;
+      const expiresIn = result.data.expiresIn || 3600;
+      const newExpiry = new Date().getTime() + (Number(expiresIn) - 300) * 1000;
+
+      localStorage.setItem("google_calendar_token", newToken);
+      localStorage.setItem(
+        "google_calendar_token_expiry",
+        newExpiry.toString(),
+      );
+      console.log("Token refreshed successfully via Cloud Functions.");
+      return newToken;
+    }
+  } catch (e) {
+    console.error("Token auto-refresh failed:", e);
+  }
+  return null;
 };
 
 /**
@@ -10918,68 +10978,68 @@ export function useMyBrain() {
 </file>
 
 <file path=".firebase/hosting.ZGlzdA.cache">
-sw.js,1770442373507,c29db1932310539a4f916525979916ef33e63e848a6a2eae3c31c45698612a76
-manifest.webmanifest,1770442372646,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-index.html,1770442372646,5b27f9bd88a37eaa687fce9ee6301a51fee65e9e5912527dd93895a91b21768c
-firebase-messaging-sw.js,1770442372177,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-registerSW.js,1770442372646,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-workbox-8c29f6e4.js,1770442373507,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-lp.html,1770442372180,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/stateDiagram-FKZM4ZOC-DEyHP204.js,1770442372644,5b202715cb276b3794d54e97a97b774f6218d609e617e59b0886b09cddd91b4d
-assets/stateDiagram-v2-4FDKWEC3-C763nhbr.js,1770442372644,00f5c174fd12977ec2b0ddab2aca1e2a7dc84a48cd259b10b52ba78631c01cf5
-assets/xychartDiagram-PRI3JC2R-CJTy2fZU.js,1770442372645,c7cef4d7d186b5ffeff93827012d0052e19161221f92fd0e94adbcb69efe8a3c
-assets/pieDiagram-ADFJNKIX-BVR4yKZM.js,1770442372645,fea9df55fc2fa2b3d438565df691896bf4da636e5ca795eb4bbabc79b53d8221
-assets/ordinal-Cboi1Yqb.js,1770442372646,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/sankeyDiagram-TZEHDZUN-cf8IIVtw.js,1770442372646,f858d8aced90d93a1e2cc5d07407fe06bf06d27add14aa8203ee0d8bc40a0a0f
-assets/min-1c0G6RYG.js,1770442372646,40b05af312b85634dff8356c53e81ef78be063e63a58745ffdb888ef25dc7f4f
-assets/timeline-definition-IT6M3QCI-a4EsUKsw.js,1770442372644,5a3ae20ee831722ed3c2bd181b9615c1d4ac5829781ad7e3e18fbc138d6ccd8a
-assets/linear-QhI8wC8j.js,1770442372646,a22d93bbedd59c5b03a4078dba0ae85110d087e56b12495a3ceb0bbeecd231a1
-assets/requirementDiagram-UZGBJVZJ-CI4zvyNR.js,1770442372644,2fa2d8cb51b724baf9db0425326258fc35f6058dbcc180e02c40f4d89ed6e664
-assets/init-Gi6I4Gst.js,1770442372644,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/quadrantDiagram-AYHSOK5B-BhCK3ERT.js,1770442372644,13997dc071198ec1b3ace4abc1027332a1471b6cfe0b04586ce67d1e507aa4ae
-assets/kanban-definition-3W4ZIXB7-fPaj01EU.js,1770442372644,3268f79a5485f8eddd218297b2c1e47f8f2c69477598e6a8912c655d840a5a7e
-assets/infoDiagram-WHAUD3N6-B2ivtPmF.js,1770442372644,b397580215fd98fc9df85a6991c2d27cfd2f2eb0aa020da4f521c4c469a77423
-assets/mindmap-definition-VGOIOE7T-CdXvfywS.js,1770442372645,dde7e306a67b6a19585408896b2f223f0781195fa34845657ca17f27a121821f
-assets/graph-C35VKZ2q.js,1770442372646,9f20e938f21eac16e916820f3d5480f9d5b7dd7b2b7128ba47150a624188655d
-assets/journeyDiagram-XKPGCS4Q-P4XVsr3m.js,1770442372644,ec50d746bae9e6c75bc3e5948ca52fed98c16a6590b7d0d59f4dd058da2225a4
-assets/gitGraphDiagram-NY62KEGX-pqIYg6zM.js,1770442372644,1c74ed83059dd41eee09ea0a04707611df0c9b72ab4059db5c183cdfb0d88ffd
-assets/layout-0pAHdiW4.js,1770442372646,14e0349f3ffcb9f869b758ed7fe30055d30078b3bc75012b191ad8f15afdfc57
-assets/erDiagram-Q2GNP2WA-BVtbXNVT.js,1770442372646,220cb35d8aeece041a249136512551858b3f265b49d28704f9714b156a324585
-assets/diagram-S2PKOQOG-gHwLo6BD.js,1770442372644,e03130c6ca2c71a1c055e70658fdd02b0fa212aa66275070f4a8732b76729743
-assets/index-BqNE6pW9.css,1770442372644,dc4edbb26ae7db903680b58e1162e154191dcc50b7e829c802d52f45ab6a874c
-assets/diagram-QEK2KX5R-J4lnj218.js,1770442372644,2b271487507e1660e1b8c3c3fa73035509d65034ddaf1583539d0138544c1b8b
-assets/dagre-6UL2VRFP-C_gzuw9B.js,1770442372645,7d122310acaedc365e7472957fa45166b3c74d43f50ee6ba75b6a914be1b8acb
-assets/diagram-PSM6KHXK-BIT8O90-.js,1770442372646,ed79d391e1033b045387252bbe1a82d7a14c9f2ef29982a571f64835ef030d99
-assets/clone-tRzb63M8.js,1770442372644,7750bee6ad34ddf86ac1eb14cbffe31b6b076d34701a8b16004ffffbdb0d22be
-assets/defaultLocale-DX6XiGOO.js,1770442372646,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/classDiagram-2ON5EDUG-CBlh5ioZ.js,1770442372644,aa48e539049ebad5c691d60ac4860dc13295a00a53ba353cbea8572de0324368
-assets/classDiagram-v2-WZHVMYZB-CBlh5ioZ.js,1770442372645,aa48e539049ebad5c691d60ac4860dc13295a00a53ba353cbea8572de0324368
-assets/chunk-QZHKN3VN-QX9uB7GZ.js,1770442372644,318991a78bf92e5cf15b29c76619b23d1e8fe6e4afaa12daa59d9b94e69f6335
-assets/chunk-TZMSLE5B-ChIjjGF5.js,1770442372644,fe751a53a402cd68c2003fff9c3094291459f8b817ed83265e452ee2be7e74c6
-assets/flowDiagram-NV44I4VS-DMSWwras.js,1770442372644,1739d933f2b8490cc53c83f16dfd6dc84dedcc9de160c861630757019c343b20
-assets/sequenceDiagram-WL72ISMW-BFScH-uK.js,1770442372644,c583242211beb46b179c3da76d7f68d82dba1c27650230027e699f08447241c4
-assets/ganttDiagram-JELNMOA3-D_Q7Z9R_.js,1770442372646,1a937ad13668d9de93e55ca7c8b113380373a369013db004efd448cb7f96d4e3
-assets/cose-bilkent-S5V4N54A-CbAY0T8O.js,1770442372646,09956a5014ac44f4e78505e4e4ebc6d7390a95b7bb3e832947b4e67ebe491b04
-assets/chunk-QN33PNHL-D828HhsV.js,1770442372645,5cd66e6e250fa682cad45a75488582c880faee51d83276e5266a055d43713307
-assets/chunk-FMBD7UC4-DU5CaGaK.js,1770442372644,0815b05339b4bbd8eda861805bca22b7452d0eb06cd57bd17c29858c89a7c062
-assets/chunk-55IACEB6-BuHR5Z-1.js,1770442372644,557dd6aa29a255a2b0b27a0936ae148c39c8d4796e2d4c9cf9a7b3c652df1b8b
-assets/channel-DnSCYuqL.js,1770442372644,b26662fea22b4b25aaca2a731aafb968b24f6d9e5dce2284642f0cec25bbe5eb
-assets/chunk-4BX2VUAB-Mmv3TQfF.js,1770442372645,869492b5cf780c510877c5d3773b57244cd13d315f104f362548d19bbe62959b
-assets/chunk-DI55MBZ5-DemuKVR9.js,1770442372644,d01a91ce6800ee27acbb4bd14847c515ffb78053797accc9696c40f40958d531
-assets/chunk-B4BG7PRW-C-AiZrOR.js,1770442372644,1f14baeb259e0ef6840122e5f336fefa7cdf39383fe4b71bfa73058f105c108c
-assets/arc-D-jG64z2.js,1770442372644,d7fdc00a559edb4fd77b078746498083a77dbaf77eb4f7ef6666cb0784e395e8
-assets/_baseUniq-pAjr0qg0.js,1770442372646,5a8373dd224cc83cd8421b6e8dc22007ca65c472aa540633a3a3d556c4920a47
-assets/c4Diagram-YG6GDRKO-CNZZsyn9.js,1770442372644,dbf1fb7e3ce5cec19dc2852bde0e38d059ecfb29904ff235cb62d2f23df3a0b0
-assets/blockDiagram-VD42YOAC-BG-J79_n.js,1770442372644,64e21af9285a190bad9e6f488473f1e8b084a915104eb34fe539189d1028474a
-assets/architectureDiagram-VXUJARFQ-D-L09ruh.js,1770442372646,4cf5b3c6029a78256feb46157655ca3382205e921762c68d829733d1e9e23fff
-assets/katex-Cu_Erd72.js,1770442372645,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-B8SFpvGB.js,1770442372646,768505f21b9697200bc2309212b152f5fbade4d72d6fb6bbf32ddbc3add3bcbf
-assets/cytoscape.esm-CyJtwmzi.js,1770442372645,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-VyI3io2F.js,1770442372647,e3741e12ee8cb24176bd9ee884bf0f7c0f9871a3d3c76412a430b4ea2bf428ba
-logo.png,1770442372179,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-apple-touch-icon.png,1770442372177,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1770442372196,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-192x192.png,1770442372185,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+manifest.webmanifest,1770450401880,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+registerSW.js,1770450401880,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+sw.js,1770450402610,9686846003acdd4bfd6672497e55005622819d44388073cf92684a5ff70ca290
+index.html,1770450401880,796a8f3c3b092a99fd67a8a328ea39939daf9ad11070b853a05c14cc2c0211dd
+workbox-8c29f6e4.js,1770450402610,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+firebase-messaging-sw.js,1770450401437,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+lp.html,1770450401443,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/stateDiagram-v2-4FDKWEC3-Bn5HI9uu.js,1770450401879,ee50190d3a811d0f4905163fd09b1a6ce6147f30c3841a51a9938568bcf48234
+assets/timeline-definition-IT6M3QCI-D6rcxo2w.js,1770450401879,b226b69620dd2bf664aee121dae6be343de8556d170d494396c330a5b63708dc
+assets/stateDiagram-FKZM4ZOC-BZgvB3VS.js,1770450401879,813138c1d1a146bfae1c072bbb18e23712ae1e0b90ebbdd4c08dc47a489320cc
+assets/xychartDiagram-PRI3JC2R-DGd5d4fn.js,1770450401879,00d023c921ea2c061b426750d9d4fd2740fbbf0c781a8689b49b457021955126
+assets/sankeyDiagram-TZEHDZUN-Cotx_t4V.js,1770450401879,2e0b920590155235561c6030677497785e71c406e8e435db7daf7ec970d16e85
+assets/ordinal-Cboi1Yqb.js,1770450401879,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/requirementDiagram-UZGBJVZJ-CkFd0pmy.js,1770450401879,fbf3e26b5d8e1bad4064a651549e11c00c20a6c4c9927d3ce6a0435dc62f3fa9
+assets/min-CQAw25te.js,1770450401879,e0c4e4cf455428924f07abdaca187767800e63f7094259df41ad4ccb5cec5f48
+assets/pieDiagram-ADFJNKIX-BXhSbAs8.js,1770450401879,491ef6e9921363a82ee77793e30dcc72f48a6eb54f5c9c5bc008590c0a9c8dbc
+assets/linear--2HPp0eq.js,1770450401879,9690276e1a5d1af0156068a9adf07743606fc490abfb11a0034c00173a1f2226
+assets/mindmap-definition-VGOIOE7T-DYQu3tw4.js,1770450401879,39464ef5601152e27251edf09c2188b493af4ad8fdf018f4c806026df0633902
+assets/init-Gi6I4Gst.js,1770450401879,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/infoDiagram-WHAUD3N6-CpK9DVyd.js,1770450401879,d4065479f4e7115989242f14adcf06a3b2b350541bca767c3460b0687563d1aa
+assets/quadrantDiagram-AYHSOK5B-DlRcPkQV.js,1770450401879,8071e43f97081d8d8f8bcaf37a3d11633b6ef2428eac23e30c1591b9196e804b
+assets/kanban-definition-3W4ZIXB7-CAZAkJJn.js,1770450401879,3d0ca27bb1b90bc5691c0f24fb1175a0e57ffa7b93ce4bd9b6f76f7c9e69e030
+assets/journeyDiagram-XKPGCS4Q-4m0dJYXQ.js,1770450401879,c60e06212bc713c8530bbb16a44dc0721a4afb72114fb4393e0872ef0ca9462c
+assets/layout-es6IHf-P.js,1770450401879,6d09e08eb9e675d06d675b60b2c44f590fd78525987e73ea2b8ec8a4853845d6
+assets/graph-D3LklyNW.js,1770450401879,2265f6170d8a989efda1ab1a84c06ef306c9b48cdf48b0520ec157ee37e6fd84
+assets/diagram-S2PKOQOG-CVZAQiqF.js,1770450401879,70bcfeffb56153aefd0b64cc3b8e7bb8bf2a245cada66e5c7c081d95159ec827
+assets/gitGraphDiagram-NY62KEGX-DvMyYQ3E.js,1770450401879,2ae45d81410f290de65d01e843268ea6464db1209d0f51565ee78f8b81075096
+assets/erDiagram-Q2GNP2WA-wdO8LTFh.js,1770450401879,5118e557357f5eb28f6ea0b849145c680501cc2feb1fd7d64c9915f4149c239e
+assets/index-SvJD8p5Q.css,1770450401879,c4b3ecd34c7581da988e6c8a76f263e2b326aa5fabe0c3991b26573183ba0eeb
+assets/diagram-QEK2KX5R-By1Zrwmd.js,1770450401879,ae2e18299d54fddc1411aa14d9861658f5a56471ea004f359a93443dd87b55c0
+assets/defaultLocale-DX6XiGOO.js,1770450401879,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/diagram-PSM6KHXK-CHwx43ug.js,1770450401879,a77bf9d5a5dcd595c94d1c9717af59c44d5844f9f5b9a9eeebdaf8b9d28307b1
+assets/dagre-6UL2VRFP-B_BEgPz4.js,1770450401879,0dfabbd9fc62d931a8dcdf8957ff94df2df31931819b26d203533a69645d781f
+assets/clone-BfU0GNyG.js,1770450401879,aac090732ec9e364606f8dbeccd36c15a7e8a1389374b1fea97396df88a20f07
+assets/classDiagram-v2-WZHVMYZB-BQ0jgXsC.js,1770450401879,fc575a425b35b88f2dedeac84e67c2cbef5d42bd50c797d922cbd86428cf4991
+assets/classDiagram-2ON5EDUG-BQ0jgXsC.js,1770450401879,fc575a425b35b88f2dedeac84e67c2cbef5d42bd50c797d922cbd86428cf4991
+assets/chunk-QZHKN3VN-B4kB1bXy.js,1770450401879,de128917af3d5b6679bdb190aa1728acfd1b61e2680a1b7fc1aafffa80258463
+assets/chunk-TZMSLE5B-Dy_KumDJ.js,1770450401879,2b25a0f0db83baeee3c2bdfa1ed2300f327b4049a2bd54c8e8810012738b50b0
+assets/flowDiagram-NV44I4VS-C5O0RSHI.js,1770450401879,361aeb9f63dd0a0178104214c9c1401918cd4a839ac6d9f094704d389fb3d476
+assets/ganttDiagram-JELNMOA3-B7la8iLN.js,1770450401879,431d32eaa3e5bec8fb22684887edb796d42888e43fcac7070aa9b81ce4128f80
+assets/sequenceDiagram-WL72ISMW-D_RLe5vk.js,1770450401879,084f0ccb77d91d7828125f8d1eb44ce07c06a05774c40dc2eff73a7dbd739620
+assets/cose-bilkent-S5V4N54A-BxbTCJAC.js,1770450401879,e21b6663edd391168ddbda2cec81a216bb1dbb25547746a435bd0b4ce8df850b
+assets/chunk-QN33PNHL-B6TobIBK.js,1770450401879,47f84bc3181a6503d1d00f59e1d7f5c725674f869378112f08a08d44bd8bc8d0
+assets/chunk-55IACEB6-CwG2jeP4.js,1770450401879,08895961fed875447147e7e6b58f4d20781b957fa97a5a38e8772c8e2cd02b0c
+assets/chunk-4BX2VUAB-CBWnwTCm.js,1770450401879,a5a4bc8f757e91e772b49c833631bafb7ed670f225c120e00e4d45fcc244502e
+assets/channel-f_FFCgi-.js,1770450401879,fc4e4763bf1c713ec6645edcc898f7e556ee1c3672dcd9dd4975b3907b8ba3a4
+assets/chunk-DI55MBZ5-DGTlIIji.js,1770450401879,e1784324fb817a9cbe81e9e510feba820eea5dc7f5eb0489754ce80039ff4943
+assets/chunk-B4BG7PRW-lJKDYVx4.js,1770450401879,2a5d1d946ccb793ebcde96a3fe6178df451fffdde056c85cfe1caa209689c31f
+assets/arc-C-thKpl5.js,1770450401879,e3c9bee458bbca75c50d79eaf3863826813f6cff89da618266d152bd72333b95
+assets/chunk-FMBD7UC4-iGhzZpdR.js,1770450401879,3e2c1831e5cac62df48988c29f8c5d986ac5e5cb807c9b0e989271ed411b70e4
+assets/_baseUniq-D4GAMSgZ.js,1770450401879,ac629b2de55348e428109a63883e5c9b59188fa132b61c9660524a68c00c767f
+assets/c4Diagram-YG6GDRKO-vjPnPU-w.js,1770450401879,a9a23c5e04098ec097d50323f37a3e8c742aeaf8321ed79a8008e4252cd92a27
+assets/blockDiagram-VD42YOAC-C636PZG7.js,1770450401879,72c990f4b598d77411e4d53b1dae6ebd9686f6818d1e242f4e703c27bb564916
+assets/katex-Cu_Erd72.js,1770450401879,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/architectureDiagram-VXUJARFQ-hOWjZSUY.js,1770450401879,1c803ce24b6793dcff7c03538e04b035b64f844a9c04336043a500a95d3a9ae2
+assets/treemap-KMMF4GRG-Dy0IRaig.js,1770450401880,68ed4ed93b5fb8553c3c25848ef9c0331a05f6a11b8d0b6fb9df5d15fcfccf0d
+assets/cytoscape.esm-CyJtwmzi.js,1770450401879,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-CfAu4O2I.js,1770450401880,e71cb0d143158a43a43416eac1e2481700a5054d729e74985d90f063bddd070c
+pwa-192x192.png,1770450401449,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+logo.png,1770450401441,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1770450401456,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1770450401436,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>
