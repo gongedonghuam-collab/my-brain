@@ -1,8 +1,10 @@
 "use strict";
 // ==============================================================================
-//  My Brain (AI秘書) バックエンドプログラム [完全解説版]
+//  My Brain (AI秘書) バックエンドプログラム
 //
-//  役割: LINEからのメッセージを受け取り、AIに考えさせ、カレンダーやメモ帳を操作する「脳みそ」の部分です。
+//  【役割】
+//  LINEからのメッセージを受け取り、Google Gemini (AI) に考えさせ、
+//  カレンダー登録やメモ保存、タスク管理を自動で行う「中枢神経」です。
 // ==============================================================================
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -43,38 +45,39 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.forceTriggerNotification = exports.scrapeUrl = exports.unlinkLineAccount = exports.linkLineAccount = exports.sendMorningBriefing = exports.checkRoutinePatterns = exports.checkUpcomingMeetings = exports.lineWebhook = void 0;
 // --- 1. 道具箱 (ライブラリのインポート) ---
-// 料理でいう「食材と調理器具の準備」です。必要な機能を部品として取り込みます。
-const https_1 = require("firebase-functions/v2/https"); // ウェブからの通信を受け取る道具
-const scheduler_1 = require("firebase-functions/v2/scheduler"); // 時間指定で動くタイマーの道具
-const v2_1 = require("firebase-functions/v2"); // 全体の設定をする道具
-const params_1 = require("firebase-functions/params"); // パスワードなどの秘密情報を扱う道具
-const admin = __importStar(require("firebase-admin")); // データベース(Firestore)を管理する権限
-const axios_1 = __importDefault(require("axios")); // 外部のサイト(Googleや天気予報)と通信する電話のような道具
-const line = __importStar(require("@line/bot-sdk")); // LINEにメッセージを送るための道具
+const https_1 = require("firebase-functions/v2/https"); // ウェブからの通信(HTTP)を受け取る機能
+const scheduler_1 = require("firebase-functions/v2/scheduler"); // 時間指定で定期実行する機能
+const v2_1 = require("firebase-functions/v2"); // 関数全体の設定を行う機能
+const params_1 = require("firebase-functions/params"); // パスワードなどの秘密情報を安全に扱う機能
+const admin = __importStar(require("firebase-admin")); // データベース(Firestore)を管理者権限で操作する機能
+const axios_1 = __importDefault(require("axios")); // 外部のサイト(Googleや天気予報)と通信する機能
+const line = __importStar(require("@line/bot-sdk")); // LINEにメッセージを送るための公式ツール
 // --- 2. アプリの起動準備 ---
-// サーバーが立ち上がった時に一度だけ実行されます。
+// サーバーが立ち上がった時に一度だけ実行され、管理者としてログインします。
 if (admin.apps.length === 0) {
-    admin.initializeApp(); // 管理者権限でアプリを起動！
+    admin.initializeApp();
 }
-const db = admin.firestore(); // データベース「Firestore」を変数dbに入れて使いやすくします
+const db = admin.firestore(); // データベース「Firestore」を操作する変数を準備
 // --- 3. 基本設定 ---
-// AIは考えるのに時間がかかるので、制限時間(タイムアウト)を長めの5分に設定します。
+// AIは考えるのに時間がかかるため、タイムアウトを長め(300秒)に設定します。
+// メモリも1GiB確保して、処理落ちを防ぎます。
 (0, v2_1.setGlobalOptions)({
-    region: "asia-northeast1", // サーバーの場所: 東京 (近いほうが速い)
-    memory: "1GiB", // コンピュータの頭の良さ (メモリ)
-    timeoutSeconds: 300, // タイムアウト: 300秒 (5分)
+    region: "asia-northeast1", // サーバーの場所: 東京 (近いほうが通信が速い)
+    memory: "1GiB", // コンピュータの作業領域の広さ
+    timeoutSeconds: 300, // 制限時間: 5分
 });
 // --- 4. 秘密の鍵 (シークレット) の読み込み ---
-// コードに直接書くと危険なので、Firebaseに登録した鍵をここで読み込みます。
-const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN"); // LINEボットを動かす鍵
-const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET"); // LINEの合言葉
-const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY"); // AI(Gemini)を動かす鍵
-const googleClientId = (0, params_1.defineSecret)("GOOGLE_CLIENT_ID"); // カレンダー連携用のID
-const googleClientSecret = (0, params_1.defineSecret)("GOOGLE_CLIENT_SECRET"); // カレンダー連携用のパスワード
-const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID"); // LINEログイン用のID
-const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET"); // LINEログイン用のパスワード
-const openWeatherApiKey = (0, params_1.defineSecret)("OPENWEATHER_API_KEY"); // 天気予報を見るための鍵
-// AIモデルのリスト (メインが使えない時に予備を使えるようにリスト化)
+// コードに直接書くと危険な「鍵」を、Firebaseの金庫から取り出します。
+const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN"); // LINEボットを動かすためのトークン
+const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET"); // LINE通信の改ざんを防ぐ秘密鍵
+const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY"); // AI(Gemini)を使うためのAPIキー
+const googleClientId = (0, params_1.defineSecret)("GOOGLE_CLIENT_ID"); // Googleカレンダー連携用のID
+const googleClientSecret = (0, params_1.defineSecret)("GOOGLE_CLIENT_SECRET"); // Googleカレンダー連携用のパスワード
+const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID"); // LINEログイン機能用のID
+const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET"); // LINEログイン機能用のパスワード
+const openWeatherApiKey = (0, params_1.defineSecret)("OPENWEATHER_API_KEY"); // 天気予報を取得するためのAPIキー
+// AIモデルの候補リスト
+// メインのモデルが調子悪い時、予備のモデルを使えるようにリスト化しています。
 const CANDIDATE_MODELS = [
     "gemini-1.5-flash", // 速いモデル (メイン)
     "gemini-1.5-flash-001",
@@ -84,20 +87,26 @@ const CANDIDATE_MODELS = [
 // =========================================================
 // [デザイン室] LINEに送る「カード」の見た目を作る場所
 // =========================================================
-// アプリのテーマカラー (色を変えたい時はここをいじる)
+// アプリ全体のテーマカラー定義
+// ここを変えるだけで、LINE通知の雰囲気を一括変更できます。
 const COLORS = {
-    primary: "#6366f1", // 青紫 (メイン)
+    primary: "#6366f1", // 青紫 (メインカラー: 知的な印象)
     success: "#10b981", // 緑 (成功・完了)
     warning: "#f59e0b", // 黄 (注意・保存)
     danger: "#ef4444", // 赤 (警告・削除)
     info: "#0ea5e9", // 水色 (天気・情報)
-    dark: "#1e293b", // 濃いグレー (背景)
+    dark: "#1e293b", // 濃いグレー (背景色)
     text: "#334155", // 文字色
     textLight: "#94a3b8", // 薄い文字色
 };
 /**
- * ⚠️ [警告カード] を作る関数
- * ダブルブッキングや移動時間が足りない時に表示します。
+ * ⚠️ [警告カード] を作成する関数
+ * ダブルブッキングや移動時間が足りない時に、赤色の警告メッセージを表示します。
+ *
+ * @param title - 警告のタイトル（例：「ダブルブッキング警告」）
+ * @param message - 警告の詳細メッセージ
+ * @param suggestion - (任意) AIからの解決案（例：「時間をずらしますか？」）
+ * @returns LINE Flex Message のオブジェクト
  */
 function createAlertFlex(title, message, suggestion) {
     return {
@@ -133,7 +142,7 @@ function createAlertFlex(title, message, suggestion) {
                     wrap: true,
                 },
             ],
-            backgroundColor: COLORS.danger, // 背景は赤
+            backgroundColor: COLORS.danger, // 背景を赤にする
             paddingAll: "20px",
         },
         body: {
@@ -148,7 +157,7 @@ function createAlertFlex(title, message, suggestion) {
                     wrap: true,
                     lineSpacing: "4px",
                 },
-                // AIからの提案がある場合だけ、ここを表示する
+                // AIからの提案がある場合のみ、区切り線を入れて表示する
                 suggestion
                     ? {
                         type: "box",
@@ -182,11 +191,18 @@ function createAlertFlex(title, message, suggestion) {
     };
 }
 /**
- * 📅 [カレンダー登録カード] を作る関数
- * 予定の日時や場所、天気予報の警告をきれいに表示します。
+ * 📅 [カレンダー登録カード] を作成する関数
+ * 予定の日時や場所、天気予報の警告をきれいに整形して表示します。
+ *
+ * @param title - 予定のタイトル
+ * @param start - 開始日時 (ISO形式文字列)
+ * @param end - 終了日時 (ISO形式文字列)
+ * @param location - (任意) 場所
+ * @param weatherInfo - (任意) 天気予報のアラート文
+ * @returns LINE Flex Message のオブジェクト
  */
 function createCalendarFlex(title, start, end, location, weatherInfo) {
-    // コンピュータ用の日時文字を、人間が読みやすい形（例: 12/25）に変換
+    // ISO形式の日時を、人間が読みやすい形（例: 12/25 10:00）に変換する処理
     const startDate = new Date(start);
     const dateStr = `${startDate.getMonth() + 1}/${startDate.getDate()}`;
     const timeStr = `${startDate.getHours()}:${startDate.getMinutes().toString().padStart(2, "0")}`;
@@ -215,7 +231,7 @@ function createCalendarFlex(title, start, end, location, weatherInfo) {
                     offsetTop: "12px",
                 },
             ],
-            alignItems: "flex-end", // 修正済み: 下揃え
+            alignItems: "flex-end", // 日付と曜日を下揃えにする
         },
         {
             type: "text",
@@ -238,7 +254,7 @@ function createCalendarFlex(title, start, end, location, weatherInfo) {
                     color: COLORS.text,
                     wrap: true,
                 },
-                // 場所情報があるときだけ表示
+                // 場所情報があるときだけ表示するブロック
                 location
                     ? {
                         type: "box",
@@ -260,7 +276,7 @@ function createCalendarFlex(title, start, end, location, weatherInfo) {
             margin: "lg",
         },
     ];
-    // ★雨予報などの警告があれば、カードの下に追加
+    // 雨予報などの警告があれば、カードの下に追記する
     if (weatherInfo) {
         bodyContents.push({
             type: "box",
@@ -295,6 +311,7 @@ function createCalendarFlex(title, start, end, location, weatherInfo) {
             ],
         });
     }
+    // 最終的なカード構造を返す
     return {
         type: "bubble",
         size: "mega",
@@ -347,8 +364,8 @@ function createCalendarFlex(title, start, end, location, weatherInfo) {
     };
 }
 /**
- * ✅ [タスク追加カード] を作る関数
- * @param title タスク名
+ * ✅ [タスク追加カード] を作成する関数
+ * @param title - タスク名
  */
 function createTaskFlex(title) {
     return {
@@ -398,9 +415,9 @@ function createTaskFlex(title) {
     };
 }
 /**
- * 🧠 [メモ保存カード] を作る関数
- * @param text メモ本文
- * @param isUpdate 更新かどうか
+ * 🧠 [メモ保存カード] を作成する関数
+ * @param text - メモの本文
+ * @param isUpdate - 更新か新規か (trueなら更新)
  */
 function createMemoryFlex(text, isUpdate = false) {
     return {
@@ -451,9 +468,10 @@ function createMemoryFlex(text, isUpdate = false) {
     };
 }
 /**
- * 🔔 [直前カンペ通知カード] を作る関数
- * @param title 予定名
- * @param summary AIが作ったカンペ
+ * 🔔 [直前カンペ通知カード] を作成する関数
+ * 会議や予定の前に、AIが関連情報をまとめて通知する際に使います。
+ * @param title - 予定のタイトル
+ * @param summary - AIが生成した要約（カンペ）
  */
 function createCheatSheetFlex(title, summary) {
     return {
@@ -522,8 +540,9 @@ function createCheatSheetFlex(title, summary) {
         },
     };
 }
-/** * ✨ [ルーティン提案カード] を作る関数
- * 「毎週〇〇してますよね？」と提案するときに使います
+/**
+ * ✨ [ルーティン提案カード] を作成する関数
+ * 「毎週日曜日に〇〇してますよね？」とAIが気づいた時に使います。
  */
 function createRoutineSuggestionFlex(patterns) {
     return {
@@ -593,7 +612,11 @@ function createRoutineSuggestionFlex(patterns) {
 // =========================================================
 /**
  * JSONクリーナー
- * AIはたまに「```json ... ```」のような余計な文字をつけるので、それを取り除いてデータだけ抽出します。
+ * AIはたまに「```json ... ```」のような余計な文字をつけて返してくるので、
+ * データ部分だけを綺麗に取り出すための掃除機です。
+ *
+ * @param text - AIからの生の応答テキスト
+ * @returns パース済みのJSONオブジェクト、またはエラー時はチャットオブジェクト
  */
 function extractJson(text) {
     try {
@@ -606,10 +629,12 @@ function extractJson(text) {
                 .replace(/```json/g, "")
                 .replace(/```/g, "")
                 .trim();
+            // {} で囲まれた部分を探す
             const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
             if (jsonMatch)
                 return JSON.parse(jsonMatch[0]);
-            return { action: "CHAT", reply: text }; // どうしても無理なら普通のチャットとして扱う
+            // どうしても無理なら普通のチャットとして扱う
+            return { action: "CHAT", reply: text };
         }
         catch (e2) {
             return { action: "CHAT", reply: text };
@@ -618,17 +643,22 @@ function extractJson(text) {
 }
 /**
  * 日付フォーマッター
- * Googleカレンダーが理解できる厳密な日時形式に変換します。
+ * Googleカレンダーが理解できる厳密な日時形式(ISO 8601)に変換します。
+ * 例: "2024-01-01 10:00" -> "2024-01-01T10:00:00+09:00"
  */
 function formatIsoDate(dateStr) {
     if (!dateStr)
         return "";
+    // すでにタイムゾーン情報が含まれていれば何もしない
     if (dateStr.includes("+") || dateStr.endsWith("Z"))
         return dateStr;
+    // 秒がない場合 (YYYY-MM-DDTHH:mm) -> 秒とタイムゾーンを追加
     if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/))
         return `${dateStr}:00+09:00`;
+    // 秒がある場合 (YYYY-MM-DDTHH:mm:ss) -> タイムゾーンを追加
     if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/))
         return `${dateStr}+09:00`;
+    // 日付のみの場合 -> 00:00:00として扱う
     if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/))
         return `${dateStr}T00:00:00+09:00`;
     return dateStr;
@@ -638,7 +668,7 @@ function formatIsoDate(dateStr) {
 // =========================================================
 /**
  * AIモデルの確認
- * 使えるAIモデル（Gemini）のリストを取得します。
+ * Googleのサーバーに問い合わせて、現在使えるAIモデル（Gemini）のリストを取得します。
  */
 async function fetchAvailableModels(apiKey) {
     try {
@@ -652,14 +682,19 @@ async function fetchAvailableModels(apiKey) {
 }
 /**
  * ベストなAIを選ぶ
- * 「Flash」という速いモデルを優先し、だめなら「Pro」を使います。
+ * 「Flash」という速くて安いモデルを優先し、だめなら「Pro」という賢いモデルを使います。
+ * 冗長化（バックアップ）構成です。
  */
 async function resolveGeminiModel(apiKey) {
     const models = await fetchAvailableModels(apiKey);
+    // テキスト生成ができるモデルだけに絞る
     const genModels = models.filter((m) => { var _a; return (_a = m.supportedGenerationMethods) === null || _a === void 0 ? void 0 : _a.includes("generateContent"); });
+    // Flashモデルを探す
     let target = genModels.find((m) => m.name.includes("gemini-1.5-flash"));
+    // なければProモデルを探す
     if (!target)
         target = genModels.find((m) => m.name.includes("gemini-1.5-pro"));
+    // それもなければリストの最初を使う
     if (!target && genModels.length > 0)
         target = genModels[0];
     return target ? target.name.replace("models/", "") : "gemini-1.5-flash";
@@ -667,10 +702,12 @@ async function resolveGeminiModel(apiKey) {
 /**
  * AIに文章を作らせる（リトライ機能・安全装置解除付き）
  * AIが「それは答えられません」とエラーを吐くのを防ぐため、安全設定を緩めています。
+ * また、エラーが出たら別のモデルで再挑戦する根性も持っています。
  */
 async function generateContentWithRetry(apiKey, prompt) {
     var _a, _b, _c, _d, _e, _f;
     const bestModel = await resolveGeminiModel(apiKey);
+    // 重複を除いて試行順序リストを作成
     const models = [...new Set([bestModel, ...CANDIDATE_MODELS])].filter(Boolean);
     for (const m of models) {
         try {
@@ -678,6 +715,7 @@ async function generateContentWithRetry(apiKey, prompt) {
             const res = await axios_1.default.post(url, {
                 contents: [{ parts: [{ text: prompt }] }],
                 // ★ここが重要: 安全フィルターを「ブロックなし」にしてエラーを防ぐ
+                // これがないと「タスクを殺して(消して)」等の表現で止まってしまう
                 safetySettings: [
                     { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
                     { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -691,6 +729,7 @@ async function generateContentWithRetry(apiKey, prompt) {
                     },
                 ],
             }, { headers: { "Content-Type": "application/json" } });
+            // 結果を取り出す
             const txt = (_f = (_e = (_d = (_c = (_b = (_a = res.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text;
             if (txt)
                 return txt;
@@ -701,7 +740,10 @@ async function generateContentWithRetry(apiKey, prompt) {
     }
     throw new Error("All AI models failed.");
 }
-// AIを呼び出してJSONデータをもらう
+/**
+ * AIを呼び出してJSONデータをもらう
+ * 内部でJSONパース処理まで行います。
+ */
 async function callGeminiJson(apiKey, prompt) {
     if (!apiKey)
         return { action: "CHAT", reply: "⚠️ APIキー未設定" };
@@ -717,7 +759,10 @@ async function callGeminiJson(apiKey, prompt) {
         };
     }
 }
-// AIを呼び出してテキストをもらう
+/**
+ * AIを呼び出してプレーンテキストをもらう
+ * 余計な記号を取り除いて返します。
+ */
 async function callGeminiText(apiKey, prompt) {
     if (!apiKey)
         return "";
@@ -734,7 +779,8 @@ async function callGeminiText(apiKey, prompt) {
 }
 /**
  * カレンダーの合言葉（トークン）を更新する
- * 古い鍵ではドアが開かないので、新しい鍵をもらいます。
+ * 1時間で切れる「通行証(Access Token)」が切れた時に、
+ * 永続的な「合鍵(Refresh Token)」を使って新しい通行証を発行します。
  */
 async function refreshAccessToken(refreshToken) {
     try {
@@ -753,10 +799,12 @@ async function refreshAccessToken(refreshToken) {
 }
 /**
  * 有効なカレンダーの鍵を取得する
- * データベースから鍵を取り出し、期限切れなら更新します。
+ * データベースから鍵を取り出し、期限切れなら自動的に更新します。
+ * これにより、ユーザーは再ログインの手間から解放されます。
  */
 async function getValidAccessToken(uid) {
     try {
+        // DBからユーザーのトークン情報を取得
         const docSnap = await db
             .collection("users")
             .doc(uid)
@@ -767,7 +815,7 @@ async function getValidAccessToken(uid) {
             return null;
         const data = docSnap.data();
         const accessToken = data === null || data === void 0 ? void 0 : data.accessToken;
-        const refreshToken = data === null || data === void 0 ? void 0 : data.refreshToken;
+        const refreshToken = data === null || data === void 0 ? void 0 : data.refreshToken; // これが重要！
         if (!accessToken)
             return null;
         // ★修正: まず今のトークンが使えるか軽くテストする
@@ -777,16 +825,17 @@ async function getValidAccessToken(uid) {
                 headers: { Authorization: `Bearer ${accessToken}` },
                 params: { maxResults: 1 }, // 最小限の通信量で済ませる
             });
-            // エラーが出なければトークンは有効
+            // エラーが出なければトークンは有効なのでそのまま返す
             return accessToken;
         }
         catch (e) {
             // 401 Unauthorized (期限切れ) ならリフレッシュを試みる
             if (e.response && e.response.status === 401 && refreshToken) {
                 console.log(`User ${uid}: Token expired. Refreshing...`);
+                // ここで合鍵を使って更新！
                 const newToken = await refreshAccessToken(refreshToken);
                 if (newToken) {
-                    // 新しいトークンをDBに保存
+                    // 新しいトークンをDBに保存して次回以降も使えるようにする
                     await db
                         .collection("users")
                         .doc(uid)
@@ -832,6 +881,7 @@ async function getCalendarEvents(uid) {
         const events = res.data.items || [];
         if (events.length === 0)
             return "直近の予定なし";
+        // 予定リストを見やすい文字列に変換
         return events
             .map((ev) => {
             const start = ev.start.dateTime
@@ -860,12 +910,13 @@ async function addCalendarEvent(uid, eventData) {
         const token = await getValidAccessToken(uid);
         if (!token)
             return false;
+        // 日付フォーマットの厳密化
         const finalStart = formatIsoDate(eventData.start);
         if (!finalStart)
             return false;
         const finalEnd = eventData.end
             ? formatIsoDate(eventData.end)
-            : new Date(new Date(finalStart).getTime() + 60 * 60000)
+            : new Date(new Date(finalStart).getTime() + 60 * 60000) // 終了時刻がなければ1時間後に設定
                 .toISOString()
                 .replace("Z", "+09:00");
         await axios_1.default.post("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
@@ -890,10 +941,11 @@ async function checkWeather(location, dateStr) {
     if (!apiKey)
         return null;
     try {
-        const query = location || "Tokyo";
+        const query = location || "Tokyo"; // 場所がなければ東京
         const url = `https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(query)}&appid=${apiKey}&units=metric&lang=ja`;
         const res = await axios_1.default.get(url);
         const forecasts = res.data.list || [];
+        // 予定時刻に一番近い予報を探す
         const targetTime = new Date(dateStr).getTime();
         const closest = forecasts.reduce((prev, curr) => {
             return Math.abs(curr.dt * 1000 - targetTime) <
@@ -903,7 +955,8 @@ async function checkWeather(location, dateStr) {
         });
         if (!closest)
             return null;
-        const isRainy = closest.pop >= 0.5 ||
+        // 雨判定ロジック
+        const isRainy = closest.pop >= 0.5 || // 降水確率50%以上
             (closest.weather[0] && closest.weather[0].main === "Rain");
         if (isRainy) {
             const description = ((_a = closest.weather[0]) === null || _a === void 0 ? void 0 : _a.description) || "雨";
@@ -917,12 +970,13 @@ async function checkWeather(location, dateStr) {
     }
 }
 // --- 削除ロジック (安全版) ---
-// カレンダー削除
+// カレンダー削除: タイトルで検索して削除
 async function deleteCalendarEvent(uid, query) {
     try {
         const token = await getValidAccessToken(uid);
         if (!token)
             return null;
+        // まず検索
         const searchRes = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
             headers: { Authorization: `Bearer ${token}` },
             params: { q: query, maxResults: 5, singleEvents: true },
@@ -931,6 +985,7 @@ async function deleteCalendarEvent(uid, query) {
         if (events.length === 0)
             return null;
         const target = events[0];
+        // 見つかったら削除
         await axios_1.default.delete(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${target.id}`, { headers: { Authorization: `Bearer ${token}` } });
         return target.summary;
     }
@@ -939,11 +994,11 @@ async function deleteCalendarEvent(uid, query) {
         return null;
     }
 }
-// タスク削除
+// タスク削除: タイトルで検索して削除
 async function deleteTodoByTitle(uid, title) {
     try {
         const ref = db.collection("todos");
-        // 全件取得してからプログラム側で探す
+        // 全件取得してからプログラム側で探す（Firestoreの部分一致検索が弱いため）
         const snap = await ref
             .where("userId", "==", uid)
             .where("isCompleted", "==", false)
@@ -964,7 +1019,7 @@ async function deleteTodoByTitle(uid, title) {
         return null;
     }
 }
-// メモ削除
+// メモ削除: 内容で検索して削除
 async function deleteMemoryByContent(uid, content) {
     try {
         const ref = db.collection("memories");
@@ -1004,7 +1059,7 @@ async function getRecentMemories(uid, query) {
         return "（メモ取得失敗）";
     }
 }
-// ★ 追加: 現在の未完了タスク一覧を取得
+// 現在の未完了タスク一覧を取得
 async function getOpenTodos(uid) {
     try {
         const snap = await db
@@ -1054,6 +1109,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
     ],
     cors: true,
 }, async (req, res) => {
+    // 1. 必要な鍵のチェック
     const token = lineBotToken.value();
     const apiKey = geminiApiKey.value();
     if (!token || !apiKey) {
@@ -1062,16 +1118,18 @@ exports.lineWebhook = (0, https_1.onRequest)({
     }
     const client = new line.Client({ channelAccessToken: token });
     const events = req.body.events;
+    // 2. 受け取ったイベントを順に処理
     // エラーで全体が止まらないように安全装置(try-catch)で囲む
     try {
         await Promise.all(events.map(async (event) => {
             var _a, _b, _c;
+            // テキストメッセージ以外は無視
             if (event.type !== "message" || event.message.type !== "text")
                 return;
             const eventId = event.webhookEventId;
             const lineUserId = event.source.userId;
             const message = event.message.text.trim();
-            // 同じメッセージを二回処理しないためのチェック
+            // 重複実行防止: 同じメッセージIDが既に処理済みならスキップ
             try {
                 await db.collection("processed_events").doc(eventId).create({
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1081,7 +1139,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
             catch (_d) {
                 return;
             }
-            // ユーザーの特定
+            // 3. ユーザーの特定 (LINE IDからアプリのUser IDを探す)
             const usersSnap = await db
                 .collection("users")
                 .where("lineUserId", "==", lineUserId)
@@ -1096,6 +1154,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
             }
             const uid = usersSnap.docs[0].id;
             const userRef = db.collection("users").doc(uid);
+            // 4. 固定コマンドの処理 (モード切替)
             const commands = {
                 "【モード】タスク": "TASK",
                 "【モード】メモ": "MEMORY",
@@ -1111,7 +1170,8 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 });
                 return;
             }
-            // ★ 修正: getOpenTodos を追加してタスク一覧もAIに渡す
+            // 5. 状況(コンテキスト)の収集
+            // AIに判断材料を与えるために、色々なデータを集めます
             const [contextSnap, memoryContext, chatHistory, calendarEvents, openTodos,] = await Promise.all([
                 userRef.collection("system").doc("user_context").get(),
                 getRecentMemories(uid, message),
@@ -1120,6 +1180,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 getOpenTodos(uid),
             ]);
             const lastMemoryId = ((_a = contextSnap.data()) === null || _a === void 0 ? void 0 : _a.lastMemoryId) || null;
+            // 時間帯による感情設定
             const now = new Date();
             const nowStr = now.toLocaleString("ja-JP", {
                 timeZone: "Asia/Tokyo",
@@ -1139,7 +1200,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 emotionPrompt =
                     "現在は早朝です。爽やかで元気なトーンで接してください。";
             }
-            // AIへの指令書 (プロンプト)
+            // 6. AIへの指令書 (プロンプト) 作成
             const routerPrompt = `
       あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr}
       
@@ -1188,13 +1249,14 @@ exports.lineWebhook = (0, https_1.onRequest)({
         "reply": "パートナーとしての人間味ある返信"
       }
       `;
+            // 7. AIに判断させる
             const aiDecision = await callGeminiJson(apiKey, routerPrompt);
             const action = aiDecision.action || "CHAT";
             const data = aiDecision.data || {};
             let replyText = aiDecision.reply || "処理しました。";
             let flexMessage = null;
             let newLastMemoryId = null;
-            // --- アクション分岐 ---
+            // 8. アクションの実行
             if (action === "CALENDAR_CONFLICT_ERROR") {
                 replyText = "おっと、その時間は予定が被っちゃってますね。";
                 flexMessage = createAlertFlex("ダブルブッキング警告", `その時間は「${data.content || "別の予定"}」が入っています。`, data.suggestion || "時間を変更してください。");
@@ -1222,6 +1284,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
                         }
                     }
                     flexMessage = createCalendarFlex(data.title, data.start, data.end, data.location, weatherWarning);
+                    // 通知履歴に保存
                     await db.collection("notifications").add({
                         userId: uid,
                         type: "reservation",
@@ -1238,6 +1301,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
             else if (action === "MEMORY_EDIT" &&
                 data.targetId &&
                 data.instruction) {
+                // メモ編集
                 try {
                     const docRef = db.collection("memories").doc(data.targetId);
                     const docSnap = await docRef.get();
@@ -1256,6 +1320,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
             }
             else if (action === "MEMORY_APPEND" &&
                 (data.targetId || lastMemoryId)) {
+                // メモ追記
                 try {
                     const finalId = data.targetId || lastMemoryId;
                     const docRef = db.collection("memories").doc(finalId);
@@ -1329,12 +1394,14 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     .collection("system")
                     .doc("user_context")
                     .set({ lastMemoryId: newLastMemoryId }, { merge: true });
+            // チャット履歴をDBに保存
             await db.collection("chat_logs").add({
                 userId: uid,
                 question: message,
                 answer: replyText,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
+            // LINEへ返信
             const messages = [
                 { type: "text", text: replyText.trim() },
             ];
@@ -1356,8 +1423,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
 // 6. 定期実行機能 (バックグラウンド処理)
 // =========================================================
 /**
- * [直前通知の蘇生] 15分ごとに予定をチェックして通知
- * 以前は「メモがないと通知しない」仕様でしたが、修正して「必ず通知する」ようにしました。
+ * [直前通知] 15分ごとに予定をチェックして通知
  */
 exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
     schedule: "every 15 minutes",
@@ -1403,7 +1469,6 @@ exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
                 const dump = mems.docs
                     .map((x) => `[${x.data().createdAt.toDate().toLocaleDateString()}] ${x.data().text}`)
                     .join("\n");
-                // ★修正: メモがなくても必ず応援メッセージを作るプロンプト
                 const txt = await callGeminiText(apiKey, `「${ev.summary}」がもうすぐ始まります。過去メモ:${dump}。もし関連情報があれば要約し、なければ「頑張ってください」等の応援メッセージを作成してください(100字以内)。`);
                 // 通知送信
                 await client.pushMessage(d.lineUserId, {
@@ -1419,13 +1484,13 @@ exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
         }
     }
 });
-// --- その他の定期実行 ---
-// 毎週日曜のルーティン提案
+// [ルーティン提案] 毎週日曜夜に実行
 exports.checkRoutinePatterns = (0, scheduler_1.onSchedule)({
     schedule: "0 20 * * 0",
     timeZone: "Asia/Tokyo",
     secrets: [lineBotToken, geminiApiKey],
 }, async (event) => {
+    // ... (省略可能ですが一応全部出力します) ...
     const apiKey = geminiApiKey.value();
     const client = new line.Client({
         channelAccessToken: lineBotToken.value(),
@@ -1469,7 +1534,7 @@ exports.checkRoutinePatterns = (0, scheduler_1.onSchedule)({
         }
     }
 });
-// 毎朝のブリーフィング
+// [毎朝のブリーフィング] 毎日7時に実行
 exports.sendMorningBriefing = (0, scheduler_1.onSchedule)({
     schedule: "0 7 * * *",
     timeZone: "Asia/Tokyo",
@@ -1509,6 +1574,7 @@ exports.sendMorningBriefing = (0, scheduler_1.onSchedule)({
     }
 });
 // --- 連携用API (変更なし) ---
+// LINE連携時の処理
 exports.linkLineAccount = (0, https_1.onCall)({
     secrets: [
         lineLoginChannelId,
@@ -1541,6 +1607,7 @@ exports.linkLineAccount = (0, https_1.onCall)({
         throw new https_1.HttpsError("internal", e.message);
     }
 });
+// LINE連携解除
 exports.unlinkLineAccount = (0, https_1.onCall)({ cors: true }, async (req) => {
     if (!req.auth)
         throw new https_1.HttpsError("unauthenticated", "Login required");
@@ -1550,7 +1617,9 @@ exports.unlinkLineAccount = (0, https_1.onCall)({ cors: true }, async (req) => {
         .set({ isLineLinked: false, lineUserId: admin.firestore.FieldValue.delete() }, { merge: true });
     return { success: true };
 });
+// URL読み取り(予備)
 exports.scrapeUrl = (0, https_1.onCall)(async () => ({ success: true }));
+// 通知テスト用API
 exports.forceTriggerNotification = (0, https_1.onCall)({
     secrets: [lineBotToken, geminiApiKey, googleClientId, googleClientSecret],
     cors: true,

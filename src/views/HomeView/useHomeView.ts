@@ -182,17 +182,24 @@ export function useHomeView() {
 
   /**
    * Googleカレンダーから全ての予定を取得する関数
+   * ★デバッグ用のログ出力を追加しています
    */
   const fetchAllCalendars = async () => {
     calendarLoading.value = true;
     try {
+      console.log("📅 カレンダー取得開始...");
       const calendars = await callGoogleApi(async (token) => {
+        console.log(
+          "🔑 トークンを使ってリスト取得を試みます:",
+          token ? token.substring(0, 10) + "..." : "なし",
+        );
         let list = [{ id: "primary", backgroundColor: "#818cf8" }];
         try {
           const listRes = await axios.get(
             "https://www.googleapis.com/calendar/v3/users/me/calendarList",
             { headers: { Authorization: `Bearer ${token}` } },
           );
+          console.log("✅ カレンダーリスト取得成功:", listRes.data);
           if (listRes.data.items) {
             list = listRes.data.items.map((cal: any) => ({
               id: cal.id,
@@ -200,6 +207,7 @@ export function useHomeView() {
             }));
           }
         } catch (e: any) {
+          console.error("❌ カレンダーリスト取得失敗:", e.response?.data || e);
           if (e.response && e.response.status === 401) {
             throw e;
           }
@@ -208,7 +216,10 @@ export function useHomeView() {
         return list;
       });
 
-      if (!calendars) return;
+      if (!calendars) {
+        console.warn("⚠️ カレンダー情報がnullでした");
+        return;
+      }
 
       const now = new Date();
       // 表示範囲: 前後数ヶ月分
@@ -238,7 +249,13 @@ export function useHomeView() {
                 },
               },
             )
-            .catch((e) => ({ data: { items: [] } }));
+            .catch((e) => {
+              console.error(
+                `❌ イベント取得失敗 (ID: ${cal.id}):`,
+                e.response?.data || e,
+              );
+              return { data: { items: [] } };
+            });
         }),
       );
 
@@ -260,10 +277,12 @@ export function useHomeView() {
           };
         });
       });
+      console.log(`✅ 合計 ${allEvents.length} 件の予定を取得しました`);
       calendarOptions.value.events = allEvents;
     } catch (e: any) {
-      console.error("Calendar fetch global error:", e);
+      console.error("🔥 fetchAllCalendars 全体エラー:", e);
       if (e.response && e.response.status === 401) {
+        console.error("🚫 401エラー検知: トークンを削除して未接続にします");
         localStorage.removeItem("google_calendar_token");
         isCalendarConnected.value = false;
       }
