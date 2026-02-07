@@ -1102,19 +1102,6 @@ exports.sendDailyReminders = (0, scheduler_1.onSchedule)("every day 09:00", asyn
 </html>
 </file>
 
-<file path="src/components/AppHeader/useAppHeader.ts">
-import { useMyBrain } from "@/composables/useMyBrain";
-
-export function useAppHeader() {
-  // 脳みそ機能（ログアウトなど）を持ってくる
-  const { logout } = useMyBrain();
-
-  return {
-    logout, // 画面で使えるようにする
-  };
-}
-</file>
-
 <file path="src/components/MemoList/MemoList.vue">
 <script setup lang="ts">
 import { useMemoList } from "./useMemoList";
@@ -1203,68 +1190,6 @@ const { displayMemories, loading, hasMore, loadMore, handleOpenDetail } =
 </template>
 </file>
 
-<file path="src/components/MemoList/useMemoList.ts">
-import { ref, computed } from "vue";
-import { useMyBrain } from "@/composables/useMyBrain";
-import type { Memory } from "@/types"; // ★修正: 正しい場所から型をインポート
-
-/**
- * メモリストの表示ロジックを管理するフック
- * 表示件数の制御（ページネーション）や詳細表示イベントの発火を行います。
- * * @param emit - 親コンポーネントにイベントを伝えるための関数
- */
-export function useMemoList(
-  emit: (event: "openDetail", memory: Memory) => void,
-) {
-  // アプリ全体のステートから、フィルタリング済みのメモ一覧とロード状態を取得
-  const { filteredMemories, loading } = useMyBrain();
-
-  // 画面に一度に表示する件数のリミット（初期値20件）
-  const displayLimit = ref(20);
-
-  /**
-   * 画面に表示すべきメモだけを切り出した配列（計算プロパティ）
-   * 元のリストが100件あっても、displayLimitが20なら最初の20件だけを返します。
-   */
-  const displayMemories = computed(() => {
-    return filteredMemories.value.slice(0, displayLimit.value);
-  });
-
-  /**
-   * 「もっと見る」ボタンを表示すべきかどうかを判定するフラグ
-   * 表示中の件数より全件数が多ければ true になります。
-   */
-  const hasMore = computed(() => {
-    return displayLimit.value < filteredMemories.value.length;
-  });
-
-  /**
-   * 「もっと見る」ボタンが押された時の処理
-   * 表示制限を20件増やします。
-   */
-  const loadMore = () => {
-    displayLimit.value += 20;
-  };
-
-  /**
-   * メモをクリックした時の処理
-   * 親コンポーネントに「詳細を開いて！」というイベントを送ります。
-   * @param memo - クリックされたメモデータ
-   */
-  const handleOpenDetail = (memo: Memory) => {
-    emit("openDetail", memo);
-  };
-
-  return {
-    displayMemories,
-    loading,
-    hasMore,
-    loadMore,
-    handleOpenDetail,
-  };
-}
-</file>
-
 <file path="src/components/MemoryModal/useMemoryModal.ts">
 import { ref, watch } from "vue";
 import { useMyBrain, type Memory } from "@/composables/useMyBrain";
@@ -1301,170 +1226,6 @@ export function useMemoryModal(props: { memory: Memory | null }, emit: any) {
     editContent,
     saveUpdate,
     remove,
-  };
-}
-</file>
-
-<file path="src/components/NotificationBell/useNotifications.ts">
-import { ref, onMounted } from "vue";
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
-import {
-  doc,
-  setDoc,
-  arrayUnion,
-  collection,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-} from "firebase/firestore";
-import { db, auth } from "@/firebase";
-
-// 通知データの型定義
-export interface NotificationItem {
-  id: string;
-  type: "reservation" | "cancel" | "info"; // 通知の種類（アイコンの色などに影響）
-  title: string;
-  message: string;
-  timestamp: Date;
-  isRead: boolean; // 既読フラグ
-}
-
-// --- グローバルステート (アプリ全体で共有される変数) ---
-// コンポーネントが再描画されてもデータを保持するために外に出しています
-const notifications = ref<NotificationItem[]>([]);
-const isDropdownOpen = ref(false);
-
-// ★重要: Firebaseコンソールで取得したVAPIDキー (Webプッシュ通知用の公開鍵)
-const VAPID_KEY =
-  "BDc2GU2MYvtgOjzdx5cnFjp9xeAQ2DhkrmtF6w3MVzkKzb0DTJmtJCrSOiKs0J90vXZ6glr-5Wl2jHJGmETBSc8";
-
-/**
- * 通知機能を管理するフック
- */
-export function useNotifications() {
-  // Firestoreの監視を解除するための関数を格納する変数
-  let unsubscribe: (() => void) | null = null;
-
-  /**
-   * Firestoreの通知コレクションをリアルタイムで監視する関数
-   * 新しい通知が来るたびに自動で notifications 配列が更新されます。
-   */
-  const subscribeToNotifications = () => {
-    if (!auth.currentUser) return; // 未ログインなら何もしない
-
-    if (unsubscribe) unsubscribe(); // 既に監視中なら一旦解除（二重監視防止）
-
-    const q = query(
-      collection(db, "notifications"),
-      where("userId", "==", auth.currentUser.uid), // 自分の通知だけ取得
-      orderBy("timestamp", "desc"), // 新しい順
-    );
-
-    // リアルタイムリスナーの登録
-    unsubscribe = onSnapshot(q, (snapshot) => {
-      notifications.value = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          type: data.type || "info",
-          title: data.title || "",
-          message: data.message || "",
-          // FirestoreのTimestamp型をJSのDate型に変換
-          timestamp: data.timestamp ? data.timestamp.toDate() : new Date(),
-          isRead: data.isRead || false,
-        };
-      });
-    });
-  };
-
-  // コンポーネントがマウントされたら監視を開始
-  onMounted(() => {
-    subscribeToNotifications();
-  });
-
-  /**
-   * 通知を既読にする関数
-   * @param id - 通知ID
-   */
-  const markAsRead = async (id: string) => {
-    // まずローカルの見た目を即座に更新（UX向上）
-    const target = notifications.value.find((n) => n.id === id);
-    if (target) target.isRead = true;
-
-    // TODO: ここでFirestoreの updateDoc を呼んでサーバー側も更新するのが正式な実装
-    // 現状はローカルのみの更新となっているようです
-  };
-
-  /**
-   * 全ての通知を既読にする関数
-   */
-  const markAllRead = () => {
-    notifications.value.forEach((n) => (n.isRead = true));
-  };
-
-  /**
-   * 通知ドロップダウンの表示/非表示を切り替える関数
-   */
-  const toggleDropdown = () => {
-    isDropdownOpen.value = !isDropdownOpen.value;
-  };
-
-  // --- FCM (Firebase Cloud Messaging) 設定 ---
-
-  /**
-   * ブラウザにプッシュ通知の許可を求める関数
-   * 許可されたらデバイストークンを取得してDBに保存します。
-   */
-  const requestNotificationPermission = async () => {
-    try {
-      // ブラウザ標準の許可ダイアログを表示
-      const permission = await Notification.requestPermission();
-
-      if (permission === "granted") {
-        const messaging = getMessaging();
-
-        // アプリを開いている最中に通知が来た場合の処理
-        onMessage(messaging, (payload) => {
-          console.log("Message received. ", payload);
-          // Firestoreを監視しているので、ここではトースト表示などを出すのが一般的
-        });
-
-        // このブラウザ固有のトークン（住所のようなもの）を取得
-        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-        if (token && auth.currentUser) {
-          await saveTokenToDatabase(token);
-        }
-      }
-    } catch (err) {
-      console.error("Unable to get permission to notify.", err);
-    }
-  };
-
-  /**
-   * 取得したデバイストークンをFirestoreのユーザー情報に保存する関数
-   * @param token - FCMトークン
-   */
-  const saveTokenToDatabase = async (token: string) => {
-    if (!auth.currentUser) return;
-    const userRef = doc(db, "users", auth.currentUser.uid);
-    // arrayUnionを使うことで、既存のトークンリストに重複なく追加する
-    await setDoc(
-      userRef,
-      {
-        fcmTokens: arrayUnion(token),
-      },
-      { merge: true },
-    );
-  };
-
-  return {
-    notifications,
-    isDropdownOpen,
-    markAsRead,
-    markAllRead,
-    toggleDropdown,
-    requestNotificationPermission,
   };
 }
 </file>
@@ -1508,21 +1269,6 @@ const { activeTag, allTags, selectTag } = useTagFilter();
     </button>
   </div>
 </template>
-</file>
-
-<file path="src/components/TagFilter/useTagFilter.ts">
-import { useMyBrain } from "@/composables/useMyBrain";
-
-export function useTagFilter() {
-  // 全タグリスト、現在選択中のタグ、タグを選ぶ関数を持ってくる
-  const { activeTag, allTags, selectTag } = useMyBrain();
-
-  return {
-    activeTag,
-    allTags,
-    selectTag,
-  };
-}
 </file>
 
 <file path="src/composables/useNotifications.ts">
@@ -2249,67 +1995,82 @@ messaging.onBackgroundMessage((payload) => {
 });
 </file>
 
-<file path="src/components/ChatList/useChatList.ts">
-import { watch, nextTick } from "vue";
+<file path="src/components/AppHeader/useAppHeader.ts">
 import { useMyBrain } from "@/composables/useMyBrain";
-import mermaid from "mermaid"; // 図解を描画するためのライブラリ
 
 /**
- * チャットリストのロジックを管理するフック
- * チャットログの監視と、Mermaid記法（テキストによる図解）のレンダリングを担当します。
+ * アプリヘッダーのロジックを管理するフック
+ * 主にログアウト機能を提供します。
  */
-export function useChatList() {
-  // アプリ全体の共有ステートからチャットログなどを取得
-  const { chatLogs, isAiThinking, deleteChatLog } = useMyBrain();
-
-  /**
-   * チャットログの変更を監視し、新しいログに図解コードが含まれていれば描画する処理
-   * @param chatLogs - 監視対象のチャットログ配列
-   */
-  watch(
-    chatLogs,
-    async () => {
-      // DOM（画面）の更新が完了するのを待つ
-      await nextTick();
-
-      // クラス名 "mermaid" を持つ要素（図解のコードが書かれたdiv）を全て取得
-      const elements = document.querySelectorAll(".mermaid");
-
-      elements.forEach(async (el) => {
-        const element = el as HTMLElement;
-        // 既に描画処理済みの要素はスキップ（無駄な再描画を防ぐため）
-        if (element.getAttribute("data-processed")) return;
-
-        // data-code属性からMermaidのソースコードを取得
-        // ChatList.vue側で :data-code="log.mermaidCode" のようにセットされている前提
-        const code = element.getAttribute("data-code") || "";
-        const id = element.id;
-
-        if (!code || !id) return;
-
-        try {
-          // Mermaidライブラリを使って、テキストコードをSVG画像に変換
-          const { svg } = await mermaid.render(`${id}-svg`, code);
-          // 生成されたSVGを要素の中に挿入
-          element.innerHTML = svg;
-          // 処理済みフラグを立てる
-          element.setAttribute("data-processed", "true");
-          // 描画が成功したら表示する（初期状態はhiddenにしていることが多い）
-          element.classList.remove("hidden");
-        } catch (e) {
-          console.warn("Mermaid rendering failed:", e);
-          // 構文エラーなどで失敗した場合は、要素を非表示のままにするか、エラー表示を行う
-          element.style.display = "none";
-        }
-      });
-    },
-    { deep: true, immediate: true }, // 配列の中身が変わった時や、初期表示時にも実行する設定
-  );
+export function useAppHeader() {
+  // アプリ全体の脳みそ（useMyBrain）からログアウト機能だけを借ります
+  const { logout } = useMyBrain();
 
   return {
-    chatLogs,
-    isAiThinking,
-    deleteChatLog,
+    /** ログアウトを実行する関数 */
+    logout,
+  };
+}
+</file>
+
+<file path="src/components/MemoList/useMemoList.ts">
+import { ref, computed } from "vue";
+import { useMyBrain } from "@/composables/useMyBrain";
+import type { Memory } from "@/types"; // ★修正: 正しい場所から型をインポート
+
+/**
+ * メモリストの表示ロジックを管理するフック
+ * 表示件数の制御（ページネーション）や詳細表示イベントの発火を行います。
+ * * @param emit - 親コンポーネントにイベントを伝えるための関数
+ */
+export function useMemoList(
+  emit: (event: "openDetail", memory: Memory) => void,
+) {
+  // アプリ全体のステートから、フィルタリング済みのメモ一覧とロード状態を取得
+  const { filteredMemories, loading } = useMyBrain();
+
+  // 画面に一度に表示する件数のリミット（初期値20件）
+  const displayLimit = ref(20);
+
+  /**
+   * 画面に表示すべきメモだけを切り出した配列（計算プロパティ）
+   * 元のリストが100件あっても、displayLimitが20なら最初の20件だけを返します。
+   */
+  const displayMemories = computed(() => {
+    return filteredMemories.value.slice(0, displayLimit.value);
+  });
+
+  /**
+   * 「もっと見る」ボタンを表示すべきかどうかを判定するフラグ
+   * 表示中の件数より全件数が多ければ true になります。
+   */
+  const hasMore = computed(() => {
+    return displayLimit.value < filteredMemories.value.length;
+  });
+
+  /**
+   * 「もっと見る」ボタンが押された時の処理
+   * 表示制限を20件増やします。
+   */
+  const loadMore = () => {
+    displayLimit.value += 20;
+  };
+
+  /**
+   * メモをクリックした時の処理
+   * 親コンポーネントに「詳細を開いて！」というイベントを送ります。
+   * @param memo - クリックされたメモデータ
+   */
+  const handleOpenDetail = (memo: Memory) => {
+    emit("openDetail", memo);
+  };
+
+  return {
+    displayMemories,
+    loading,
+    hasMore,
+    loadMore,
+    handleOpenDetail,
   };
 }
 </file>
@@ -2570,127 +2331,192 @@ const getTypeStyles = (type: string) => {
 </style>
 </file>
 
-<file path="src/views/VerifyEmailView/VerifyEmailView.vue">
-<script setup lang="ts">
-import { ref } from "vue";
-import { getAuth, sendEmailVerification, signOut } from "firebase/auth";
-import { useRouter } from "vue-router";
+<file path="src/components/NotificationBell/useNotifications.ts">
+import { ref, onMounted } from "vue";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import {
+  doc,
+  setDoc,
+  arrayUnion,
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+} from "firebase/firestore";
+import { db, auth } from "@/firebase";
 
-const auth = getAuth();
-const router = useRouter();
-const user = auth.currentUser;
-const loading = ref(false);
-const message = ref("");
+// 通知データの型定義
+export interface NotificationItem {
+  id: string;
+  type: "reservation" | "cancel" | "info"; // 通知の種類（アイコンの色などに影響）
+  title: string;
+  message: string;
+  timestamp: Date;
+  isRead: boolean; // 既読フラグ
+}
 
-// 再送信処理
-const resendEmail = async () => {
-  if (!user) return;
-  loading.value = true;
-  try {
-    await sendEmailVerification(user);
-    message.value = "確認メールを再送信しました。";
-  } catch (e: any) {
-    if (e.code === "auth/too-many-requests") {
-      message.value = "少し時間を置いてから再試行してください。";
-    } else {
-      message.value = "送信に失敗しました。";
+// --- グローバルステート (アプリ全体で共有される変数) ---
+// コンポーネントが再描画されてもデータを保持するために外に出しています
+const notifications = ref<NotificationItem[]>([]);
+const isDropdownOpen = ref(false);
+
+// ★重要: Firebaseコンソールで取得したVAPIDキー (Webプッシュ通知用の公開鍵)
+const VAPID_KEY =
+  "BDc2GU2MYvtgOjzdx5cnFjp9xeAQ2DhkrmtF6w3MVzkKzb0DTJmtJCrSOiKs0J90vXZ6glr-5Wl2jHJGmETBSc8";
+
+/**
+ * 通知機能を管理するフック
+ */
+export function useNotifications() {
+  // Firestoreの監視を解除するための関数を格納する変数
+  let unsubscribe: (() => void) | null = null;
+
+  /**
+   * Firestoreの通知コレクションをリアルタイムで監視する関数
+   * 新しい通知が来るたびに自動で notifications 配列が更新されます。
+   */
+  const subscribeToNotifications = () => {
+    if (!auth.currentUser) return; // 未ログインなら何もしない
+
+    if (unsubscribe) unsubscribe(); // 既に監視中なら一旦解除（二重監視防止）
+
+    const q = query(
+      collection(db, "notifications"),
+      where("userId", "==", auth.currentUser.uid), // 自分の通知だけ取得
+      orderBy("timestamp", "desc"), // 新しい順
+    );
+
+    // リアルタイムリスナーの登録
+    unsubscribe = onSnapshot(q, (snapshot) => {
+      notifications.value = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          type: data.type || "info",
+          title: data.title || "",
+          message: data.message || "",
+          // FirestoreのTimestamp型をJSのDate型に変換
+          timestamp: data.timestamp ? data.timestamp.toDate() : new Date(),
+          isRead: data.isRead || false,
+        };
+      });
+    });
+  };
+
+  // コンポーネントがマウントされたら監視を開始
+  onMounted(() => {
+    subscribeToNotifications();
+  });
+
+  /**
+   * 通知を既読にする関数
+   * @param id - 通知ID
+   */
+  const markAsRead = async (id: string) => {
+    // まずローカルの見た目を即座に更新（UX向上）
+    const target = notifications.value.find((n) => n.id === id);
+    if (target) target.isRead = true;
+
+    // TODO: ここでFirestoreの updateDoc を呼んでサーバー側も更新するのが正式な実装
+    // 現状はローカルのみの更新となっているようです
+  };
+
+  /**
+   * 全ての通知を既読にする関数
+   */
+  const markAllRead = () => {
+    notifications.value.forEach((n) => (n.isRead = true));
+  };
+
+  /**
+   * 通知ドロップダウンの表示/非表示を切り替える関数
+   */
+  const toggleDropdown = () => {
+    isDropdownOpen.value = !isDropdownOpen.value;
+  };
+
+  // --- FCM (Firebase Cloud Messaging) 設定 ---
+
+  /**
+   * ブラウザにプッシュ通知の許可を求める関数
+   * 許可されたらデバイストークンを取得してDBに保存します。
+   */
+  const requestNotificationPermission = async () => {
+    try {
+      // ブラウザ標準の許可ダイアログを表示
+      const permission = await Notification.requestPermission();
+
+      if (permission === "granted") {
+        const messaging = getMessaging();
+
+        // アプリを開いている最中に通知が来た場合の処理
+        onMessage(messaging, (payload) => {
+          console.log("Message received. ", payload);
+          // Firestoreを監視しているので、ここではトースト表示などを出すのが一般的
+        });
+
+        // このブラウザ固有のトークン（住所のようなもの）を取得
+        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+        if (token && auth.currentUser) {
+          await saveTokenToDatabase(token);
+        }
+      }
+    } catch (err) {
+      console.error("Unable to get permission to notify.", err);
     }
-  } finally {
-    loading.value = false;
-  }
-};
+  };
 
-// 「確認しました」ボタン
-const checkVerification = async () => {
-  if (!user) return;
-  loading.value = true;
-  try {
-    await user.reload(); // Firebaseの状態を最新に更新
-    if (user.emailVerified) {
-      alert("認証を確認しました！");
-      // ★修正: アプリ画面へ
-      router.push("/app");
-    } else {
-      alert(
-        "まだ認証が完了していません。\nメールのリンクをクリックしましたか？",
-      );
-    }
-  } catch (e) {
-    console.error(e);
-  } finally {
-    loading.value = false;
-  }
-};
+  /**
+   * 取得したデバイストークンをFirestoreのユーザー情報に保存する関数
+   * @param token - FCMトークン
+   */
+  const saveTokenToDatabase = async (token: string) => {
+    if (!auth.currentUser) return;
+    const userRef = doc(db, "users", auth.currentUser.uid);
+    // arrayUnionを使うことで、既存のトークンリストに重複なく追加する
+    await setDoc(
+      userRef,
+      {
+        fcmTokens: arrayUnion(token),
+      },
+      { merge: true },
+    );
+  };
 
-const handleLogout = async () => {
-  await signOut(auth);
-  router.push("/login");
-};
-</script>
+  return {
+    notifications,
+    isDropdownOpen,
+    markAsRead,
+    markAllRead,
+    toggleDropdown,
+    requestNotificationPermission,
+  };
+}
+</file>
 
-<template>
-  <div
-    class="min-h-screen bg-slate-50 flex items-center justify-center p-6 font-sans"
-  >
-    <div
-      class="max-w-md w-full bg-white rounded-3xl p-8 shadow-sm border border-slate-100 text-center"
-    >
-      <div
-        class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-6"
-      >
-        ✉️
-      </div>
+<file path="src/components/TagFilter/useTagFilter.ts">
+import { useMyBrain } from "@/composables/useMyBrain";
 
-      <h2 class="text-xl font-bold text-slate-800 mb-4">
-        メールアドレスの確認
-      </h2>
+/**
+ * タグフィルターのロジックを管理するフック
+ * メモ一覧の絞り込みに使用するタグの選択状態と、タグリストを提供します。
+ */
+export function useTagFilter() {
+  // アプリ全体のステートから必要な情報を取得
+  const { activeTag, allTags, selectTag } = useMyBrain();
 
-      <p class="text-sm text-slate-600 mb-6 leading-relaxed">
-        <strong>{{ user?.email }}</strong> 宛に確認メールを送信しました。<br />
-        メール内のリンクをクリックして、アカウントを有効化してください。
-      </p>
-
-      <div class="space-y-3">
-        <button
-          @click="checkVerification"
-          :disabled="loading"
-          class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition shadow-lg shadow-blue-200"
-        >
-          {{ loading ? "確認中..." : "認証完了 (アプリへ進む)" }}
-        </button>
-
-        <button
-          @click="resendEmail"
-          :disabled="loading"
-          class="w-full py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition"
-        >
-          メールを再送信
-        </button>
-      </div>
-
-      <p
-        v-if="message"
-        class="mt-4 text-xs text-blue-600 font-bold animate-pulse"
-      >
-        {{ message }}
-      </p>
-
-      <div class="mt-8 pt-6 border-t border-slate-100">
-        <p class="text-xs text-slate-400 mb-2">メールが届かない場合</p>
-        <p class="text-[10px] text-slate-400">
-          ・迷惑メールフォルダをご確認ください<br />
-          ・メールアドレスが間違っている場合はログアウトしてやり直してください
-        </p>
-        <button
-          @click="handleLogout"
-          class="mt-4 text-xs text-slate-500 underline hover:text-slate-800"
-        >
-          ログアウト / アドレス変更
-        </button>
-      </div>
-    </div>
-  </div>
-</template>
+  return {
+    /** 現在選択中のタグ (nullの場合は「すべて表示」) */
+    activeTag,
+    /** 保存されているメモから抽出された、全タグのリスト（重複なし） */
+    allTags,
+    /** * タグを選択する関数
+     * @param tag - 選択するタグ名（nullを渡すと解除）
+     */
+    selectTag,
+  };
+}
 </file>
 
 <file path="src/env.d.ts">
@@ -2705,6 +2531,10 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_APP_ID: string;
   readonly VITE_FIREBASE_MEASUREMENT_ID: string;
   readonly VITE_GEMINI_API_KEY: string;
+  readonly VITE_LINE_LOGIN_CHANNEL_ID: string;
+  // ★追加: Stripe関連
+  readonly VITE_STRIPE_PAYMENT_LINK: string;
+  readonly VITE_STRIPE_PORTAL_LINK: string;
 }
 
 interface ImportMeta {
@@ -2715,77 +2545,6 @@ declare module "*.vue" {
   import type { DefineComponent } from "vue";
   const component: DefineComponent<{}, {}, any>;
   export default component;
-}
-</file>
-
-<file path="src/firebase.ts">
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth"; // ★修正: GoogleAuthProviderを追加
-import {
-  getFirestore,
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
-} from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-import { getMessaging } from "firebase/messaging";
-
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
-};
-
-// アプリが既に初期化されているかチェック
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-
-export const auth = getAuth(app);
-
-// Firestoreの初期化（重複防止）
-let dbInstance;
-try {
-  // すでに初期化済みなら取得するだけ
-  dbInstance = getFirestore(app);
-} catch (e) {
-  // まだなら設定付きで初期化
-  dbInstance = initializeFirestore(app, {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager(),
-    }),
-  });
-}
-export const db = dbInstance;
-
-export const storage = getStorage(app);
-export const messaging = getMessaging(app);
-
-// ★追加: ここが抜けているためエラーになっています
-export const googleProvider = new GoogleAuthProvider();
-</file>
-
-<file path="src/main.ts">
-import { createApp } from "vue";
-import "./style.css";
-import App from "./App.vue";
-import router from "./router";
-
-const app = createApp(App);
-app.use(router);
-app.mount("#app");
-
-// マウント後にローディング画面を消す
-const loader = document.getElementById("loading-screen");
-if (loader) {
-  setTimeout(() => {
-    loader.style.opacity = "0";
-    setTimeout(() => {
-      loader.remove();
-    }, 500);
-  }, 500);
 }
 </file>
 
@@ -2806,7 +2565,7 @@ if (loader) {
 
   /* FullCalendar カスタマイズ変数 */
   --fc-border-color: #27272a;
-  --fc-today-bg-color: rgba(99, 102, 241, 0.08); /* 今日の背景 */
+  --fc-today-bg-color: rgba(99, 102, 241, 0.05); /* 今日の背景は極薄く */
   --fc-page-bg-color: transparent;
   --fc-neutral-bg-color: transparent;
   --fc-list-event-hover-bg-color: #27272a;
@@ -2835,44 +2594,50 @@ body {
   scrollbar-width: none;
 }
 
-/* --- FullCalendar 大改造 --- */
+/* --- FullCalendar モダンUIカスタマイズ --- */
 
 .fc {
   font-family: inherit;
 }
 
-/* ツールバー (年月表示など) */
+/* ヘッダー全体の余白と背景 */
 .fc .fc-toolbar {
-  margin-bottom: 1.5rem !important;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  padding: 0 4px;
+  margin-bottom: 1rem !important;
+  flex-wrap: nowrap; /* ボタンが改行しないように */
+  gap: 8px;
 }
+
+/* タイトルのスタイル（年月） */
 .fc .fc-toolbar-title {
-  font-size: 1.25rem !important;
+  font-size: 1.1rem !important;
   font-weight: 800 !important;
-  letter-spacing: -0.02em;
   color: var(--text-main);
 }
 
-/* ボタン (今日、< >) */
+/* ボタン（今日、月、一覧）のデザイン刷新 */
 .fc .fc-button {
-  background-color: transparent !important;
-  border: 1px solid var(--border) !important;
-  color: var(--text-muted) !important;
-  font-size: 0.8rem !important;
-  font-weight: 600 !important;
-  padding: 0.4rem 0.8rem !important;
+  background-color: #27272a !important; /* ダークグレー */
+  border: 1px solid #3f3f46 !important;
+  color: #a1a1aa !important; /* 薄い文字色 */
+  font-size: 0.75rem !important;
+  font-weight: bold !important;
+  padding: 6px 10px !important;
   border-radius: 8px !important;
-  box-shadow: none !important;
-  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+  transition: all 0.2s ease !important;
 }
 .fc .fc-button:hover {
-  background-color: var(--bg-hover) !important;
-  color: var(--text-main) !important;
+  background-color: #3f3f46 !important;
+  color: #fff !important;
 }
-.fc .fc-button:active {
-  transform: scale(0.95);
+
+/* アクティブなボタン（現在選択中のビュー） */
+.fc .fc-button-active {
+  background-color: var(--primary) !important; /* ブランドカラー */
+  border-color: var(--primary) !important;
+  color: white !important;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4) !important;
 }
 
 /* カレンダーグリッド */
@@ -2880,6 +2645,8 @@ body {
 .fc-theme-standard th {
   border-color: var(--border) !important;
 }
+
+/* 曜日ヘッダー */
 .fc .fc-col-header-cell-cushion {
   color: var(--text-muted);
   font-size: 0.7rem;
@@ -2894,58 +2661,133 @@ body {
   padding-top: 6px;
 }
 .fc-daygrid-day-number {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 500;
-  color: var(--text-main);
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: background-color 0.2s;
+  color: var(--text-muted);
+  padding: 4px 6px;
 }
-/* 今日 */
+/* 今日の日付 */
 .fc-day-today .fc-daygrid-day-number {
   background-color: var(--primary);
   color: white;
   font-weight: 700;
-  box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+  border-radius: 50%;
+  width: 32px; /* 24pxから拡大 */
+  height: 32px; /* 24pxから拡大 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+  line-height: 1; /* 行間をリセットして垂直中央揃えを確実に */
 }
 
-/* イベント (予定) */
-.fc-event {
+/* --- ★ここから下がカレンダーイベントのデザイン修正 --- */
+
+/* イベントの枠（コンテナ） */
+.fc-content-custom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  overflow: hidden;
+  border-radius: 4px;
+
+  /* 背景色: JSから渡された変数を使い、透明度を下げる */
+  background-color: color-mix(in srgb, var(--event-color) 20%, transparent);
+
+  /* 左端のライン: 元の色をそのまま使う */
+  border-left: 3px solid var(--event-color);
+
+  transition: all 0.1s ease;
+}
+
+.fc-content-custom:hover {
+  /* ホバー時は少し濃くする */
+  background-color: color-mix(in srgb, var(--event-color) 30%, transparent);
+}
+
+/* 色付きのドット（今回はボーダーラインで色を出すのでドットは廃止） */
+.fc-event-dot {
+  display: none;
+}
+
+/* イベントタイトル */
+.fc-title-custom {
+  font-size: 0.75rem;
+  /* 文字色: 背景が薄いので、逆に「元の色を明るくした色」を使う */
+  color: color-mix(in srgb, var(--event-color) 100%, white);
+  /* もしくはシンプルに白にするなら color: #fff; */
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  line-height: 1.2;
+
+  /* 文字をくっきりさせる影 */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* デフォルトのイベント背景リセット */
+.fc-daygrid-event {
+  background-color: transparent !important;
   border: none !important;
-  border-radius: 6px !important;
-  padding: 2px 4px !important;
-  margin: 1px 2px !important;
-  font-size: 0.75rem !important;
-  font-weight: 600 !important;
-  cursor: pointer;
-  transition:
-    transform 0.1s ease,
-    filter 0.1s ease;
-}
-.fc-event:active {
-  transform: scale(0.95);
-}
-/* 終日イベント */
-.fc-h-event {
-  background-color: rgba(99, 102, 241, 0.2); /* 薄い紫 */
-  border-left: 3px solid var(--primary) !important;
-  color: #e0e7ff !important;
-}
-/* 時間付きイベントのドット */
-.fc-daygrid-event-dot {
-  border-color: var(--primary) !important;
+  margin-top: 2px !important;
 }
 
-/* リスト表示 */
-.fc-list {
-  border-color: var(--border) !important;
+/* --- リスト表示 (listMonth) の調整 --- */
+
+/* リスト全体のボーダーを消してスッキリさせる */
+.fc-theme-standard .fc-list {
+  border: none !important;
+}
+
+/* 日付ヘッダー（例: 2月7日 土曜日） */
+.fc-list-day-cushion {
+  background-color: #18181b !important; /* カード背景色 */
+  border-bottom: 1px solid #27272a;
+}
+.fc-list-day-text,
+.fc-list-day-side-text {
+  color: #fff !important;
+  font-size: 0.9rem !important;
+  font-weight: bold;
+}
+
+/* イベント行 */
+.fc-list-event {
+  background-color: transparent !important;
+  border-bottom: 1px solid #27272a;
+  cursor: pointer;
 }
 .fc-list-event:hover td {
-  background-color: var(--bg-hover) !important;
+  background-color: #27272a !important; /* ホバー時の色 */
+}
+
+/* 時間 */
+.fc-list-event-time {
+  color: #a1a1aa !important;
+  font-size: 0.8rem !important;
+  font-weight: 500;
+}
+
+/* ★修正: リスト表示のタイトル */
+.fc-list-custom-title {
+  color: #f4f4f5 !important;
+  font-size: 0.95rem !important; /* 少し大きく */
+  font-weight: 700; /* 太く */
+  padding-left: 4px;
+}
+
+/* イベントの色丸 */
+.fc-list-event-dot {
+  border-width: 4px !important;
+}
+
+/* 「予定がありません」のメッセージ */
+.fc-list-empty-cushion {
+  background-color: transparent !important;
+  color: var(--text-muted) !important;
 }
 
 /* アニメーション */
@@ -2961,69 +2803,6 @@ body {
 }
 .animate-fade-in {
   animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* --- ★以下、カレンダーのモダン化CSS --- */
-
-/* イベントのデザインを「ベタ塗り」から「左線＋半透明」に変える */
-.fc-daygrid-event {
-  background-color: transparent !important; /* 背景を透明に */
-  border: none !important;
-  margin-bottom: 2px !important;
-  border-radius: 4px !important;
-  position: relative;
-  padding-left: 8px !important; /* 左に色線のスペース */
-  overflow: hidden;
-}
-
-/* イベントの背景（うっすら色をつける） */
-.fc-daygrid-event::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: var(
-    --fc-event-border-color,
-    #6366f1
-  ); /* イベントの色を使う */
-  opacity: 0.15; /* 透明度15% */
-  z-index: -1;
-}
-
-/* 左側のアクセントライン */
-.fc-daygrid-event::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 3px; /* 左線の太さ */
-  height: 100%;
-  background-color: var(--fc-event-border-color, #6366f1);
-  border-radius: 2px 0 0 2px;
-}
-
-/* テキストの色 */
-.fc-event-title,
-.fc-time-custom,
-.fc-title-custom {
-  color: #e2e8f0 !important; /* 文字は白系 */
-  font-weight: 500;
-  font-size: 0.75rem;
-}
-
-/* 時間表示のスタイル */
-.fc-time-custom {
-  opacity: 0.7;
-  margin-right: 4px;
-  font-size: 0.7rem;
-}
-
-/* 今日の日付の丸の色（紫に統一） */
-.fc-day-today .fc-daygrid-day-number {
-  background-color: #6366f1 !important;
-  color: white !important;
 }
 </file>
 
@@ -3249,6 +3028,358 @@ onMounted(() => {
 </template>
 </file>
 
+<file path="src/components/ChatList/useChatList.ts">
+import { watch, nextTick } from "vue";
+import { useMyBrain } from "@/composables/useMyBrain";
+import mermaid from "mermaid"; // 図解を描画するためのライブラリ
+
+/**
+ * チャットリストのロジックを管理するフック
+ * チャットログの監視と、Mermaid記法（テキストによる図解）のレンダリングを担当します。
+ */
+export function useChatList() {
+  // アプリ全体の共有ステートからチャットログなどを取得
+  const { chatLogs, isAiThinking, deleteChatLog } = useMyBrain();
+
+  /**
+   * チャットログの変更を監視し、新しいログに図解コードが含まれていれば描画する処理
+   * @param chatLogs - 監視対象のチャットログ配列
+   */
+  watch(
+    chatLogs,
+    async () => {
+      // DOM（画面）の更新が完了するのを待つ
+      await nextTick();
+
+      // クラス名 "mermaid" を持つ要素（図解のコードが書かれたdiv）を全て取得
+      const elements = document.querySelectorAll(".mermaid");
+
+      elements.forEach(async (el) => {
+        const element = el as HTMLElement;
+        // 既に描画処理済みの要素はスキップ（無駄な再描画を防ぐため）
+        if (element.getAttribute("data-processed")) return;
+
+        // data-code属性からMermaidのソースコードを取得
+        // ChatList.vue側で :data-code="log.mermaidCode" のようにセットされている前提
+        const code = element.getAttribute("data-code") || "";
+        const id = element.id;
+
+        if (!code || !id) return;
+
+        try {
+          // Mermaidライブラリを使って、テキストコードをSVG画像に変換
+          const { svg } = await mermaid.render(`${id}-svg`, code);
+          // 生成されたSVGを要素の中に挿入
+          element.innerHTML = svg;
+          // 処理済みフラグを立てる
+          element.setAttribute("data-processed", "true");
+          // 描画が成功したら表示する（初期状態はhiddenにしていることが多い）
+          element.classList.remove("hidden");
+        } catch (e) {
+          console.warn("Mermaid rendering failed:", e);
+          // 構文エラーなどで失敗した場合は、要素を非表示のままにするか、エラー表示を行う
+          element.style.display = "none";
+        }
+      });
+    },
+    { deep: true, immediate: true }, // 配列の中身が変わった時や、初期表示時にも実行する設定
+  );
+
+  return {
+    chatLogs,
+    isAiThinking,
+    deleteChatLog,
+  };
+}
+</file>
+
+<file path="src/views/VerifyEmailView/VerifyEmailView.vue">
+<script setup lang="ts">
+import { ref } from "vue";
+import { getAuth, sendEmailVerification, signOut } from "firebase/auth";
+import { useRouter } from "vue-router";
+
+const auth = getAuth();
+const router = useRouter();
+// 現在ログイン中のユーザー（未認証状態）
+const user = auth.currentUser;
+
+const loading = ref(false);
+const message = ref("");
+
+/**
+ * 確認メールを再送信する処理
+ * ユーザーがメールを受け取れなかった場合に実行します。
+ */
+const resendEmail = async () => {
+  if (!user) return;
+  loading.value = true;
+  try {
+    // Firebaseの機能で本人確認メールを送る
+    await sendEmailVerification(user);
+    message.value = "確認メールを再送信しました。";
+  } catch (e: any) {
+    // 短時間に何度も送ると制限がかかることがあるので、そのエラーハンドリング
+    if (e.code === "auth/too-many-requests") {
+      message.value = "少し時間を置いてから再試行してください。";
+    } else {
+      message.value = "送信に失敗しました。";
+    }
+  } finally {
+    loading.value = false;
+  }
+};
+
+/**
+ * 「確認しました」ボタンが押された時の処理
+ * ユーザーがメールリンクをクリックした後、アプリ側で認証状態を再確認します。
+ */
+const checkVerification = async () => {
+  if (!user) return;
+  loading.value = true;
+  try {
+    // Firebase上のユーザー情報を最新の状態にリロード
+    // (これを行わないと、メール認証が完了していても古い情報のままになる)
+    await user.reload();
+
+    if (user.emailVerified) {
+      alert("認証を確認しました！");
+      // 認証OKならアプリのメイン画面へ移動
+      router.push("/app");
+    } else {
+      alert(
+        "まだ認証が完了していません。\nメールのリンクをクリックしましたか？",
+      );
+    }
+  } catch (e) {
+    console.error(e);
+  } finally {
+    loading.value = false;
+  }
+};
+
+/**
+ * ログアウトしてログイン画面に戻る処理
+ * メールアドレスを間違えた場合などに使います。
+ */
+const handleLogout = async () => {
+  await signOut(auth);
+  router.push("/login");
+};
+</script>
+
+<template>
+  <div
+    class="min-h-screen bg-slate-50 flex items-center justify-center p-6 font-sans"
+  >
+    <div
+      class="max-w-md w-full bg-white rounded-3xl p-8 shadow-sm border border-slate-100 text-center"
+    >
+      <div
+        class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-6"
+      >
+        ✉️
+      </div>
+
+      <h2 class="text-xl font-bold text-slate-800 mb-4">
+        メールアドレスの確認
+      </h2>
+
+      <p class="text-sm text-slate-600 mb-6 leading-relaxed">
+        <strong>{{ user?.email }}</strong> 宛に確認メールを送信しました。<br />
+        メール内のリンクをクリックして、アカウントを有効化してください。
+      </p>
+
+      <div class="space-y-3">
+        <button
+          @click="checkVerification"
+          :disabled="loading"
+          class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition shadow-lg shadow-blue-200"
+        >
+          {{ loading ? "確認中..." : "認証完了 (アプリへ進む)" }}
+        </button>
+
+        <button
+          @click="resendEmail"
+          :disabled="loading"
+          class="w-full py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition"
+        >
+          メールを再送信
+        </button>
+      </div>
+
+      <p
+        v-if="message"
+        class="mt-4 text-xs text-blue-600 font-bold animate-pulse"
+      >
+        {{ message }}
+      </p>
+
+      <div class="mt-8 pt-6 border-t border-slate-100">
+        <p class="text-xs text-slate-400 mb-2">メールが届かない場合</p>
+        <p class="text-[10px] text-slate-400">
+          ・迷惑メールフォルダをご確認ください<br />
+          ・メールアドレスが間違っている場合はログアウトしてやり直してください
+        </p>
+        <button
+          @click="handleLogout"
+          class="mt-4 text-xs text-slate-500 underline hover:text-slate-800"
+        >
+          ログアウト / アドレス変更
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
+<file path="src/firebase.ts">
+/**
+ * Firebase（バックエンドサービス）の初期化設定ファイル
+ * アプリ全体で使う「認証」「データベース」「ストレージ」などの機能をここで準備します。
+ */
+
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+import { getMessaging } from "firebase/messaging";
+
+// 環境変数 (.envファイル) から設定値を読み込み
+// これにより、本番環境と開発環境で接続先を切り替えられます
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+};
+
+// --- アプリの初期化 (Singletonパターン) ---
+// 既に初期化済みなら既存のアプリを取得し、まだなら新規に初期化します。
+// これにより、二重初期化によるエラーを防ぎます。
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+/** 認証機能 (ログイン/ログアウト) */
+export const auth = getAuth(app);
+
+// --- Firestore (データベース) の初期化 ---
+let dbInstance;
+try {
+  // すでに初期化済みなら取得するだけ
+  dbInstance = getFirestore(app);
+} catch (e) {
+  // まだなら設定付きで初期化
+  // オフラインでも動くように「永続化キャッシュ」を有効にしています
+  dbInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  });
+}
+/** データベース本体 */
+export const db = dbInstance;
+
+/** ファイルストレージ (画像の保存先) */
+export const storage = getStorage(app);
+
+/** プッシュ通知機能 */
+export const messaging = getMessaging(app);
+
+/** Googleログイン用のプロバイダ設定 */
+export const googleProvider = new GoogleAuthProvider();
+</file>
+
+<file path="src/main.ts">
+/**
+ * アプリケーションのエントリーポイント
+ * Vue.jsを起動し、ルーターやプラグインを読み込んで画面に描画（マウント）します。
+ */
+
+import { createApp } from "vue";
+import "./style.css"; // Tailwind CSSなどのスタイル読み込み
+import App from "./App.vue"; // ルートコンポーネント
+import router from "./router"; // 画面遷移の管理
+
+// Vueアプリのインスタンスを作成
+const app = createApp(App);
+
+// ルータープラグインを使用（これがないと画面遷移できない）
+app.use(router);
+
+// IDが "app" のHTML要素にVueアプリを描画
+app.mount("#app");
+
+// --- ローディング画面の消去処理 ---
+// index.htmlに書かれている初期ローディング画面（スピナー）を、
+// Vueアプリの準備が整ったタイミングでフェードアウトさせます。
+const loader = document.getElementById("loading-screen");
+if (loader) {
+  setTimeout(() => {
+    // CSSで透明にする
+    loader.style.opacity = "0";
+    // アニメーションが終わった頃にDOMから削除
+    setTimeout(() => {
+      loader.remove();
+    }, 500);
+  }, 500);
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "my-brain",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && firebase deploy"
+  },
+  "dependencies": {
+    "@fullcalendar/daygrid": "^6.1.20",
+    "@fullcalendar/interaction": "^6.1.20",
+    "@fullcalendar/list": "^6.1.20",
+    "@fullcalendar/timegrid": "^6.1.20",
+    "@fullcalendar/vue3": "^6.1.20",
+    "@google/generative-ai": "^0.24.1",
+    "@line/bot-sdk": "^10.5.0",
+    "axios": "^1.13.2",
+    "chart.js": "^4.5.1",
+    "firebase": "^10.14.1",
+    "html5-qrcode": "^2.3.8",
+    "mathjs": "^15.1.0",
+    "mermaid": "^11.12.2",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "vue": "^3.4.0",
+    "vue-chartjs": "^5.3.3",
+    "vue-router": "^4.6.3"
+  },
+  "devDependencies": {
+    "@types/google-apps-script": "^2.0.8",
+    "@types/react": "^19.2.7",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.18",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0",
+    "vite-plugin-pwa": "^1.2.0",
+    "vue-tsc": "^1.8.25"
+  }
+}
+</file>
+
 <file path="src/types/index.ts">
 /**
  * 🧠 記憶（メモ）のデータ構造
@@ -3334,28 +3465,155 @@ export interface DailyReport {
 }
 </file>
 
+<file path="src/views/LegalView/LegalView.vue">
+<script setup lang="ts">
+import { useRouter } from "vue-router";
+const router = useRouter();
+</script>
+
+<template>
+  <div
+    class="min-h-screen bg-slate-950 text-slate-300 p-6 md:p-12 font-sans overflow-y-auto"
+  >
+    <div class="max-w-3xl mx-auto pb-20">
+      <button
+        @click="router.back()"
+        class="mb-6 text-sm text-slate-500 hover:text-white transition"
+      >
+        ← 戻る
+      </button>
+
+      <h1 class="text-2xl font-bold text-white mb-8">
+        特定商取引法に基づく表記
+      </h1>
+
+      <div class="space-y-8 text-sm leading-relaxed">
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
+          <p>吉岡 拓海 (BlueCode)</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">運営統括責任者</h2>
+          <p>吉岡 拓海</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">所在地</h2>
+          <p>〒815-0041 福岡県福岡市南区野間1丁目19-1</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
+          <p>080-6423-6435</p>
+          <p class="text-xs text-slate-500 mt-1">
+            受付時間 10:00-18:00（土日祝を除く）
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">メールアドレス</h2>
+          <p>gongedonghuam@gmail.com</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">販売価格</h2>
+          <p>PROプラン: 月額980円（税込）</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">商品代金以外の必要料金</h2>
+          <p>
+            当サイトの閲覧、コンテンツのダウンロード、お問い合わせ等の際の電子メールの送受信時などに、所定の通信料が発生いたします。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">お支払方法</h2>
+          <p>クレジットカード決済（Stripe）</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">お支払時期</h2>
+          <p>
+            初回お申込み時に即時決済され、以降毎月同日に自動的に決済が行われます。<br />
+            実際の引き落とし時期は、ご利用のクレジットカード会社の締め日や契約内容により異なります。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">商品の引渡時期</h2>
+          <p>決済手続き完了後、直ちにご利用いただけます。</p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">
+            返品・キャンセルについて
+          </h2>
+          <p>
+            デジタルコンテンツの性質上、決済完了後の返品・返金には応じられません。<br />
+            解約はいつでも可能です。次回更新日の前日までにお手続きください。なお、日割り計算による返金は行われません。
+          </p>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">動作環境</h2>
+          <p>
+            推奨ブラウザ：Google Chrome 最新版、Safari 最新版、Microsoft Edge
+            最新版<br />
+            ※インターネット接続環境が必要です。
+          </p>
+        </section>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
 <file path="src/App.vue">
 <script setup lang="ts">
+/**
+ * App.vue - ルートコンポーネント
+ * アプリ全体で常に実行しておきたい処理（ログイン監視、テーマ監視など）はここに記述します。
+ * <router-view /> の部分に、URLに応じた各ページが表示されます。
+ */
 import { onMounted, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useMyBrain } from "@/composables/useMyBrain";
-import { useTheme } from "@/composables/useTheme"; // 追加
+import { useTheme } from "@/composables/useTheme";
 
 const { initAuth, currentUser } = useMyBrain();
-const { initTheme, cleanupTheme } = useTheme(); // 追加
+const { initTheme, cleanupTheme } = useTheme();
 const router = useRouter();
 
+/**
+ * アプリ起動時の処理
+ */
 onMounted(() => {
+  // Firebaseの認証監視をスタート
+  // (ユーザーがログイン中かチェックし、データを読み込む)
   initAuth();
-  initTheme(); // テーマ監視開始
+
+  // 時間帯によるダークモード/ライトモードの自動切替を監視スタート
+  initTheme();
 });
 
+/**
+ * アプリ終了時（コンポーネント破棄時）の処理
+ */
 onUnmounted(() => {
+  // タイマーなどを停止してメモリリークを防ぐ
   cleanupTheme();
 });
 
+/**
+ * ユーザー情報の監視
+ * ログアウトされた場合や、セッションが切れた場合に
+ * 自動的にログイン画面へリダイレクトさせます。
+ */
 watch(currentUser, (newUser) => {
   if (newUser === null) {
+    // ログイン不要なページ（LPや規約など）以外にいる場合は、ログイン画面へ飛ばす
     const publicPages = ["/", "/login", "/legal", "/verify-email", "/privacy"];
     if (!publicPages.includes(router.currentRoute.value.path)) {
       router.push("/login");
@@ -3369,51 +3627,113 @@ watch(currentUser, (newUser) => {
 </template>
 </file>
 
-<file path="package.json">
-{
-  "name": "my-brain",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "deploy": "vite build && firebase deploy"
-  },
-  "dependencies": {
-    "@fullcalendar/daygrid": "^6.1.20",
-    "@fullcalendar/interaction": "^6.1.20",
-    "@fullcalendar/list": "^6.1.20",
-    "@fullcalendar/timegrid": "^6.1.20",
-    "@fullcalendar/vue3": "^6.1.20",
-    "@google/generative-ai": "^0.24.1",
-    "@line/bot-sdk": "^10.5.0",
-    "axios": "^1.13.2",
-    "chart.js": "^4.5.1",
-    "firebase": "^10.14.1",
-    "html5-qrcode": "^2.3.8",
-    "mathjs": "^15.1.0",
-    "mermaid": "^11.12.2",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "vue": "^3.4.0",
-    "vue-chartjs": "^5.3.3",
-    "vue-router": "^4.6.3"
-  },
-  "devDependencies": {
-    "@types/google-apps-script": "^2.0.8",
-    "@types/react": "^19.2.7",
-    "@vitejs/plugin-vue": "^5.0.0",
-    "autoprefixer": "^10.4.22",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^3.4.18",
-    "typescript": "^5.2.2",
-    "vite": "^5.0.0",
-    "vite-plugin-pwa": "^1.2.0",
-    "vue-tsc": "^1.8.25"
+<file path="firestore.rules">
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ヘルパー関数: 本人かどうか
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // ★ここが変更点: ユーザー配下のデータ(system含む)をすべて無条件で許可
+    match /users/{userId}/{document=**} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // その他のデータもシンプルに許可
+    match /memories/{memoryId} {
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
+    }
+
+    match /chat_logs/{logId} {
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
+    }
+
+    match /todos/{todoId} {
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
+    }
+
+    match /daily_reports/{reportId} {
+      allow read, update, delete: if isOwner(resource.data.userId);
+      allow create: if request.auth != null;
+    }
   }
 }
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="google-site-verification"
+      content="qpuJVeg2XkDd1ieycUl-LOQkD3MDEH7wVKmlPE3NdEI"
+    />
+    <link rel="icon" href="/logo.png?v=3" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>My Brain</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0f172a;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+      }
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #0f172a;
+        color: white;
+        z-index: 9999;
+        transition: opacity 0.5s ease;
+      }
+      .loader {
+        margin-top: 32px;
+        width: 32px;
+        height: 32px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        border-top-color: #3b82f6;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="loading-screen">
+      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
+      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
+      <div class="loader"></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
 </file>
 
 <file path="src/components/InputFooter/useInputFooter.ts">
@@ -3626,220 +3946,6 @@ export function useInputFooter(inputMode: Ref<InputMode>) {
 }
 </file>
 
-<file path="src/views/LegalView/LegalView.vue">
-<script setup lang="ts">
-import { useRouter } from "vue-router";
-const router = useRouter();
-</script>
-
-<template>
-  <div
-    class="min-h-screen bg-slate-950 text-slate-300 p-6 md:p-12 font-sans overflow-y-auto"
-  >
-    <div class="max-w-3xl mx-auto pb-20">
-      <button
-        @click="router.back()"
-        class="mb-6 text-sm text-slate-500 hover:text-white transition"
-      >
-        ← 戻る
-      </button>
-
-      <h1 class="text-2xl font-bold text-white mb-8">
-        特定商取引法に基づく表記
-      </h1>
-
-      <div class="space-y-8 text-sm leading-relaxed">
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">販売業者</h2>
-          <p>吉岡 拓海 (BlueCode)</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">運営統括責任者</h2>
-          <p>吉岡 拓海</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">所在地</h2>
-          <p>〒815-0041 福岡県福岡市南区野間1丁目19-1</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">電話番号</h2>
-          <p>080-6423-6435</p>
-          <p class="text-xs text-slate-500 mt-1">
-            受付時間 10:00-18:00（土日祝を除く）
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">メールアドレス</h2>
-          <p>gongedonghuam@gmail.com</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">販売価格</h2>
-          <p>PROプラン: 月額980円（税込）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">商品代金以外の必要料金</h2>
-          <p>
-            当サイトの閲覧、コンテンツのダウンロード、お問い合わせ等の際の電子メールの送受信時などに、所定の通信料が発生いたします。
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">お支払方法</h2>
-          <p>クレジットカード決済（Stripe）</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">お支払時期</h2>
-          <p>
-            初回お申込み時に即時決済され、以降毎月同日に自動的に決済が行われます。<br />
-            実際の引き落とし時期は、ご利用のクレジットカード会社の締め日や契約内容により異なります。
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">商品の引渡時期</h2>
-          <p>決済手続き完了後、直ちにご利用いただけます。</p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">
-            返品・キャンセルについて
-          </h2>
-          <p>
-            デジタルコンテンツの性質上、決済完了後の返品・返金には応じられません。<br />
-            解約はいつでも可能です。次回更新日の前日までにお手続きください。なお、日割り計算による返金は行われません。
-          </p>
-        </section>
-
-        <section>
-          <h2 class="font-bold text-slate-100 mb-2">動作環境</h2>
-          <p>
-            推奨ブラウザ：Google Chrome 最新版、Safari 最新版、Microsoft Edge
-            最新版<br />
-            ※インターネット接続環境が必要です。
-          </p>
-        </section>
-      </div>
-    </div>
-  </div>
-</template>
-</file>
-
-<file path="firestore.rules">
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    
-    // ヘルパー関数: 本人かどうか
-    function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
-    }
-
-    // ★ここが変更点: ユーザー配下のデータ(system含む)をすべて無条件で許可
-    match /users/{userId}/{document=**} {
-      allow read, write: if isOwner(userId);
-    }
-
-    // その他のデータもシンプルに許可
-    match /memories/{memoryId} {
-      allow read, update, delete: if isOwner(resource.data.userId);
-      allow create: if request.auth != null;
-    }
-
-    match /chat_logs/{logId} {
-      allow read, update, delete: if isOwner(resource.data.userId);
-      allow create: if request.auth != null;
-    }
-
-    match /todos/{todoId} {
-      allow read, update, delete: if isOwner(resource.data.userId);
-      allow create: if request.auth != null;
-    }
-
-    match /daily_reports/{reportId} {
-      allow read, update, delete: if isOwner(resource.data.userId);
-      allow create: if request.auth != null;
-    }
-  }
-}
-</file>
-
-<file path="index.html">
-<!doctype html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="google-site-verification"
-      content="qpuJVeg2XkDd1ieycUl-LOQkD3MDEH7wVKmlPE3NdEI"
-    />
-    <link rel="icon" href="/logo.png?v=3" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
-    <title>My Brain</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        background-color: #0f172a;
-        height: 100vh;
-        width: 100vw;
-        overflow: hidden;
-      }
-      #loading-screen {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background-color: #0f172a;
-        color: white;
-        z-index: 9999;
-        transition: opacity 0.5s ease;
-      }
-      .loader {
-        margin-top: 32px;
-        width: 32px;
-        height: 32px;
-        border: 3px solid rgba(255, 255, 255, 0.1);
-        border-radius: 50%;
-        border-top-color: #3b82f6;
-        animation: spin 1s linear infinite;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app"></div>
-
-    <div id="loading-screen">
-      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
-      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
-      <div class="loader"></div>
-    </div>
-
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
-</file>
-
 <file path="src/router/index.ts">
 import { createRouter, createWebHistory } from "vue-router";
 import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
@@ -3923,395 +4029,6 @@ router.beforeEach(async (to, from, next) => {
 });
 
 export default router;
-</file>
-
-<file path="src/views/HomeView/useHomeView.ts">
-import { ref, onMounted, watch, nextTick, computed } from "vue";
-import { useMyBrain } from "@/composables/useMyBrain";
-import type { Memory } from "@/types";
-import mermaid from "mermaid"; // 図解を描画するライブラリ
-import { httpsCallable, getFunctions } from "firebase/functions";
-import { getApp } from "firebase/app";
-import { useRouter, useRoute } from "vue-router";
-import axios from "axios";
-
-// カレンダープラグイン（FullCalendar）
-import dayGridPlugin from "@fullcalendar/daygrid";
-import timeGridPlugin from "@fullcalendar/timegrid";
-import interactionPlugin from "@fullcalendar/interaction";
-import listPlugin from "@fullcalendar/list";
-import type { CalendarOptions } from "@fullcalendar/core";
-
-// Googleカレンダーの色定義（IDと色の対応表）
-const GOOGLE_CALENDAR_COLORS: Record<string, string> = {
-  "1": "#7986cb", // ラベンダー
-  "2": "#33b679", // セージ
-  "3": "#8e24aa", // グレープ
-  "4": "#e67c73", // フラミンゴ
-  "5": "#f6c026", // バナナ
-  "6": "#f4511e", // みかん
-  "7": "#039be5", // ピーコック
-  "8": "#616161", // グラファイト
-  "9": "#3f51b5", // ブルーベリー（デフォルト）
-  "10": "#0b8043", // バジル
-  "11": "#d50000", // トマト
-};
-
-export function useHomeView() {
-  // `useMyBrain` から必要な機能を借りてきます
-  const {
-    initAuth,
-    chatLogs,
-    isAiThinking,
-    currentUser,
-    findRelatedMemories,
-    todos,
-    dailyReports,
-    toggleTodo,
-    deleteTodo,
-    callGoogleApi,
-    isCalendarConnected,
-    reconnectCalendar,
-  } = useMyBrain();
-
-  // --- 画面の状態管理変数 ---
-  /** 現在の入力モード（メモ/チャット/URL/カレンダー） */
-  const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
-  /** 編集中のメモ（モーダルで開く用） */
-  const editingMemory = ref<Memory | null>(null);
-  /** チャット画面のスクロール制御用 */
-  const chatContainerRef = ref<HTMLElement | null>(null);
-  /** 成功トースト表示フラグ */
-  const showSuccessToast = ref(false);
-  /** カレンダー読み込み中フラグ */
-  const calendarLoading = ref(false);
-  /** 日報モーダル表示フラグ */
-  const isReportModalOpen = ref(false);
-
-  const route = useRoute();
-  const router = useRouter();
-
-  // --- カレンダー関連の状態 ---
-  const isBottomSheetOpen = ref(false);
-  const selectedDateStr = ref("");
-  const selectedDateEvents = ref<any[]>([]);
-  const relatedMemories = ref<Memory[]>([]);
-  const isSearchingMemories = ref(false);
-
-  /**
-   * カレンダーの日付をクリックした時に、下からニョキッと詳細画面を出す関数
-   */
-  const openBottomSheet = async (dateStr: string) => {
-    selectedDateStr.value = dateStr;
-    relatedMemories.value = [];
-    isSearchingMemories.value = false;
-
-    // その日の予定をフィルタリングして表示
-    const events = (calendarOptions.value.events as any[]) || [];
-    selectedDateEvents.value = events
-      .filter((ev: any) => ev.start && ev.start.startsWith(dateStr))
-      .sort(
-        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
-      );
-    isBottomSheetOpen.value = true;
-
-    // その日の予定に関連するメモをAI検索して表示
-    if (selectedDateEvents.value.length > 0) {
-      isSearchingMemories.value = true;
-      const queryText = selectedDateEvents.value.map((e) => e.title).join(" ");
-      try {
-        relatedMemories.value = await findRelatedMemories(queryText);
-      } catch (e) {
-        console.error("Related search failed", e);
-      } finally {
-        isSearchingMemories.value = false;
-      }
-    }
-  };
-
-  const closeBottomSheet = () => {
-    isBottomSheetOpen.value = false;
-  };
-
-  /**
-   * カレンダーの予定を削除する関数
-   */
-  const deleteEvent = async (eventId: string) => {
-    if (!confirm("削除しますか？")) return;
-    try {
-      await callGoogleApi(async (token) => {
-        await axios.delete(
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-      });
-      // 画面上のリストからも削除
-      selectedDateEvents.value = selectedDateEvents.value.filter(
-        (e) => e.id !== eventId,
-      );
-      const currentEvents = (calendarOptions.value.events as any[]) || [];
-      calendarOptions.value.events = currentEvents.filter(
-        (e: any) => e.id !== eventId,
-      );
-    } catch (e: any) {
-      alert("削除失敗: " + e.message);
-    }
-  };
-
-  /**
-   * FullCalendarの設定オブジェクト
-   * ここでカレンダーの見た目や挙動を定義しています。
-   */
-  const calendarOptions = ref<CalendarOptions>({
-    plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
-    initialView: "dayGridMonth",
-    headerToolbar: { left: "prev", center: "title", right: "next" },
-    events: [] as any[], // ここに予定データが入る
-    locale: "ja", // 日本語化
-    height: "100%",
-    expandRows: true, // 行の高さを均等にする
-    dayMaxEvents: 2, // 1日に表示する最大件数
-
-    displayEventTime: false, // 時間は詳細で見せるので非表示
-
-    // イベントの見た目をカスタマイズ
-    eventContent: function (arg: any) {
-      const timeText = arg.event.allDay ? "" : arg.timeText;
-      return {
-        html: `
-          <div class="fc-content-custom">
-            ${timeText ? `<span class="fc-time-custom">${timeText}</span>` : ""}
-            <span class="fc-title-custom">${arg.event.title}</span>
-          </div>
-        `,
-      };
-    },
-
-    moreLinkClick: (arg) => {
-      openBottomSheet(arg.date.toISOString().split("T")[0]);
-      return "void";
-    },
-    dateClick: (info) => {
-      openBottomSheet(info.dateStr);
-    },
-    eventClick: (info) => {
-      info.jsEvent.preventDefault();
-      openBottomSheet(info.event.startStr.split("T")[0]);
-    },
-    eventTimeFormat: {
-      hour: "numeric",
-      minute: "2-digit",
-      meridiem: false,
-      hour12: false,
-    },
-    longPressDelay: 500,
-    handleWindowResize: true,
-  });
-
-  /**
-   * Googleカレンダーから全ての予定を取得する関数
-   */
-  const fetchAllCalendars = async () => {
-    calendarLoading.value = true;
-    try {
-      const calendars = await callGoogleApi(async (token) => {
-        let list = [{ id: "primary", backgroundColor: "#818cf8" }];
-        try {
-          const listRes = await axios.get(
-            "https://www.googleapis.com/calendar/v3/users/me/calendarList",
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
-          if (listRes.data.items) {
-            list = listRes.data.items.map((cal: any) => ({
-              id: cal.id,
-              backgroundColor: cal.backgroundColor || "#818cf8",
-            }));
-          }
-        } catch (e: any) {
-          if (e.response && e.response.status === 401) {
-            throw e;
-          }
-          console.warn("List fetch failed, using primary only");
-        }
-        return list;
-      });
-
-      if (!calendars) return;
-
-      const now = new Date();
-      // 表示範囲: 前後数ヶ月分
-      const timeMin = new Date(
-        now.getFullYear(),
-        now.getMonth() - 1,
-        1,
-      ).toISOString();
-      const timeMax = new Date(
-        now.getFullYear(),
-        now.getMonth() + 2,
-        0,
-      ).toISOString();
-
-      const promises = calendars.map((cal: any) =>
-        callGoogleApi(async (token) => {
-          return axios
-            .get(
-              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`,
-              {
-                headers: { Authorization: `Bearer ${token}` },
-                params: {
-                  timeMin,
-                  timeMax,
-                  singleEvents: true,
-                  maxResults: 250,
-                },
-              },
-            )
-            .catch((e) => ({ data: { items: [] } }));
-        }),
-      );
-
-      const results = await Promise.all(promises);
-      const allEvents = results.flatMap((res: any, index) => {
-        if (!res || !res.data) return [];
-        const defaultColor = calendars[index].backgroundColor;
-        return (res.data.items || []).map((ev: any) => {
-          let bgColor = defaultColor;
-          if (ev.colorId && GOOGLE_CALENDAR_COLORS[ev.colorId])
-            bgColor = GOOGLE_CALENDAR_COLORS[ev.colorId];
-          return {
-            id: ev.id,
-            title: ev.summary || "(なし)",
-            start: ev.start.dateTime || ev.start.date,
-            end: ev.end.dateTime || ev.end.date,
-            backgroundColor: bgColor,
-            allDay: !ev.start.dateTime,
-          };
-        });
-      });
-      calendarOptions.value.events = allEvents;
-    } catch (e: any) {
-      console.error("Calendar fetch global error:", e);
-      if (e.response && e.response.status === 401) {
-        localStorage.removeItem("google_calendar_token");
-        isCalendarConnected.value = false;
-      }
-    } finally {
-      calendarLoading.value = false;
-    }
-  };
-
-  /**
-   * チャット画面を一番下まで自動スクロールする関数
-   */
-  const scrollToBottom = async () => {
-    if (inputMode.value !== "chat") return;
-    await nextTick();
-    setTimeout(() => {
-      if (chatContainerRef.value)
-        chatContainerRef.value.scrollTo({
-          top: chatContainerRef.value.scrollHeight,
-          behavior: "smooth",
-        });
-    }, 100);
-  };
-
-  onMounted(async () => {
-    initAuth();
-    // 図解ライブラリの初期化
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: "dark",
-      securityLevel: "loose",
-      suppressErrorRendering: true,
-    });
-
-    // LINEログインからのコールバック処理
-    const code = route.query.code as string;
-    if (code) {
-      window.history.replaceState({}, document.title, "/app");
-      try {
-        const functions = getFunctions(getApp(), "asia-northeast1");
-        const linkFunc = httpsCallable(functions, "linkLineAccount");
-        await linkFunc({ code, redirectUri: window.location.origin + "/app" });
-        showSuccessToast.value = true;
-        setTimeout(() => (showSuccessToast.value = false), 5000);
-      } catch (e) {
-        alert("LINE連携失敗");
-      }
-    }
-    if (currentUser.value) fetchAllCalendars();
-  });
-
-  // モード切替時の処理
-  watch(inputMode, (newMode) => {
-    if (newMode === "chat") {
-      nextTick(() => {
-        if (chatContainerRef.value)
-          chatContainerRef.value.scrollTop =
-            chatContainerRef.value.scrollHeight;
-      });
-      scrollToBottom();
-    } else if (newMode === "calendar") {
-      setTimeout(() => {
-        // カレンダーのサイズを再計算させるハック
-        window.dispatchEvent(new Event("resize"));
-        fetchAllCalendars();
-      }, 100);
-    }
-  });
-
-  watch(chatLogs, scrollToBottom, { deep: true });
-  watch(isAiThinking, scrollToBottom);
-
-  const onOpenDetail = (memo: Memory) => {
-    editingMemory.value = memo;
-  };
-  const onModeChange = (newMode: "memo" | "chat" | "url" | "calendar") => {
-    inputMode.value = newMode;
-  };
-  const formatDateHeader = (dateStr: string) => {
-    if (!dateStr) return "";
-    const d = new Date(dateStr);
-    const days = ["日", "月", "火", "水", "木", "金", "土"];
-    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${days[d.getDay()]})`;
-  };
-  const formatTimeRange = (ev: any) => {
-    if (ev.allDay) return "終日";
-    const start = new Date(ev.start);
-    return start.toLocaleTimeString("ja-JP", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  return {
-    inputMode,
-    editingMemory,
-    chatContainerRef,
-    showSuccessToast,
-    calendarLoading,
-    calendarOptions,
-    isBottomSheetOpen,
-    selectedDateStr,
-    selectedDateEvents,
-    openBottomSheet,
-    closeBottomSheet,
-    onOpenDetail,
-    onModeChange,
-    formatDateHeader,
-    formatTimeRange,
-    deleteEvent,
-    relatedMemories,
-    isSearchingMemories,
-    todos,
-    dailyReports,
-    toggleTodo,
-    deleteTodo,
-    isReportModalOpen,
-    isCalendarConnected,
-    reconnectCalendar,
-  };
-}
 </file>
 
 <file path="src/views/LandingView/LandingView.vue">
@@ -5025,6 +4742,404 @@ h2 {
 </style>
 </file>
 
+<file path="src/views/HomeView/useHomeView.ts">
+import { ref, onMounted, watch, nextTick, computed } from "vue";
+import { useMyBrain } from "@/composables/useMyBrain";
+import type { Memory } from "@/types";
+import mermaid from "mermaid";
+import { httpsCallable, getFunctions } from "firebase/functions";
+import { getApp } from "firebase/app";
+import { useRouter, useRoute } from "vue-router";
+import axios from "axios";
+
+// FullCalendar（カレンダーライブラリ）のプラグイン
+import dayGridPlugin from "@fullcalendar/daygrid"; // 月表示用
+import timeGridPlugin from "@fullcalendar/timegrid"; // 週/日表示用
+import interactionPlugin from "@fullcalendar/interaction"; // クリック操作用
+import listPlugin from "@fullcalendar/list"; // リスト表示用
+import type { CalendarOptions } from "@fullcalendar/core";
+
+// Googleカレンダーの色ID定義
+const GOOGLE_CALENDAR_COLORS: Record<string, string> = {
+  "1": "#7986cb",
+  "2": "#33b679",
+  "3": "#8e24aa",
+  "4": "#e67c73",
+  "5": "#f6c026",
+  "6": "#f4511e",
+  "7": "#039be5",
+  "8": "#616161",
+  "9": "#3f51b5",
+  "10": "#0b8043",
+  "11": "#d50000",
+};
+
+export function useHomeView() {
+  const {
+    initAuth,
+    chatLogs,
+    isAiThinking,
+    currentUser,
+    findRelatedMemories,
+    todos,
+    dailyReports,
+    toggleTodo,
+    deleteTodo,
+    callGoogleApi,
+    isCalendarConnected,
+    reconnectCalendar,
+  } = useMyBrain();
+
+  // --- 画面の状態管理変数 ---
+  const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
+  const editingMemory = ref<Memory | null>(null);
+  const chatContainerRef = ref<HTMLElement | null>(null);
+  const showSuccessToast = ref(false);
+  const calendarLoading = ref(false);
+  const isReportModalOpen = ref(false);
+
+  const route = useRoute();
+  const router = useRouter();
+
+  // --- カレンダー関連の状態 ---
+  const isBottomSheetOpen = ref(false);
+  const selectedDateStr = ref("");
+  const selectedDateEvents = ref<any[]>([]);
+  const relatedMemories = ref<Memory[]>([]);
+  const isSearchingMemories = ref(false);
+
+  const openBottomSheet = async (dateStr: string) => {
+    selectedDateStr.value = dateStr;
+    relatedMemories.value = [];
+    isSearchingMemories.value = false;
+
+    const events = (calendarOptions.value.events as any[]) || [];
+    selectedDateEvents.value = events
+      .filter((ev: any) => ev.start && ev.start.startsWith(dateStr))
+      .sort(
+        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+      );
+    isBottomSheetOpen.value = true;
+
+    if (selectedDateEvents.value.length > 0) {
+      isSearchingMemories.value = true;
+      const queryText = selectedDateEvents.value.map((e) => e.title).join(" ");
+      try {
+        relatedMemories.value = await findRelatedMemories(queryText);
+      } catch (e) {
+        console.error("Related search failed", e);
+      } finally {
+        isSearchingMemories.value = false;
+      }
+    }
+  };
+
+  const closeBottomSheet = () => {
+    isBottomSheetOpen.value = false;
+  };
+
+  const deleteEvent = async (eventId: string) => {
+    if (!confirm("削除しますか？")) return;
+    try {
+      await callGoogleApi(async (token) => {
+        await axios.delete(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      });
+      selectedDateEvents.value = selectedDateEvents.value.filter(
+        (e) => e.id !== eventId,
+      );
+      const currentEvents = (calendarOptions.value.events as any[]) || [];
+      calendarOptions.value.events = currentEvents.filter(
+        (e: any) => e.id !== eventId,
+      );
+    } catch (e: any) {
+      alert("削除失敗: " + e.message);
+    }
+  };
+
+  /**
+   * Googleカレンダーから全ての予定を取得する関数
+   * 引数で期間を指定できるように変更
+   * ★重要: calendarOptionsで使うため、上に移動しました
+   */
+  const fetchAllCalendars = async (startStr?: string, endStr?: string) => {
+    calendarLoading.value = true;
+    try {
+      const calendars = await callGoogleApi(async (token) => {
+        let list = [{ id: "primary", backgroundColor: "#818cf8" }];
+        try {
+          const listRes = await axios.get(
+            "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (listRes.data.items) {
+            list = listRes.data.items.map((cal: any) => ({
+              id: cal.id,
+              backgroundColor: cal.backgroundColor || "#818cf8",
+            }));
+          }
+        } catch (e: any) {
+          if (e.response && e.response.status === 401) throw e;
+          console.warn("List fetch failed");
+        }
+        return list;
+      });
+
+      if (!calendars) return;
+
+      // 期間指定がない場合は前後1年を取得 (デフォルト)
+      const now = new Date();
+      const timeMin = startStr
+        ? new Date(startStr).toISOString()
+        : new Date(now.getFullYear() - 1, now.getMonth(), 1).toISOString();
+
+      const timeMax = endStr
+        ? new Date(endStr).toISOString()
+        : new Date(now.getFullYear() + 1, now.getMonth(), 0).toISOString();
+
+      const promises = calendars.map((cal: any) =>
+        callGoogleApi(async (token) => {
+          return axios
+            .get(
+              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+                params: {
+                  timeMin,
+                  timeMax,
+                  singleEvents: true,
+                  maxResults: 2500,
+                },
+              },
+            )
+            .catch(() => ({ data: { items: [] } }));
+        }),
+      );
+
+      const results = await Promise.all(promises);
+      const allEvents = results.flatMap((res: any, index) => {
+        if (!res || !res.data) return [];
+        const defaultColor = calendars[index].backgroundColor;
+        return (res.data.items || []).map((ev: any) => {
+          let bgColor = defaultColor;
+          if (ev.colorId && GOOGLE_CALENDAR_COLORS[ev.colorId])
+            bgColor = GOOGLE_CALENDAR_COLORS[ev.colorId];
+          return {
+            id: ev.id,
+            title: ev.summary || "(なし)",
+            start: ev.start.dateTime || ev.start.date,
+            end: ev.end.dateTime || ev.end.date,
+            backgroundColor: bgColor,
+            allDay: !ev.start.dateTime,
+          };
+        });
+      });
+      calendarOptions.value.events = allEvents;
+    } catch (e: any) {
+      if (e.response && e.response.status === 401) {
+        localStorage.removeItem("google_calendar_token");
+        isCalendarConnected.value = false;
+      }
+    } finally {
+      calendarLoading.value = false;
+    }
+  };
+
+  /**
+   * FullCalendarの設定オブジェクト
+   */
+  const calendarOptions = ref<CalendarOptions>({
+    plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
+    initialView: window.innerWidth < 768 ? "listMonth" : "dayGridMonth",
+
+    headerToolbar: {
+      left: "prev,next",
+      center: "title",
+      right: "dayGridMonth,listMonth",
+    },
+
+    buttonText: {
+      today: "今日",
+      month: "月",
+      list: "一覧",
+    },
+
+    locale: "ja",
+    height: "100%",
+    expandRows: true,
+    dayMaxEvents: true,
+    navLinks: true,
+
+    eventTimeFormat: {
+      hour: "numeric",
+      minute: "2-digit",
+      meridiem: false,
+    },
+
+    views: {
+      dayGridMonth: {
+        titleFormat: { year: "numeric", month: "short" },
+        dayMaxEvents: 2,
+      },
+      listMonth: {
+        buttonText: "一覧",
+        displayEventTime: true,
+      },
+    },
+
+    windowResize: (arg) => {
+      if (arg.view.type === "dayGridMonth" && window.innerWidth < 768) {
+        arg.view.calendar.changeView("listMonth");
+      } else if (arg.view.type === "listMonth" && window.innerWidth >= 768) {
+        arg.view.calendar.changeView("dayGridMonth");
+      }
+    },
+
+    // ★修正: CSS変数(--event-color)に色情報を渡す
+    eventContent: function (arg: any) {
+      if (arg.view.type === "listMonth") {
+        return {
+          html: `<div class="fc-list-custom-title">${arg.event.title}</div>`,
+        };
+      }
+      return {
+        html: `
+          <div class="fc-content-custom" style="--event-color: ${arg.event.backgroundColor}">
+            <span class="fc-title-custom">${arg.event.title}</span>
+          </div>
+        `,
+      };
+    },
+
+    dateClick: (info) => {
+      openBottomSheet(info.dateStr);
+    },
+    eventClick: (info) => {
+      info.jsEvent.preventDefault();
+      openBottomSheet(info.event.startStr.split("T")[0]);
+    },
+
+    // ★追加: 表示期間（月など）が変わった時にデータを再取得する
+    datesSet: (arg) => {
+      // カレンダーモードで、かつローディング中でなければ再取得
+      if (inputMode.value === "calendar" && !calendarLoading.value) {
+        fetchAllCalendars(arg.startStr, arg.endStr);
+      }
+    },
+
+    longPressDelay: 500,
+    handleWindowResize: true,
+  });
+
+  const scrollToBottom = async () => {
+    if (inputMode.value !== "chat") return;
+    await nextTick();
+    setTimeout(() => {
+      if (chatContainerRef.value)
+        chatContainerRef.value.scrollTo({
+          top: chatContainerRef.value.scrollHeight,
+          behavior: "smooth",
+        });
+    }, 100);
+  };
+
+  onMounted(async () => {
+    initAuth();
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "dark",
+      securityLevel: "loose",
+    });
+    const code = route.query.code as string;
+    if (code) {
+      window.history.replaceState({}, document.title, "/app");
+      try {
+        const functions = getFunctions(getApp(), "asia-northeast1");
+        const linkFunc = httpsCallable(functions, "linkLineAccount");
+        await linkFunc({ code, redirectUri: window.location.origin + "/app" });
+        showSuccessToast.value = true;
+        setTimeout(() => (showSuccessToast.value = false), 5000);
+      } catch (e) {
+        alert("LINE連携失敗");
+      }
+    }
+    // 初期ロードはdatesSetが自動で発火するのでここでは呼ばない（重複防止）
+    // if (currentUser.value) fetchAllCalendars();
+  });
+
+  watch(inputMode, (newMode) => {
+    if (newMode === "chat") {
+      nextTick(() => {
+        if (chatContainerRef.value)
+          chatContainerRef.value.scrollTop =
+            chatContainerRef.value.scrollHeight;
+      });
+      scrollToBottom();
+    } else if (newMode === "calendar") {
+      setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+        // モード切替時は明示的にリロード（datesSetの発火を期待しても良いが、念のため）
+        fetchAllCalendars();
+      }, 100);
+    }
+  });
+
+  watch(chatLogs, scrollToBottom, { deep: true });
+  watch(isAiThinking, scrollToBottom);
+
+  const onOpenDetail = (memo: Memory) => {
+    editingMemory.value = memo;
+  };
+  const onModeChange = (newMode: "memo" | "chat" | "url" | "calendar") => {
+    inputMode.value = newMode;
+  };
+  const formatDateHeader = (dateStr: string) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    const days = ["日", "月", "火", "水", "木", "金", "土"];
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${days[d.getDay()]})`;
+  };
+  const formatTimeRange = (ev: any) => {
+    if (ev.allDay) return "終日";
+    const start = new Date(ev.start);
+    return start.toLocaleTimeString("ja-JP", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  return {
+    inputMode,
+    editingMemory,
+    chatContainerRef,
+    showSuccessToast,
+    calendarLoading,
+    calendarOptions,
+    isBottomSheetOpen,
+    selectedDateStr,
+    selectedDateEvents,
+    openBottomSheet,
+    closeBottomSheet,
+    onOpenDetail,
+    onModeChange,
+    formatDateHeader,
+    formatTimeRange,
+    deleteEvent,
+    relatedMemories,
+    isSearchingMemories,
+    todos,
+    dailyReports,
+    toggleTodo,
+    deleteTodo,
+    isReportModalOpen,
+    isCalendarConnected,
+    reconnectCalendar,
+  };
+}
+</file>
+
 <file path="src/components/AppHeader/AppHeader.vue">
 <script setup lang="ts">
 import { useAppHeader } from "./useAppHeader";
@@ -5032,9 +5147,14 @@ import { useMyBrain } from "@/composables/useMyBrain";
 import NotificationBell from "@/components/NotificationBell/NotificationBell.vue";
 
 const { logout } = useAppHeader();
-// startSubscription: 課金画面へ飛ばす関数
-const { currentUser, startLineAuth, unlinkLine, startSubscription } =
-  useMyBrain();
+// ★修正: manageSubscription を追加で取得して使えるようにする
+const {
+  currentUser,
+  startLineAuth,
+  unlinkLine,
+  startSubscription,
+  manageSubscription,
+} = useMyBrain();
 </script>
 
 <template>
@@ -5071,10 +5191,14 @@ const { currentUser, startLineAuth, unlinkLine, startSubscription } =
       </div>
 
       <div v-else-if="currentUser && currentUser.isPro" class="mr-2">
-        <span
-          class="text-[10px] font-bold text-amber-400 border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 rounded"
-          >PRO Plan</span
+        <button
+          @click="manageSubscription"
+          class="text-[10px] font-bold text-amber-400 border border-amber-400/30 bg-amber-400/10 px-2 py-1 rounded transition hover:bg-amber-400/20 cursor-pointer flex items-center gap-1"
+          title="プラン管理・解約"
         >
+          <span>PRO Plan</span>
+          <span class="text-[8px] opacity-60">⚙️</span>
+        </button>
       </div>
 
       <NotificationBell />
@@ -5139,181 +5263,6 @@ const { currentUser, startLineAuth, unlinkLine, startSubscription } =
   }
 }
 </style>
-</file>
-
-<file path="src/views/LoginView/LoginView.vue">
-<script setup lang="ts">
-import { ref } from "vue";
-import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore, doc, setDoc } from "firebase/firestore";
-import { useRouter } from "vue-router";
-
-// ルーター（画面遷移）と認証機能の準備
-const router = useRouter();
-const loading = ref(false); // ローディング中かどうか
-const auth = getAuth(); // Firebase Auth
-const db = getFirestore(); // Firestore Database
-
-/**
- * Googleログイン処理
- * ここでGoogleにログインし、「合鍵」をもらってきます。
- */
-const handleGoogleLogin = async () => {
-  loading.value = true;
-  try {
-    const provider = new GoogleAuthProvider();
-
-    // ★重要: カレンダーへの読み書き権限を要求します
-    provider.addScope("https://www.googleapis.com/auth/calendar.events");
-    provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
-
-    // ★修正ポイント: リフレッシュトークン（永続的な合鍵）を強制的に取得する設定
-    // これがないと1時間で期限切れになり、LINEで使えなくなります。
-    provider.setCustomParameters({
-      prompt: "consent", // 毎回承認画面を出して合鍵を確実に取得
-      access_type: "offline", // 裏側（Cloud Functions）で接続するために必須
-    });
-
-    // ポップアップでログイン画面を表示
-    const result = await signInWithPopup(auth, provider);
-    const user = result.user;
-
-    // トークン情報の取得
-    // ※ _tokenResponse は型定義に含まれていないため any でキャストして無理やり取得します
-    const tokenResponse = (result as any)._tokenResponse;
-    const refreshToken =
-      tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const accessToken = credential?.accessToken;
-
-    // ★トークンをDBに保存（システム用）
-    // ユーザーには見えない場所に保存します。
-    const tokenData: any = { updatedAt: new Date() };
-    if (accessToken) tokenData.accessToken = accessToken; // 今すぐ使える鍵
-    if (refreshToken) tokenData.refreshToken = refreshToken; // 期限が切れた時のための合鍵
-
-    // どちらか片方でもあれば保存
-    if (refreshToken || accessToken) {
-      try {
-        await setDoc(
-          doc(db, "users", user.uid, "system", "tokens"),
-          tokenData,
-          { merge: true }, // 既存のデータを消さないようにマージ保存
-        );
-        console.log("Tokens saved successfully.");
-      } catch (saveError: any) {
-        console.error("Token save error:", saveError);
-      }
-    } else {
-      console.warn("No tokens retrieved from Google.");
-    }
-
-    // ユーザー基本情報の保存
-    await setDoc(
-      doc(db, "users", user.uid),
-      {
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        lastLogin: new Date(),
-      },
-      { merge: true },
-    );
-
-    // ログイン成功したらアプリ画面へ
-    router.push("/app");
-  } catch (e: any) {
-    console.error(e);
-    alert("Googleログインに失敗しました: " + e.message);
-  } finally {
-    loading.value = false;
-  }
-};
-</script>
-
-<template>
-  <div
-    class="min-h-[100dvh] w-full bg-slate-900 flex items-center justify-center p-6 relative overflow-hidden"
-  >
-    <div
-      class="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[100px] pointer-events-none"
-    ></div>
-    <div
-      class="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none"
-    ></div>
-
-    <div
-      class="w-full max-w-sm bg-white/5 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/10 flex flex-col items-center"
-    >
-      <div class="mb-10 text-center">
-        <div class="text-6xl mb-4">🧠</div>
-        <h1 class="text-3xl font-black text-white mb-2 tracking-tight">
-          My Brain
-        </h1>
-        <p class="text-slate-400 text-xs font-bold tracking-widest uppercase">
-          ズボラ専用 AI秘書
-        </p>
-      </div>
-
-      <div class="w-full space-y-6">
-        <p class="text-slate-300 text-sm text-center leading-relaxed mb-4">
-          LINEで全てを完結させるために、<br />
-          <span class="text-indigo-400 font-bold">Google連携</span>
-          が必要です。<br />
-          <span class="text-xs text-slate-500"
-            >※一度連携すれば、あとはログイン不要です。</span
-          >
-        </p>
-
-        <button
-          @click="handleGoogleLogin"
-          :disabled="loading"
-          class="w-full bg-white text-slate-900 font-bold py-4 rounded-xl shadow-lg hover:bg-slate-50 transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 group"
-        >
-          <svg
-            class="w-5 h-5 group-hover:scale-110 transition-transform"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              fill="#4285F4"
-            />
-            <path
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              fill="#34A853"
-            />
-            <path
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-              fill="#FBBC05"
-            />
-            <path
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-              fill="#EA4335"
-            />
-          </svg>
-          Googleで連携する
-        </button>
-
-        <div class="mt-6 flex justify-center gap-4 text-[10px] text-slate-500">
-          <router-link
-            to="/privacy"
-            class="hover:text-slate-300 transition underline"
-          >
-            プライバシーポリシー
-          </router-link>
-          <span class="text-slate-700">|</span>
-          <router-link
-            to="/legal"
-            class="hover:text-slate-300 transition underline"
-          >
-            利用規約
-          </router-link>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
 </file>
 
 <file path="src/components/InputFooter/InputFooter.vue">
@@ -5545,12 +5494,559 @@ const testNotification = async () => {
 </template>
 </file>
 
+<file path="src/views/LoginView/LoginView.vue">
+<script setup lang="ts">
+import { ref } from "vue";
+import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { getFirestore, doc, setDoc } from "firebase/firestore";
+import { useRouter } from "vue-router";
+
+// ルーター（画面遷移）と認証機能の準備
+const router = useRouter();
+const loading = ref(false); // ローディング中かどうか
+const auth = getAuth(); // Firebase Auth
+const db = getFirestore(); // Firestore Database
+
+/**
+ * Googleログイン処理
+ * ユーザーにGoogleアカウントでのログインを求め、以下の処理を行います。
+ * 1. カレンダーへのアクセス権限を取得
+ * 2. 取得したトークン（合鍵）をFirestoreとlocalStorageに保存
+ * 3. ユーザー情報を保存してアプリ画面へ遷移
+ */
+const handleGoogleLogin = async () => {
+  loading.value = true;
+  try {
+    const provider = new GoogleAuthProvider();
+
+    // ★重要: カレンダーへの読み書き権限を要求します
+    provider.addScope("https://www.googleapis.com/auth/calendar.events");
+    provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
+
+    // ★修正ポイント: リフレッシュトークン（永続的な合鍵）を強制的に取得する設定
+    // これがないと1時間で期限切れになり、LINEで使えなくなります。
+    provider.setCustomParameters({
+      prompt: "consent", // 毎回承認画面を出して合鍵を確実に取得
+      access_type: "offline", // 裏側（Cloud Functions）で接続するために必須
+    });
+
+    // ポップアップでログイン画面を表示
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+
+    // トークン情報の取得
+    // ※ _tokenResponse は型定義に含まれていないため any でキャストして無理やり取得します
+    const tokenResponse = (result as any)._tokenResponse;
+    const refreshToken =
+      tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const accessToken = credential?.accessToken;
+    // ★追加: トークンの有効期限（秒）
+    const expiresIn = tokenResponse?.expiresIn || 3600;
+
+    // ★トークンを保存するためのデータ準備
+    const tokenData: any = { updatedAt: new Date() };
+
+    if (accessToken) {
+      tokenData.accessToken = accessToken; // 今すぐ使える鍵
+
+      // ★修正: ブラウザのlocalStorageにも即座に保存
+      // これにより、ログイン直後の画面遷移でもカレンダーが即座に表示されます
+      localStorage.setItem("google_calendar_token", accessToken);
+
+      // ★追加: 有効期限を計算して保存 (現在時刻 + 有効秒数 - マージン300秒)
+      const expiryTime =
+        new Date().getTime() + (Number(expiresIn) - 300) * 1000;
+      localStorage.setItem(
+        "google_calendar_token_expiry",
+        expiryTime.toString(),
+      );
+    }
+
+    if (refreshToken) {
+      tokenData.refreshToken = refreshToken; // 期限が切れた時のための合鍵
+    }
+
+    // Firestore（サーバー側）への保存処理
+    // 裏側のCloud Functionsがカレンダーを操作するために必要です
+    if (refreshToken || accessToken) {
+      try {
+        await setDoc(
+          doc(db, "users", user.uid, "system", "tokens"),
+          tokenData,
+          { merge: true }, // 既存のデータを消さないようにマージ保存
+        );
+        console.log("Tokens saved successfully.");
+      } catch (saveError: any) {
+        console.error("Token save error:", saveError);
+      }
+    } else {
+      console.warn("No tokens retrieved from Google.");
+    }
+
+    // ユーザー基本情報の保存
+    await setDoc(
+      doc(db, "users", user.uid),
+      {
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        lastLogin: new Date(),
+      },
+      { merge: true },
+    );
+
+    // ログイン成功したらアプリ画面へ
+    router.push("/app");
+  } catch (e: any) {
+    console.error(e);
+    alert("Googleログインに失敗しました: " + e.message);
+  } finally {
+    loading.value = false;
+  }
+};
+</script>
+
+<template>
+  <div
+    class="min-h-[100dvh] w-full bg-slate-900 flex items-center justify-center p-6 relative overflow-hidden"
+  >
+    <div
+      class="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[100px] pointer-events-none"
+    ></div>
+    <div
+      class="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none"
+    ></div>
+
+    <div
+      class="w-full max-w-sm bg-white/5 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/10 flex flex-col items-center"
+    >
+      <div class="mb-10 text-center">
+        <div class="text-6xl mb-4">🧠</div>
+        <h1 class="text-3xl font-black text-white mb-2 tracking-tight">
+          My Brain
+        </h1>
+        <p class="text-slate-400 text-xs font-bold tracking-widest uppercase">
+          ズボラ専用 AI秘書
+        </p>
+      </div>
+
+      <div class="w-full space-y-6">
+        <p class="text-slate-300 text-sm text-center leading-relaxed mb-4">
+          LINEで全てを完結させるために、<br />
+          <span class="text-indigo-400 font-bold">Google連携</span>
+          が必要です。<br />
+          <span class="text-xs text-slate-500"
+            >※一度連携すれば、あとはログイン不要です。</span
+          >
+        </p>
+
+        <button
+          @click="handleGoogleLogin"
+          :disabled="loading"
+          class="w-full bg-white text-slate-900 font-bold py-4 rounded-xl shadow-lg hover:bg-slate-50 transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 group"
+        >
+          <svg
+            class="w-5 h-5 group-hover:scale-110 transition-transform"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              fill="#4285F4"
+            />
+            <path
+              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              fill="#34A853"
+            />
+            <path
+              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+              fill="#FBBC05"
+            />
+            <path
+              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+              fill="#EA4335"
+            />
+          </svg>
+          Googleで連携する
+        </button>
+
+        <div class="mt-6 flex justify-center gap-4 text-[10px] text-slate-500">
+          <router-link
+            to="/privacy"
+            class="hover:text-slate-300 transition underline"
+          >
+            プライバシーポリシー
+          </router-link>
+          <span class="text-slate-700">|</span>
+          <router-link
+            to="/legal"
+            class="hover:text-slate-300 transition underline"
+          >
+            利用規約
+          </router-link>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
+<file path="src/views/HomeView/HomeView.vue">
+<script setup lang="ts">
+/**
+ * HomeView.vue
+ * アプリのメイン画面です。ヘッダー、メインコンテンツ、フッターを統括します。
+ * 入力モード（inputMode）によって表示内容（メモ、チャット、カレンダー）を切り替えます。
+ */
+import { ref } from "vue";
+import { useHomeView } from "./useHomeView";
+import { useMyBrain } from "@/composables/useMyBrain";
+
+// コンポーネント群のインポート
+import AppHeader from "@/components/AppHeader/AppHeader.vue";
+import TagFilter from "@/components/TagFilter/TagFilter.vue";
+import MemoList from "@/components/MemoList/MemoList.vue";
+import ChatList from "@/components/ChatList/ChatList.vue";
+import InputFooter from "@/components/InputFooter/InputFooter.vue";
+import MemoryModal from "@/components/MemoryModal/MemoryModal.vue";
+import FullCalendar from "@fullcalendar/vue3"; // カレンダーコンポーネント
+
+const {
+  inputMode,
+  editingMemory,
+  chatContainerRef,
+  showSuccessToast,
+  calendarLoading,
+  calendarOptions,
+  isBottomSheetOpen,
+  selectedDateStr,
+  selectedDateEvents,
+  closeBottomSheet,
+  onOpenDetail,
+  onModeChange,
+  formatTimeRange,
+  deleteEvent,
+  relatedMemories,
+  isSearchingMemories,
+  todos,
+  toggleTodo,
+  deleteTodo,
+  dailyReports,
+  isReportModalOpen,
+  isCalendarConnected,
+  reconnectCalendar,
+} = useHomeView();
+
+// ユーザー情報と手動タスク追加ロジック
+const { addManualTodo, currentUser, startLineAuth } = useMyBrain();
+const newTaskTitle = ref("");
+
+const submitTask = async () => {
+  if (!newTaskTitle.value.trim()) return;
+  await addManualTodo(newTaskTitle.value);
+  newTaskTitle.value = "";
+};
+
+const latestReport =
+  dailyReports.value.length > 0 ? dailyReports.value[0] : null;
+
+// バイブレーション機能（UX向上）
+const haptic = () => {
+  if (navigator.vibrate) navigator.vibrate(10);
+};
+</script>
+
+<template>
+  <div
+    class="h-[100dvh] flex flex-col bg-[#09090b] text-[#f8fafc] font-sans relative overflow-hidden"
+  >
+    <AppHeader />
+    <TagFilter />
+
+    <div
+      v-if="latestReport && !isReportModalOpen && inputMode === 'memo'"
+      class="px-4 pt-4 pb-2 animate-fade-in"
+    >
+      <button
+        @click="
+          isReportModalOpen = true;
+          haptic();
+        "
+        class="w-full bg-gradient-to-r from-slate-900 to-[#121214] border border-[#27272a] rounded-2xl p-4 flex items-center justify-between shadow-lg shadow-black/20 group active:scale-[0.98] transition-transform"
+      >
+        <div class="flex items-center gap-3">
+          <div
+            class="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400"
+          >
+            📰
+          </div>
+          <div class="text-left">
+            <div
+              class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5"
+            >
+              Daily Insight
+            </div>
+            <div class="text-sm font-bold text-slate-200">
+              {{ latestReport.date }} の振り返り
+            </div>
+          </div>
+        </div>
+        <span class="text-slate-600 text-lg">→</span>
+      </button>
+    </div>
+
+    <main
+      ref="chatContainerRef"
+      class="flex-1 overflow-y-auto scrollbar-hide transition-all"
+      :class="inputMode === 'calendar' ? 'p-0' : 'p-4 pb-40'"
+    >
+      <div v-if="inputMode === 'memo'" class="mb-6 animate-fade-in">
+        <div class="flex gap-2 mb-6">
+          <input
+            v-model="newTaskTitle"
+            @keydown.enter="submitTask"
+            type="text"
+            placeholder="タスクを追加..."
+            class="flex-1 bg-[#18181b] border border-[#27272a] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition placeholder-slate-600"
+          />
+          <button
+            @click="
+              submitTask();
+              haptic();
+            "
+            class="bg-indigo-600 text-white w-12 h-auto rounded-xl flex items-center justify-center hover:bg-indigo-500 active:scale-95 transition shadow-lg shadow-indigo-900/30"
+          >
+            ＋
+          </button>
+        </div>
+
+        <div v-if="todos.length > 0" class="space-y-2 mb-8">
+          <h3 class="text-xs font-bold text-slate-500 tracking-wider mb-2 px-1">
+            TASKS
+          </h3>
+          <div
+            v-for="todo in todos"
+            :key="todo.id"
+            class="flex items-center gap-3 bg-[#18181b] p-3.5 rounded-xl border border-[#27272a] transition active:scale-[0.99]"
+            :class="{ 'opacity-50 grayscale': todo.isCompleted }"
+          >
+            <button
+              @click="
+                toggleTodo(todo.id, todo.isCompleted);
+                haptic();
+              "
+              class="w-5 h-5 rounded-md border-2 flex items-center justify-center transition"
+              :class="
+                todo.isCompleted
+                  ? 'bg-indigo-500 border-indigo-500'
+                  : 'border-slate-600 hover:border-indigo-400'
+              "
+            >
+              <span
+                v-if="todo.isCompleted"
+                class="text-[10px] text-white font-bold"
+                >✓</span
+              >
+            </button>
+            <span
+              class="flex-1 text-sm font-medium truncate text-slate-300"
+              :class="{ 'line-through': todo.isCompleted }"
+            >
+              {{ todo.title }}
+            </span>
+            <button
+              @click="deleteTodo(todo.id)"
+              class="text-slate-600 hover:text-red-400 px-2"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <h3 class="text-xs font-bold text-slate-500 tracking-wider mb-2 px-1">
+          MEMORIES
+        </h3>
+        <MemoList @openDetail="onOpenDetail" />
+      </div>
+
+      <div v-if="inputMode === 'url'" class="animate-fade-in">
+        <div class="text-center py-10 text-slate-600 text-sm">
+          URLを貼り付けると、AIが要約してここに保存します。
+        </div>
+        <MemoList @openDetail="onOpenDetail" />
+      </div>
+
+      <ChatList v-if="inputMode === 'chat'" />
+
+      <div
+        v-if="inputMode === 'calendar'"
+        class="w-full h-full flex flex-col animate-fade-in relative bg-[#09090b]"
+      >
+        <div class="flex-1 p-2 md:p-6 overflow-hidden relative">
+          <div
+            class="absolute top-14 left-4 right-4 z-20 flex flex-col gap-2 pointer-events-none"
+          >
+            <div
+              v-if="!isCalendarConnected"
+              class="bg-red-500/10 border border-red-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between pointer-events-auto"
+            >
+              <span class="text-red-400 text-xs font-bold">未接続</span>
+              <button
+                @click="reconnectCalendar"
+                class="bg-red-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold"
+              >
+                再接続
+              </button>
+            </div>
+
+            <div
+              v-if="currentUser && !currentUser.isLineLinked"
+              class="bg-green-500/10 border border-green-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between animate-fade-in pointer-events-auto"
+            >
+              <div class="flex items-center gap-2">
+                <span class="text-xl">💬</span>
+                <span class="text-green-400 text-xs font-bold"
+                  >LINEで通知を受け取る</span
+                >
+              </div>
+              <button
+                @click="startLineAuth"
+                class="bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold hover:bg-green-400 transition"
+              >
+                連携する
+              </button>
+            </div>
+          </div>
+
+          <FullCalendar
+            :options="calendarOptions"
+            class="w-full h-full font-sans cyber-calendar"
+          />
+        </div>
+      </div>
+    </main>
+
+    <MemoryModal :memory="editingMemory" @close="editingMemory = null" />
+    <InputFooter :modelValue="inputMode" @update:modelValue="onModeChange" />
+
+    <div
+      v-if="isBottomSheetOpen"
+      class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity"
+      @click="closeBottomSheet"
+    ></div>
+    <div
+      class="fixed bottom-0 left-0 w-full z-50 bg-[#121214] rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] transform transition-transform duration-300 ease-out flex flex-col max-h-[85vh] border-t border-[#27272a]"
+      :class="isBottomSheetOpen ? 'translate-y-0' : 'translate-y-full'"
+    >
+      <div
+        class="w-full flex justify-center pt-3 pb-2"
+        @click="closeBottomSheet"
+      >
+        <div class="w-12 h-1.5 bg-slate-700/50 rounded-full"></div>
+      </div>
+
+      <div
+        class="px-6 pb-4 pt-2 border-b border-[#27272a] flex justify-between items-end"
+      >
+        <div>
+          <div class="text-xs font-bold text-indigo-400 mb-0.5 tracking-wider">
+            SELECTED DATE
+          </div>
+          <div class="text-2xl font-bold text-white tracking-tight">
+            {{ selectedDateStr }}
+          </div>
+        </div>
+        <button
+          @click="closeBottomSheet"
+          class="bg-[#27272a] p-2 rounded-full text-slate-400 hover:text-white"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-6 pb-12">
+        <div
+          v-if="selectedDateEvents.length === 0"
+          class="text-center py-12 text-slate-600"
+        >
+          <p class="text-sm font-bold">No Events</p>
+        </div>
+        <div v-else class="space-y-3">
+          <div
+            v-for="(ev, idx) in selectedDateEvents"
+            :key="idx"
+            class="bg-[#18181b] p-4 rounded-xl border border-[#27272a] flex gap-4 hover:border-indigo-500/30 transition"
+          >
+            <div
+              class="w-1 h-auto rounded-full"
+              :style="{ backgroundColor: ev.backgroundColor }"
+            ></div>
+            <div class="flex-1">
+              <div class="text-xs text-slate-400 font-mono mb-1">
+                {{ formatTimeRange(ev) }}
+              </div>
+              <div class="text-sm font-bold text-white">{{ ev.title }}</div>
+            </div>
+            <button
+              @click.stop="deleteEvent(ev.id)"
+              class="text-slate-600 hover:text-red-500"
+            >
+              🗑️
+            </button>
+          </div>
+        </div>
+
+        <div
+          v-if="relatedMemories.length > 0"
+          class="mt-8 pt-8 border-t border-[#27272a]"
+        >
+          <h4
+            class="text-xs font-bold text-slate-500 mb-4 tracking-wider flex items-center gap-2"
+          >
+            <span>🧠</span> 関連する記憶
+          </h4>
+          <div class="grid gap-2">
+            <div
+              v-for="m in relatedMemories"
+              :key="m.id"
+              @click="onOpenDetail(m)"
+              class="bg-[#18181b] border border-[#27272a] p-3 rounded-xl text-xs text-slate-300 hover:bg-[#27272a] cursor-pointer leading-relaxed"
+            >
+              {{ m.aiSummary || m.text.substring(0, 50) }}
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-else-if="selectedDateEvents.length > 0 && !isSearchingMemories"
+          class="mt-8 pt-8 border-t border-[#27272a] text-center"
+        >
+          <p class="text-xs text-slate-600">関連する記憶はありませんでした</p>
+        </div>
+
+        <div
+          v-else-if="isSearchingMemories"
+          class="mt-8 pt-8 border-t border-[#27272a] text-center"
+        >
+          <p class="text-xs text-slate-500 animate-pulse">
+            関連情報を検索中...
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
 <file path="functions/lib/index.js">
 "use strict";
 // ==============================================================================
-//  My Brain (AI秘書) バックエンドプログラム [完全解説版]
+//  My Brain (AI秘書) バックエンドプログラム
 //
-//  役割: LINEからのメッセージを受け取り、AIに考えさせ、カレンダーやメモ帳を操作する「脳みそ」の部分です。
+//  【役割】
+//  LINEからのメッセージを受け取り、Google Gemini (AI) に考えさせ、
+//  カレンダー登録やメモ保存、タスク管理を自動で行う「中枢神経」です。
 // ==============================================================================
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -5591,38 +6087,41 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.forceTriggerNotification = exports.scrapeUrl = exports.unlinkLineAccount = exports.linkLineAccount = exports.sendMorningBriefing = exports.checkRoutinePatterns = exports.checkUpcomingMeetings = exports.lineWebhook = void 0;
 // --- 1. 道具箱 (ライブラリのインポート) ---
-// 料理でいう「食材と調理器具の準備」です。必要な機能を部品として取り込みます。
-const https_1 = require("firebase-functions/v2/https"); // ウェブからの通信を受け取る道具
-const scheduler_1 = require("firebase-functions/v2/scheduler"); // 時間指定で動くタイマーの道具
-const v2_1 = require("firebase-functions/v2"); // 全体の設定をする道具
-const params_1 = require("firebase-functions/params"); // パスワードなどの秘密情報を扱う道具
-const admin = __importStar(require("firebase-admin")); // データベース(Firestore)を管理する権限
-const axios_1 = __importDefault(require("axios")); // 外部のサイト(Googleや天気予報)と通信する電話のような道具
-const line = __importStar(require("@line/bot-sdk")); // LINEにメッセージを送るための道具
+const https_1 = require("firebase-functions/v2/https"); // ウェブからの通信(HTTP)を受け取る機能
+const scheduler_1 = require("firebase-functions/v2/scheduler"); // 時間指定で定期実行する機能
+const v2_1 = require("firebase-functions/v2"); // 関数全体の設定を行う機能
+const params_1 = require("firebase-functions/params"); // パスワードなどの秘密情報を安全に扱う機能
+const admin = __importStar(require("firebase-admin")); // データベース(Firestore)を管理者権限で操作する機能
+const axios_1 = __importDefault(require("axios")); // 外部のサイト(Googleや天気予報)と通信する機能
+const line = __importStar(require("@line/bot-sdk")); // LINEにメッセージを送るための公式ツール
+// ★修正: GoogleGenerativeAI をインポート
+const generative_ai_1 = require("@google/generative-ai");
 // --- 2. アプリの起動準備 ---
-// サーバーが立ち上がった時に一度だけ実行されます。
+// サーバーが立ち上がった時に一度だけ実行され、管理者としてログインします。
 if (admin.apps.length === 0) {
-    admin.initializeApp(); // 管理者権限でアプリを起動！
+    admin.initializeApp();
 }
-const db = admin.firestore(); // データベース「Firestore」を変数dbに入れて使いやすくします
+const db = admin.firestore(); // データベース「Firestore」を操作する変数を準備
 // --- 3. 基本設定 ---
-// AIは考えるのに時間がかかるので、制限時間(タイムアウト)を長めの5分に設定します。
+// AIは考えるのに時間がかかるため、タイムアウトを長め(300秒)に設定します。
+// メモリも1GiB確保して、処理落ちを防ぎます。
 (0, v2_1.setGlobalOptions)({
-    region: "asia-northeast1", // サーバーの場所: 東京 (近いほうが速い)
-    memory: "1GiB", // コンピュータの頭の良さ (メモリ)
-    timeoutSeconds: 300, // タイムアウト: 300秒 (5分)
+    region: "asia-northeast1", // サーバーの場所: 東京 (近いほうが通信が速い)
+    memory: "1GiB", // コンピュータの作業領域の広さ
+    timeoutSeconds: 300, // 制限時間: 5分
 });
 // --- 4. 秘密の鍵 (シークレット) の読み込み ---
-// コードに直接書くと危険なので、Firebaseに登録した鍵をここで読み込みます。
-const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN"); // LINEボットを動かす鍵
-const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET"); // LINEの合言葉
-const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY"); // AI(Gemini)を動かす鍵
-const googleClientId = (0, params_1.defineSecret)("GOOGLE_CLIENT_ID"); // カレンダー連携用のID
-const googleClientSecret = (0, params_1.defineSecret)("GOOGLE_CLIENT_SECRET"); // カレンダー連携用のパスワード
-const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID"); // LINEログイン用のID
-const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET"); // LINEログイン用のパスワード
-const openWeatherApiKey = (0, params_1.defineSecret)("OPENWEATHER_API_KEY"); // 天気予報を見るための鍵
-// AIモデルのリスト (メインが使えない時に予備を使えるようにリスト化)
+// コードに直接書くと危険な「鍵」を、Firebaseの金庫から取り出します。
+const lineBotToken = (0, params_1.defineSecret)("LINE_BOT_TOKEN"); // LINEボットを動かすためのトークン
+const lineBotSecret = (0, params_1.defineSecret)("LINE_BOT_SECRET"); // LINE通信の改ざんを防ぐ秘密鍵
+const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY"); // AI(Gemini)を使うためのAPIキー
+const googleClientId = (0, params_1.defineSecret)("GOOGLE_CLIENT_ID"); // Googleカレンダー連携用のID
+const googleClientSecret = (0, params_1.defineSecret)("GOOGLE_CLIENT_SECRET"); // Googleカレンダー連携用のパスワード
+const lineLoginChannelId = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_ID"); // LINEログイン機能用のID
+const lineLoginChannelSecret = (0, params_1.defineSecret)("LINE_LOGIN_CHANNEL_SECRET"); // LINEログイン機能用のパスワード
+const openWeatherApiKey = (0, params_1.defineSecret)("OPENWEATHER_API_KEY"); // 天気予報を取得するためのAPIキー
+// AIモデルの候補リスト
+// メインのモデルが調子悪い時、予備のモデルを使えるようにリスト化しています。
 const CANDIDATE_MODELS = [
     "gemini-1.5-flash", // 速いモデル (メイン)
     "gemini-1.5-flash-001",
@@ -5632,20 +6131,26 @@ const CANDIDATE_MODELS = [
 // =========================================================
 // [デザイン室] LINEに送る「カード」の見た目を作る場所
 // =========================================================
-// アプリのテーマカラー (色を変えたい時はここをいじる)
+// アプリ全体のテーマカラー定義
+// ここを変えるだけで、LINE通知の雰囲気を一括変更できます。
 const COLORS = {
-    primary: "#6366f1", // 青紫 (メイン)
+    primary: "#6366f1", // 青紫 (メインカラー: 知的な印象)
     success: "#10b981", // 緑 (成功・完了)
     warning: "#f59e0b", // 黄 (注意・保存)
     danger: "#ef4444", // 赤 (警告・削除)
     info: "#0ea5e9", // 水色 (天気・情報)
-    dark: "#1e293b", // 濃いグレー (背景)
+    dark: "#1e293b", // 濃いグレー (背景色)
     text: "#334155", // 文字色
     textLight: "#94a3b8", // 薄い文字色
 };
 /**
- * ⚠️ [警告カード] を作る関数
- * ダブルブッキングや移動時間が足りない時に表示します。
+ * ⚠️ [警告カード] を作成する関数
+ * ダブルブッキングや移動時間が足りない時に、赤色の警告メッセージを表示します。
+ *
+ * @param title - 警告のタイトル（例：「ダブルブッキング警告」）
+ * @param message - 警告の詳細メッセージ
+ * @param suggestion - (任意) AIからの解決案（例：「時間をずらしますか？」）
+ * @returns LINE Flex Message のオブジェクト
  */
 function createAlertFlex(title, message, suggestion) {
     return {
@@ -5681,7 +6186,7 @@ function createAlertFlex(title, message, suggestion) {
                     wrap: true,
                 },
             ],
-            backgroundColor: COLORS.danger, // 背景は赤
+            backgroundColor: COLORS.danger, // 背景を赤にする
             paddingAll: "20px",
         },
         body: {
@@ -5696,7 +6201,7 @@ function createAlertFlex(title, message, suggestion) {
                     wrap: true,
                     lineSpacing: "4px",
                 },
-                // AIからの提案がある場合だけ、ここを表示する
+                // AIからの提案がある場合のみ、区切り線を入れて表示する
                 suggestion
                     ? {
                         type: "box",
@@ -5730,11 +6235,18 @@ function createAlertFlex(title, message, suggestion) {
     };
 }
 /**
- * 📅 [カレンダー登録カード] を作る関数
- * 予定の日時や場所、天気予報の警告をきれいに表示します。
+ * 📅 [カレンダー登録カード] を作成する関数
+ * 予定の日時や場所、天気予報の警告をきれいに整形して表示します。
+ *
+ * @param title - 予定のタイトル
+ * @param start - 開始日時 (ISO形式文字列)
+ * @param end - 終了日時 (ISO形式文字列)
+ * @param location - (任意) 場所
+ * @param weatherInfo - (任意) 天気予報のアラート文
+ * @returns LINE Flex Message のオブジェクト
  */
 function createCalendarFlex(title, start, end, location, weatherInfo) {
-    // コンピュータ用の日時文字を、人間が読みやすい形（例: 12/25）に変換
+    // ISO形式の日時を、人間が読みやすい形（例: 12/25 10:00）に変換する処理
     const startDate = new Date(start);
     const dateStr = `${startDate.getMonth() + 1}/${startDate.getDate()}`;
     const timeStr = `${startDate.getHours()}:${startDate.getMinutes().toString().padStart(2, "0")}`;
@@ -5763,7 +6275,7 @@ function createCalendarFlex(title, start, end, location, weatherInfo) {
                     offsetTop: "12px",
                 },
             ],
-            alignItems: "flex-end", // 修正済み: 下揃え
+            alignItems: "flex-end", // 日付と曜日を下揃えにする
         },
         {
             type: "text",
@@ -5786,7 +6298,7 @@ function createCalendarFlex(title, start, end, location, weatherInfo) {
                     color: COLORS.text,
                     wrap: true,
                 },
-                // 場所情報があるときだけ表示
+                // 場所情報があるときだけ表示するブロック
                 location
                     ? {
                         type: "box",
@@ -5808,7 +6320,7 @@ function createCalendarFlex(title, start, end, location, weatherInfo) {
             margin: "lg",
         },
     ];
-    // ★雨予報などの警告があれば、カードの下に追加
+    // 雨予報などの警告があれば、カードの下に追記する
     if (weatherInfo) {
         bodyContents.push({
             type: "box",
@@ -5843,6 +6355,7 @@ function createCalendarFlex(title, start, end, location, weatherInfo) {
             ],
         });
     }
+    // 最終的なカード構造を返す
     return {
         type: "bubble",
         size: "mega",
@@ -5895,8 +6408,8 @@ function createCalendarFlex(title, start, end, location, weatherInfo) {
     };
 }
 /**
- * ✅ [タスク追加カード] を作る関数
- * @param title タスク名
+ * ✅ [タスク追加カード] を作成する関数
+ * @param title - タスク名
  */
 function createTaskFlex(title) {
     return {
@@ -5946,9 +6459,9 @@ function createTaskFlex(title) {
     };
 }
 /**
- * 🧠 [メモ保存カード] を作る関数
- * @param text メモ本文
- * @param isUpdate 更新かどうか
+ * 🧠 [メモ保存カード] を作成する関数
+ * @param text - メモの本文
+ * @param isUpdate - 更新か新規か (trueなら更新)
  */
 function createMemoryFlex(text, isUpdate = false) {
     return {
@@ -5999,9 +6512,10 @@ function createMemoryFlex(text, isUpdate = false) {
     };
 }
 /**
- * 🔔 [直前カンペ通知カード] を作る関数
- * @param title 予定名
- * @param summary AIが作ったカンペ
+ * 🔔 [直前カンペ通知カード] を作成する関数
+ * 会議や予定の前に、AIが関連情報をまとめて通知する際に使います。
+ * @param title - 予定のタイトル
+ * @param summary - AIが生成した要約（カンペ）
  */
 function createCheatSheetFlex(title, summary) {
     return {
@@ -6070,8 +6584,9 @@ function createCheatSheetFlex(title, summary) {
         },
     };
 }
-/** * ✨ [ルーティン提案カード] を作る関数
- * 「毎週〇〇してますよね？」と提案するときに使います
+/**
+ * ✨ [ルーティン提案カード] を作成する関数
+ * 「毎週日曜日に〇〇してますよね？」とAIが気づいた時に使います。
  */
 function createRoutineSuggestionFlex(patterns) {
     return {
@@ -6141,7 +6656,11 @@ function createRoutineSuggestionFlex(patterns) {
 // =========================================================
 /**
  * JSONクリーナー
- * AIはたまに「```json ... ```」のような余計な文字をつけるので、それを取り除いてデータだけ抽出します。
+ * AIはたまに「```json ... ```」のような余計な文字をつけて返してくるので、
+ * データ部分だけを綺麗に取り出すための掃除機です。
+ *
+ * @param text - AIからの生の応答テキスト
+ * @returns パース済みのJSONオブジェクト、またはエラー時はチャットオブジェクト
  */
 function extractJson(text) {
     try {
@@ -6154,10 +6673,12 @@ function extractJson(text) {
                 .replace(/```json/g, "")
                 .replace(/```/g, "")
                 .trim();
+            // {} で囲まれた部分を探す
             const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
             if (jsonMatch)
                 return JSON.parse(jsonMatch[0]);
-            return { action: "CHAT", reply: text }; // どうしても無理なら普通のチャットとして扱う
+            // どうしても無理なら普通のチャットとして扱う
+            return { action: "CHAT", reply: text };
         }
         catch (e2) {
             return { action: "CHAT", reply: text };
@@ -6166,17 +6687,22 @@ function extractJson(text) {
 }
 /**
  * 日付フォーマッター
- * Googleカレンダーが理解できる厳密な日時形式に変換します。
+ * Googleカレンダーが理解できる厳密な日時形式(ISO 8601)に変換します。
+ * 例: "2024-01-01 10:00" -> "2024-01-01T10:00:00+09:00"
  */
 function formatIsoDate(dateStr) {
     if (!dateStr)
         return "";
+    // すでにタイムゾーン情報が含まれていれば何もしない
     if (dateStr.includes("+") || dateStr.endsWith("Z"))
         return dateStr;
+    // 秒がない場合 (YYYY-MM-DDTHH:mm) -> 秒とタイムゾーンを追加
     if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/))
         return `${dateStr}:00+09:00`;
+    // 秒がある場合 (YYYY-MM-DDTHH:mm:ss) -> タイムゾーンを追加
     if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/))
         return `${dateStr}+09:00`;
+    // 日付のみの場合 -> 00:00:00として扱う
     if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/))
         return `${dateStr}T00:00:00+09:00`;
     return dateStr;
@@ -6186,7 +6712,7 @@ function formatIsoDate(dateStr) {
 // =========================================================
 /**
  * AIモデルの確認
- * 使えるAIモデル（Gemini）のリストを取得します。
+ * Googleのサーバーに問い合わせて、現在使えるAIモデル（Gemini）のリストを取得します。
  */
 async function fetchAvailableModels(apiKey) {
     try {
@@ -6200,61 +6726,62 @@ async function fetchAvailableModels(apiKey) {
 }
 /**
  * ベストなAIを選ぶ
- * 「Flash」という速いモデルを優先し、だめなら「Pro」を使います。
+ * 「Flash」という速くて安いモデルを優先し、だめなら「Pro」という賢いモデルを使います。
+ * 冗長化（バックアップ）構成です。
  */
 async function resolveGeminiModel(apiKey) {
     const models = await fetchAvailableModels(apiKey);
+    // テキスト生成ができるモデルだけに絞る
     const genModels = models.filter((m) => { var _a; return (_a = m.supportedGenerationMethods) === null || _a === void 0 ? void 0 : _a.includes("generateContent"); });
+    // Flashモデルを探す
     let target = genModels.find((m) => m.name.includes("gemini-1.5-flash"));
+    // なければProモデルを探す
     if (!target)
         target = genModels.find((m) => m.name.includes("gemini-1.5-pro"));
+    // それもなければリストの最初を使う
     if (!target && genModels.length > 0)
         target = genModels[0];
     return target ? target.name.replace("models/", "") : "gemini-1.5-flash";
 }
 /**
- * AIに文章を作らせる（リトライ機能・安全装置解除付き）
- * AIが「それは答えられません」とエラーを吐くのを防ぐため、安全設定を緩めています。
+ * AIにコンテンツ生成を依頼する関数（リトライ機能付き）
+ * メインモデルが失敗したら、自動的にバックアップモデル（Gemini Pro）で再試行します。
  */
-async function generateContentWithRetry(apiKey, prompt) {
-    var _a, _b, _c, _d, _e, _f;
-    const bestModel = await resolveGeminiModel(apiKey);
-    const models = [...new Set([bestModel, ...CANDIDATE_MODELS])].filter(Boolean);
-    for (const m of models) {
+async function generateContentWithRetry(apiKey, promptParts, isJsonMode = false) {
+    try {
+        const modelName = await resolveGeminiModel(apiKey);
+        const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
+        const config = isJsonMode ? { responseMimeType: "application/json" } : {};
+        const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: config,
+        });
+        const result = await model.generateContent(promptParts);
+        return result.response.text();
+    }
+    catch (e) {
+        console.error("AI Generation Error (Primary):", e);
         try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`;
-            const res = await axios_1.default.post(url, {
-                contents: [{ parts: [{ text: prompt }] }],
-                // ★ここが重要: 安全フィルターを「ブロックなし」にしてエラーを防ぐ
-                safetySettings: [
-                    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                    {
-                        category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        threshold: "BLOCK_NONE",
-                    },
-                    {
-                        category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-                        threshold: "BLOCK_NONE",
-                    },
-                ],
-            }, { headers: { "Content-Type": "application/json" } });
-            const txt = (_f = (_e = (_d = (_c = (_b = (_a = res.data) === null || _a === void 0 ? void 0 : _a.candidates) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.parts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.text;
-            if (txt)
-                return txt;
+            console.log("Retrying with gemini-pro...");
+            const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+            const result = await model.generateContent(promptParts);
+            return result.response.text();
         }
-        catch (e) {
-            console.warn(`Model ${m} failed:`, e.message);
+        catch (retryError) {
+            throw new Error("AI processing failed completely: " + retryError.message);
         }
     }
-    throw new Error("All AI models failed.");
 }
-// AIを呼び出してJSONデータをもらう
+/**
+ * AIを呼び出してJSONデータをもらう
+ * 内部でJSONパース処理まで行います。
+ */
 async function callGeminiJson(apiKey, prompt) {
     if (!apiKey)
         return { action: "CHAT", reply: "⚠️ APIキー未設定" };
     try {
-        const text = await generateContentWithRetry(apiKey, prompt);
+        const text = await generateContentWithRetry(apiKey, [{ text: prompt }]);
         return extractJson(text);
     }
     catch (e) {
@@ -6265,12 +6792,15 @@ async function callGeminiJson(apiKey, prompt) {
         };
     }
 }
-// AIを呼び出してテキストをもらう
+/**
+ * AIを呼び出してプレーンテキストをもらう
+ * 余計な記号を取り除いて返します。
+ */
 async function callGeminiText(apiKey, prompt) {
     if (!apiKey)
         return "";
     try {
-        const text = await generateContentWithRetry(apiKey, prompt);
+        const text = await generateContentWithRetry(apiKey, [{ text: prompt }]);
         return text
             .replace(/^```.*\n/gm, "")
             .replace(/```/g, "")
@@ -6282,7 +6812,8 @@ async function callGeminiText(apiKey, prompt) {
 }
 /**
  * カレンダーの合言葉（トークン）を更新する
- * 古い鍵ではドアが開かないので、新しい鍵をもらいます。
+ * 1時間で切れる「通行証(Access Token)」が切れた時に、
+ * 永続的な「合鍵(Refresh Token)」を使って新しい通行証を発行します。
  */
 async function refreshAccessToken(refreshToken) {
     try {
@@ -6301,10 +6832,12 @@ async function refreshAccessToken(refreshToken) {
 }
 /**
  * 有効なカレンダーの鍵を取得する
- * データベースから鍵を取り出し、期限切れなら更新します。
+ * データベースから鍵を取り出し、期限切れなら自動的に更新します。
+ * これにより、ユーザーは再ログインの手間から解放されます。
  */
 async function getValidAccessToken(uid) {
     try {
+        // DBからユーザーのトークン情報を取得
         const docSnap = await db
             .collection("users")
             .doc(uid)
@@ -6315,7 +6848,7 @@ async function getValidAccessToken(uid) {
             return null;
         const data = docSnap.data();
         const accessToken = data === null || data === void 0 ? void 0 : data.accessToken;
-        const refreshToken = data === null || data === void 0 ? void 0 : data.refreshToken;
+        const refreshToken = data === null || data === void 0 ? void 0 : data.refreshToken; // これが重要！
         if (!accessToken)
             return null;
         // ★修正: まず今のトークンが使えるか軽くテストする
@@ -6325,16 +6858,17 @@ async function getValidAccessToken(uid) {
                 headers: { Authorization: `Bearer ${accessToken}` },
                 params: { maxResults: 1 }, // 最小限の通信量で済ませる
             });
-            // エラーが出なければトークンは有効
+            // エラーが出なければトークンは有効なのでそのまま返す
             return accessToken;
         }
         catch (e) {
             // 401 Unauthorized (期限切れ) ならリフレッシュを試みる
             if (e.response && e.response.status === 401 && refreshToken) {
                 console.log(`User ${uid}: Token expired. Refreshing...`);
+                // ここで合鍵を使って更新！
                 const newToken = await refreshAccessToken(refreshToken);
                 if (newToken) {
-                    // 新しいトークンをDBに保存
+                    // 新しいトークンをDBに保存して次回以降も使えるようにする
                     await db
                         .collection("users")
                         .doc(uid)
@@ -6380,6 +6914,7 @@ async function getCalendarEvents(uid) {
         const events = res.data.items || [];
         if (events.length === 0)
             return "直近の予定なし";
+        // 予定リストを見やすい文字列に変換
         return events
             .map((ev) => {
             const start = ev.start.dateTime
@@ -6408,12 +6943,13 @@ async function addCalendarEvent(uid, eventData) {
         const token = await getValidAccessToken(uid);
         if (!token)
             return false;
+        // 日付フォーマットの厳密化
         const finalStart = formatIsoDate(eventData.start);
         if (!finalStart)
             return false;
         const finalEnd = eventData.end
             ? formatIsoDate(eventData.end)
-            : new Date(new Date(finalStart).getTime() + 60 * 60000)
+            : new Date(new Date(finalStart).getTime() + 60 * 60000) // 終了時刻がなければ1時間後に設定
                 .toISOString()
                 .replace("Z", "+09:00");
         await axios_1.default.post("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
@@ -6438,10 +6974,11 @@ async function checkWeather(location, dateStr) {
     if (!apiKey)
         return null;
     try {
-        const query = location || "Tokyo";
+        const query = location || "Tokyo"; // 場所がなければ東京
         const url = `https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(query)}&appid=${apiKey}&units=metric&lang=ja`;
         const res = await axios_1.default.get(url);
         const forecasts = res.data.list || [];
+        // 予定時刻に一番近い予報を探す
         const targetTime = new Date(dateStr).getTime();
         const closest = forecasts.reduce((prev, curr) => {
             return Math.abs(curr.dt * 1000 - targetTime) <
@@ -6451,7 +6988,8 @@ async function checkWeather(location, dateStr) {
         });
         if (!closest)
             return null;
-        const isRainy = closest.pop >= 0.5 ||
+        // 雨判定ロジック
+        const isRainy = closest.pop >= 0.5 || // 降水確率50%以上
             (closest.weather[0] && closest.weather[0].main === "Rain");
         if (isRainy) {
             const description = ((_a = closest.weather[0]) === null || _a === void 0 ? void 0 : _a.description) || "雨";
@@ -6465,12 +7003,13 @@ async function checkWeather(location, dateStr) {
     }
 }
 // --- 削除ロジック (安全版) ---
-// カレンダー削除
+// カレンダー削除: タイトルで検索して削除
 async function deleteCalendarEvent(uid, query) {
     try {
         const token = await getValidAccessToken(uid);
         if (!token)
             return null;
+        // まず検索
         const searchRes = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
             headers: { Authorization: `Bearer ${token}` },
             params: { q: query, maxResults: 5, singleEvents: true },
@@ -6479,6 +7018,7 @@ async function deleteCalendarEvent(uid, query) {
         if (events.length === 0)
             return null;
         const target = events[0];
+        // 特定したIDを使って削除
         await axios_1.default.delete(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${target.id}`, { headers: { Authorization: `Bearer ${token}` } });
         return target.summary;
     }
@@ -6487,11 +7027,11 @@ async function deleteCalendarEvent(uid, query) {
         return null;
     }
 }
-// タスク削除
+// タスク削除: タイトルで検索して削除
 async function deleteTodoByTitle(uid, title) {
     try {
         const ref = db.collection("todos");
-        // 全件取得してからプログラム側で探す
+        // 全件取得してからプログラム側で探す（Firestoreの部分一致検索が弱いため）
         const snap = await ref
             .where("userId", "==", uid)
             .where("isCompleted", "==", false)
@@ -6512,7 +7052,7 @@ async function deleteTodoByTitle(uid, title) {
         return null;
     }
 }
-// メモ削除
+// メモ削除: 内容で検索して削除
 async function deleteMemoryByContent(uid, content) {
     try {
         const ref = db.collection("memories");
@@ -6552,7 +7092,7 @@ async function getRecentMemories(uid, query) {
         return "（メモ取得失敗）";
     }
 }
-// ★ 追加: 現在の未完了タスク一覧を取得
+// 現在の未完了タスク一覧を取得
 async function getOpenTodos(uid) {
     try {
         const snap = await db
@@ -6602,6 +7142,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
     ],
     cors: true,
 }, async (req, res) => {
+    // 1. 必要な鍵のチェック
     const token = lineBotToken.value();
     const apiKey = geminiApiKey.value();
     if (!token || !apiKey) {
@@ -6610,16 +7151,18 @@ exports.lineWebhook = (0, https_1.onRequest)({
     }
     const client = new line.Client({ channelAccessToken: token });
     const events = req.body.events;
+    // 2. 受け取ったイベントを順に処理
     // エラーで全体が止まらないように安全装置(try-catch)で囲む
     try {
         await Promise.all(events.map(async (event) => {
             var _a, _b, _c;
+            // テキストメッセージ以外は無視
             if (event.type !== "message" || event.message.type !== "text")
                 return;
             const eventId = event.webhookEventId;
             const lineUserId = event.source.userId;
             const message = event.message.text.trim();
-            // 同じメッセージを二回処理しないためのチェック
+            // 重複実行防止: 同じメッセージIDが既に処理済みならスキップ
             try {
                 await db.collection("processed_events").doc(eventId).create({
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -6629,7 +7172,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
             catch (_d) {
                 return;
             }
-            // ユーザーの特定
+            // 3. ユーザーの特定 (LINE IDからアプリのUser IDを探す)
             const usersSnap = await db
                 .collection("users")
                 .where("lineUserId", "==", lineUserId)
@@ -6644,6 +7187,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
             }
             const uid = usersSnap.docs[0].id;
             const userRef = db.collection("users").doc(uid);
+            // 4. 固定コマンドの処理 (モード切替)
             const commands = {
                 "【モード】タスク": "TASK",
                 "【モード】メモ": "MEMORY",
@@ -6659,7 +7203,8 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 });
                 return;
             }
-            // ★ 修正: getOpenTodos を追加してタスク一覧もAIに渡す
+            // 5. 状況(コンテキスト)の収集
+            // AIに判断材料を与えるために、色々なデータを集めます
             const [contextSnap, memoryContext, chatHistory, calendarEvents, openTodos,] = await Promise.all([
                 userRef.collection("system").doc("user_context").get(),
                 getRecentMemories(uid, message),
@@ -6668,11 +7213,19 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 getOpenTodos(uid),
             ]);
             const lastMemoryId = ((_a = contextSnap.data()) === null || _a === void 0 ? void 0 : _a.lastMemoryId) || null;
+            // 時間帯による感情設定
             const now = new Date();
             const nowStr = now.toLocaleString("ja-JP", {
                 timeZone: "Asia/Tokyo",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: false,
             });
-            const currentHour = now.getHours();
+            const currentHour = parseInt(nowStr.split(" ")[1].split(":")[0], 10);
             const dayOfWeek = now.getDay();
             let emotionPrompt = "";
             if (currentHour >= 2 && currentHour <= 5) {
@@ -6687,7 +7240,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 emotionPrompt =
                     "現在は早朝です。爽やかで元気なトーンで接してください。";
             }
-            // AIへの指令書 (プロンプト)
+            // 6. AIへの指令書 (プロンプト) 作成
             const routerPrompt = `
       あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr}
       
@@ -6736,13 +7289,14 @@ exports.lineWebhook = (0, https_1.onRequest)({
         "reply": "パートナーとしての人間味ある返信"
       }
       `;
+            // 7. AIに判断させる
             const aiDecision = await callGeminiJson(apiKey, routerPrompt);
             const action = aiDecision.action || "CHAT";
             const data = aiDecision.data || {};
             let replyText = aiDecision.reply || "処理しました。";
             let flexMessage = null;
             let newLastMemoryId = null;
-            // --- アクション分岐 ---
+            // 8. アクションの実行
             if (action === "CALENDAR_CONFLICT_ERROR") {
                 replyText = "おっと、その時間は予定が被っちゃってますね。";
                 flexMessage = createAlertFlex("ダブルブッキング警告", `その時間は「${data.content || "別の予定"}」が入っています。`, data.suggestion || "時間を変更してください。");
@@ -6770,6 +7324,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
                         }
                     }
                     flexMessage = createCalendarFlex(data.title, data.start, data.end, data.location, weatherWarning);
+                    // 通知履歴に保存
                     await db.collection("notifications").add({
                         userId: uid,
                         type: "reservation",
@@ -6786,6 +7341,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
             else if (action === "MEMORY_EDIT" &&
                 data.targetId &&
                 data.instruction) {
+                // メモ編集
                 try {
                     const docRef = db.collection("memories").doc(data.targetId);
                     const docSnap = await docRef.get();
@@ -6804,6 +7360,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
             }
             else if (action === "MEMORY_APPEND" &&
                 (data.targetId || lastMemoryId)) {
+                // メモ追記
                 try {
                     const finalId = data.targetId || lastMemoryId;
                     const docRef = db.collection("memories").doc(finalId);
@@ -6877,12 +7434,14 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     .collection("system")
                     .doc("user_context")
                     .set({ lastMemoryId: newLastMemoryId }, { merge: true });
+            // チャット履歴をDBに保存
             await db.collection("chat_logs").add({
                 userId: uid,
                 question: message,
                 answer: replyText,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
+            // LINEへ返信
             const messages = [
                 { type: "text", text: replyText.trim() },
             ];
@@ -6904,8 +7463,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
 // 6. 定期実行機能 (バックグラウンド処理)
 // =========================================================
 /**
- * [直前通知の蘇生] 15分ごとに予定をチェックして通知
- * 以前は「メモがないと通知しない」仕様でしたが、修正して「必ず通知する」ようにしました。
+ * [直前通知] 15分ごとに予定をチェックして通知
  */
 exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
     schedule: "every 15 minutes",
@@ -6951,7 +7509,6 @@ exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
                 const dump = mems.docs
                     .map((x) => `[${x.data().createdAt.toDate().toLocaleDateString()}] ${x.data().text}`)
                     .join("\n");
-                // ★修正: メモがなくても必ず応援メッセージを作るプロンプト
                 const txt = await callGeminiText(apiKey, `「${ev.summary}」がもうすぐ始まります。過去メモ:${dump}。もし関連情報があれば要約し、なければ「頑張ってください」等の応援メッセージを作成してください(100字以内)。`);
                 // 通知送信
                 await client.pushMessage(d.lineUserId, {
@@ -6967,13 +7524,13 @@ exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
         }
     }
 });
-// --- その他の定期実行 ---
-// 毎週日曜のルーティン提案
+// [ルーティン提案] 毎週日曜夜に実行
 exports.checkRoutinePatterns = (0, scheduler_1.onSchedule)({
     schedule: "0 20 * * 0",
     timeZone: "Asia/Tokyo",
     secrets: [lineBotToken, geminiApiKey],
 }, async (event) => {
+    // ... (省略可能ですが一応全部出力します) ...
     const apiKey = geminiApiKey.value();
     const client = new line.Client({
         channelAccessToken: lineBotToken.value(),
@@ -7017,7 +7574,7 @@ exports.checkRoutinePatterns = (0, scheduler_1.onSchedule)({
         }
     }
 });
-// 毎朝のブリーフィング
+// [毎朝のブリーフィング] 毎日7時に実行
 exports.sendMorningBriefing = (0, scheduler_1.onSchedule)({
     schedule: "0 7 * * *",
     timeZone: "Asia/Tokyo",
@@ -7057,6 +7614,7 @@ exports.sendMorningBriefing = (0, scheduler_1.onSchedule)({
     }
 });
 // --- 連携用API (変更なし) ---
+// LINE連携時の処理
 exports.linkLineAccount = (0, https_1.onCall)({
     secrets: [
         lineLoginChannelId,
@@ -7089,6 +7647,7 @@ exports.linkLineAccount = (0, https_1.onCall)({
         throw new https_1.HttpsError("internal", e.message);
     }
 });
+// LINE連携解除
 exports.unlinkLineAccount = (0, https_1.onCall)({ cors: true }, async (req) => {
     if (!req.auth)
         throw new https_1.HttpsError("unauthenticated", "Login required");
@@ -7098,7 +7657,9 @@ exports.unlinkLineAccount = (0, https_1.onCall)({ cors: true }, async (req) => {
         .set({ isLineLinked: false, lineUserId: admin.firestore.FieldValue.delete() }, { merge: true });
     return { success: true };
 });
+// URL読み取り(予備)
 exports.scrapeUrl = (0, https_1.onCall)(async () => ({ success: true }));
+// 通知テスト用API
 exports.forceTriggerNotification = (0, https_1.onCall)({
     secrets: [lineBotToken, geminiApiKey, googleClientId, googleClientSecret],
     cors: true,
@@ -7171,6 +7732,8 @@ import { defineSecret } from "firebase-functions/params"; // パスワードな�
 import * as admin from "firebase-admin"; // データベース(Firestore)を管理者権限で操作する機能
 import axios from "axios"; // 外部のサイト(Googleや天気予報)と通信する機能
 import * as line from "@line/bot-sdk"; // LINEにメッセージを送るための公式ツール
+// ★修正: GoogleGenerativeAI をインポート
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // --- 2. アプリの起動準備 ---
 // サーバーが立ち上がった時に一度だけ実行され、管理者としてログインします。
@@ -7853,50 +8416,36 @@ async function resolveGeminiModel(apiKey: string): Promise<string> {
 }
 
 /**
- * AIに文章を作らせる（リトライ機能・安全装置解除付き）
- * AIが「それは答えられません」とエラーを吐くのを防ぐため、安全設定を緩めています。
- * また、エラーが出たら別のモデルで再挑戦する根性も持っています。
+ * AIにコンテンツ生成を依頼する関数（リトライ機能付き）
+ * メインモデルが失敗したら、自動的にバックアップモデル（Gemini Pro）で再試行します。
  */
 async function generateContentWithRetry(
   apiKey: string,
-  prompt: string,
-): Promise<string> {
-  const bestModel = await resolveGeminiModel(apiKey);
-  // 重複を除いて試行順序リストを作成
-  const models = [...new Set([bestModel, ...CANDIDATE_MODELS])].filter(Boolean);
-
-  for (const m of models) {
+  promptParts: any[],
+  isJsonMode = false,
+) {
+  try {
+    const modelName = await resolveGeminiModel(apiKey);
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const config = isJsonMode ? { responseMimeType: "application/json" } : {};
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: config,
+    });
+    const result = await model.generateContent(promptParts);
+    return result.response.text();
+  } catch (e: any) {
+    console.error("AI Generation Error (Primary):", e);
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`;
-      const res = await axios.post(
-        url,
-        {
-          contents: [{ parts: [{ text: prompt }] }],
-          // ★ここが重要: 安全フィルターを「ブロックなし」にしてエラーを防ぐ
-          // これがないと「タスクを殺して(消して)」等の表現で止まってしまう
-          safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-            {
-              category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-              threshold: "BLOCK_NONE",
-            },
-            {
-              category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-              threshold: "BLOCK_NONE",
-            },
-          ],
-        },
-        { headers: { "Content-Type": "application/json" } },
-      );
-      // 結果を取り出す
-      const txt = res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (txt) return txt;
-    } catch (e: any) {
-      console.warn(`Model ${m} failed:`, e.message);
+      console.log("Retrying with gemini-pro...");
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      const result = await model.generateContent(promptParts);
+      return result.response.text();
+    } catch (retryError: any) {
+      throw new Error("AI processing failed completely: " + retryError.message);
     }
   }
-  throw new Error("All AI models failed.");
 }
 
 /**
@@ -7906,7 +8455,7 @@ async function generateContentWithRetry(
 async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
   if (!apiKey) return { action: "CHAT", reply: "⚠️ APIキー未設定" };
   try {
-    const text = await generateContentWithRetry(apiKey, prompt);
+    const text = await generateContentWithRetry(apiKey, [{ text: prompt }]);
     return extractJson(text);
   } catch (e: any) {
     // エラーメッセージを人間に優しくする
@@ -7924,7 +8473,7 @@ async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
 async function callGeminiText(apiKey: string, prompt: string): Promise<string> {
   if (!apiKey) return "";
   try {
-    const text = await generateContentWithRetry(apiKey, prompt);
+    const text = await generateContentWithRetry(apiKey, [{ text: prompt }]);
     return text
       .replace(/^```.*\n/gm, "")
       .replace(/```/g, "")
@@ -8169,8 +8718,9 @@ async function deleteCalendarEvent(
     );
     const events = searchRes.data.items || [];
     if (events.length === 0) return null;
+
     const target = events[0];
-    // 見つかったら削除
+    // 特定したIDを使って削除
     await axios.delete(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events/${target.id}`,
       { headers: { Authorization: `Bearer ${token}` } },
@@ -8397,8 +8947,15 @@ export const lineWebhook = onRequest(
           const now = new Date();
           const nowStr = now.toLocaleString("ja-JP", {
             timeZone: "Asia/Tokyo",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
           });
-          const currentHour = now.getHours();
+          const currentHour = parseInt(nowStr.split(" ")[1].split(":")[0], 10);
           const dayOfWeek = now.getDay();
 
           let emotionPrompt = "";
@@ -8972,346 +9529,6 @@ export const forceTriggerNotification = onCall(
 );
 </file>
 
-<file path="src/views/HomeView/HomeView.vue">
-<script setup lang="ts">
-import { ref } from "vue";
-import { useHomeView } from "./useHomeView";
-import { useMyBrain } from "@/composables/useMyBrain";
-
-// コンポーネント
-import AppHeader from "@/components/AppHeader/AppHeader.vue";
-import TagFilter from "@/components/TagFilter/TagFilter.vue";
-import MemoList from "@/components/MemoList/MemoList.vue";
-import ChatList from "@/components/ChatList/ChatList.vue";
-import InputFooter from "@/components/InputFooter/InputFooter.vue";
-import MemoryModal from "@/components/MemoryModal/MemoryModal.vue";
-import FullCalendar from "@fullcalendar/vue3";
-
-const {
-  inputMode,
-  editingMemory,
-  chatContainerRef,
-  showSuccessToast,
-  calendarLoading,
-  calendarOptions,
-  isBottomSheetOpen,
-  selectedDateStr,
-  selectedDateEvents,
-  closeBottomSheet,
-  onOpenDetail,
-  onModeChange,
-  formatTimeRange,
-  deleteEvent,
-  relatedMemories,
-  isSearchingMemories,
-  todos,
-  toggleTodo,
-  deleteTodo,
-  dailyReports,
-  isReportModalOpen,
-  isCalendarConnected,
-  reconnectCalendar,
-} = useHomeView();
-
-// ★修正: currentUser, startLineAuth を追加で取得
-const { addManualTodo, currentUser, startLineAuth } = useMyBrain();
-const newTaskTitle = ref("");
-
-const submitTask = async () => {
-  if (!newTaskTitle.value.trim()) return;
-  await addManualTodo(newTaskTitle.value);
-  newTaskTitle.value = "";
-};
-
-const latestReport =
-  dailyReports.value.length > 0 ? dailyReports.value[0] : null;
-
-// バイブレーション機能
-const haptic = () => {
-  if (navigator.vibrate) navigator.vibrate(10);
-};
-</script>
-
-<template>
-  <div
-    class="h-[100dvh] flex flex-col bg-[#09090b] text-[#f8fafc] font-sans relative overflow-hidden"
-  >
-    <AppHeader />
-    <TagFilter />
-
-    <div
-      v-if="latestReport && !isReportModalOpen && inputMode === 'memo'"
-      class="px-4 pt-4 pb-2 animate-fade-in"
-    >
-      <button
-        @click="
-          isReportModalOpen = true;
-          haptic();
-        "
-        class="w-full bg-gradient-to-r from-slate-900 to-[#121214] border border-[#27272a] rounded-2xl p-4 flex items-center justify-between shadow-lg shadow-black/20 group active:scale-[0.98] transition-transform"
-      >
-        <div class="flex items-center gap-3">
-          <div
-            class="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400"
-          >
-            📰
-          </div>
-          <div class="text-left">
-            <div
-              class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5"
-            >
-              Daily Insight
-            </div>
-            <div class="text-sm font-bold text-slate-200">
-              {{ latestReport.date }} の振り返り
-            </div>
-          </div>
-        </div>
-        <span class="text-slate-600 text-lg">→</span>
-      </button>
-    </div>
-
-    <main
-      ref="chatContainerRef"
-      class="flex-1 overflow-y-auto scrollbar-hide transition-all"
-      :class="inputMode === 'calendar' ? 'p-0' : 'p-4 pb-40'"
-    >
-      <div v-if="inputMode === 'memo'" class="mb-6 animate-fade-in">
-        <div class="flex gap-2 mb-6">
-          <input
-            v-model="newTaskTitle"
-            @keydown.enter="submitTask"
-            type="text"
-            placeholder="タスクを追加..."
-            class="flex-1 bg-[#18181b] border border-[#27272a] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition placeholder-slate-600"
-          />
-          <button
-            @click="
-              submitTask();
-              haptic();
-            "
-            class="bg-indigo-600 text-white w-12 h-auto rounded-xl flex items-center justify-center hover:bg-indigo-500 active:scale-95 transition shadow-lg shadow-indigo-900/30"
-          >
-            ＋
-          </button>
-        </div>
-
-        <div v-if="todos.length > 0" class="space-y-2 mb-8">
-          <h3 class="text-xs font-bold text-slate-500 tracking-wider mb-2 px-1">
-            TASKS
-          </h3>
-          <div
-            v-for="todo in todos"
-            :key="todo.id"
-            class="flex items-center gap-3 bg-[#18181b] p-3.5 rounded-xl border border-[#27272a] transition active:scale-[0.99]"
-            :class="{ 'opacity-50 grayscale': todo.isCompleted }"
-          >
-            <button
-              @click="
-                toggleTodo(todo.id, todo.isCompleted);
-                haptic();
-              "
-              class="w-5 h-5 rounded-md border-2 flex items-center justify-center transition"
-              :class="
-                todo.isCompleted
-                  ? 'bg-indigo-500 border-indigo-500'
-                  : 'border-slate-600 hover:border-indigo-400'
-              "
-            >
-              <span
-                v-if="todo.isCompleted"
-                class="text-[10px] text-white font-bold"
-                >✓</span
-              >
-            </button>
-            <span
-              class="flex-1 text-sm font-medium truncate text-slate-300"
-              :class="{ 'line-through': todo.isCompleted }"
-            >
-              {{ todo.title }}
-            </span>
-            <button
-              @click="deleteTodo(todo.id)"
-              class="text-slate-600 hover:text-red-400 px-2"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-
-        <h3 class="text-xs font-bold text-slate-500 tracking-wider mb-2 px-1">
-          MEMORIES
-        </h3>
-        <MemoList @openDetail="onOpenDetail" />
-      </div>
-
-      <div v-if="inputMode === 'url'" class="animate-fade-in">
-        <div class="text-center py-10 text-slate-600 text-sm">
-          URLを貼り付けると、AIが要約してここに保存します。
-        </div>
-        <MemoList @openDetail="onOpenDetail" />
-      </div>
-
-      <ChatList v-if="inputMode === 'chat'" />
-
-      <div
-        v-if="inputMode === 'calendar'"
-        class="w-full h-full flex flex-col animate-fade-in relative bg-[#09090b]"
-      >
-        <div class="flex-1 p-0 md:p-6 overflow-hidden relative">
-          <div class="absolute top-4 left-4 right-4 z-20 flex flex-col gap-2">
-            <div
-              v-if="!isCalendarConnected"
-              class="bg-red-500/10 border border-red-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between"
-            >
-              <span class="text-red-400 text-xs font-bold">未接続</span>
-              <button
-                @click="reconnectCalendar"
-                class="bg-red-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold"
-              >
-                再接続
-              </button>
-            </div>
-
-            <div
-              v-if="currentUser && !currentUser.isLineLinked"
-              class="bg-green-500/10 border border-green-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between animate-fade-in"
-            >
-              <div class="flex items-center gap-2">
-                <span class="text-xl">💬</span>
-                <span class="text-green-400 text-xs font-bold"
-                  >LINEで通知を受け取る</span
-                >
-              </div>
-              <button
-                @click="startLineAuth"
-                class="bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold hover:bg-green-400 transition"
-              >
-                連携する
-              </button>
-            </div>
-          </div>
-
-          <FullCalendar
-            :options="calendarOptions"
-            class="w-full h-full font-sans cyber-calendar"
-          />
-        </div>
-      </div>
-    </main>
-
-    <MemoryModal :memory="editingMemory" @close="editingMemory = null" />
-    <InputFooter :modelValue="inputMode" @update:modelValue="onModeChange" />
-
-    <div
-      v-if="isBottomSheetOpen"
-      class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity"
-      @click="closeBottomSheet"
-    ></div>
-    <div
-      class="fixed bottom-0 left-0 w-full z-50 bg-[#121214] rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] transform transition-transform duration-300 ease-out flex flex-col max-h-[85vh] border-t border-[#27272a]"
-      :class="isBottomSheetOpen ? 'translate-y-0' : 'translate-y-full'"
-    >
-      <div
-        class="w-full flex justify-center pt-3 pb-2"
-        @click="closeBottomSheet"
-      >
-        <div class="w-12 h-1.5 bg-slate-700/50 rounded-full"></div>
-      </div>
-
-      <div
-        class="px-6 pb-4 pt-2 border-b border-[#27272a] flex justify-between items-end"
-      >
-        <div>
-          <div class="text-xs font-bold text-indigo-400 mb-0.5 tracking-wider">
-            SELECTED DATE
-          </div>
-          <div class="text-2xl font-bold text-white tracking-tight">
-            {{ selectedDateStr }}
-          </div>
-        </div>
-        <button
-          @click="closeBottomSheet"
-          class="bg-[#27272a] p-2 rounded-full text-slate-400 hover:text-white"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div class="flex-1 overflow-y-auto p-6 pb-12">
-        <div
-          v-if="selectedDateEvents.length === 0"
-          class="text-center py-12 text-slate-600"
-        >
-          <p class="text-sm font-bold">No Events</p>
-        </div>
-        <div v-else class="space-y-3">
-          <div
-            v-for="(ev, idx) in selectedDateEvents"
-            :key="idx"
-            class="bg-[#18181b] p-4 rounded-xl border border-[#27272a] flex gap-4 hover:border-indigo-500/30 transition"
-          >
-            <div
-              class="w-1 h-auto rounded-full"
-              :style="{ backgroundColor: ev.backgroundColor }"
-            ></div>
-            <div class="flex-1">
-              <div class="text-xs text-slate-400 font-mono mb-1">
-                {{ formatTimeRange(ev) }}
-              </div>
-              <div class="text-sm font-bold text-white">{{ ev.title }}</div>
-            </div>
-            <button
-              @click.stop="deleteEvent(ev.id)"
-              class="text-slate-600 hover:text-red-500"
-            >
-              🗑️
-            </button>
-          </div>
-        </div>
-
-        <div
-          v-if="relatedMemories.length > 0"
-          class="mt-8 pt-8 border-t border-[#27272a]"
-        >
-          <h4
-            class="text-xs font-bold text-slate-500 mb-4 tracking-wider flex items-center gap-2"
-          >
-            <span>🧠</span> 関連する記憶
-          </h4>
-          <div class="grid gap-2">
-            <div
-              v-for="m in relatedMemories"
-              :key="m.id"
-              @click="onOpenDetail(m)"
-              class="bg-[#18181b] border border-[#27272a] p-3 rounded-xl text-xs text-slate-300 hover:bg-[#27272a] cursor-pointer leading-relaxed"
-            >
-              {{ m.aiSummary || m.text.substring(0, 50) }}
-            </div>
-          </div>
-        </div>
-
-        <div
-          v-else-if="selectedDateEvents.length > 0 && !isSearchingMemories"
-          class="mt-8 pt-8 border-t border-[#27272a] text-center"
-        >
-          <p class="text-xs text-slate-600">関連する記憶はありませんでした</p>
-        </div>
-
-        <div
-          v-else-if="isSearchingMemories"
-          class="mt-8 pt-8 border-t border-[#27272a] text-center"
-        >
-          <p class="text-xs text-slate-500 animate-pulse">
-            関連情報を検索中...
-          </p>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-</file>
-
 <file path="src/composables/useMyBrain.ts">
 import { ref, computed } from "vue";
 import { db, auth } from "@/firebase";
@@ -9351,10 +9568,22 @@ import axios from "axios";
 import type { Memory, ChatLog, User, Todo, DailyReport } from "@/types";
 
 // --- 定数定義 ---
-// Stripeの決済リンク（課金ページ）
-const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/6oU28r4Hi71dglzd1z6AM00";
+// Stripeの決済リンク（課金ページ） - 環境変数から取得
+const STRIPE_PAYMENT_LINK = import.meta.env.VITE_STRIPE_PAYMENT_LINK || "";
+
+// Stripeのカスタマーポータル（解約・カード変更画面）のURL - 環境変数から取得
+const STRIPE_PORTAL_LINK = import.meta.env.VITE_STRIPE_PORTAL_LINK || "";
+
 // 管理者権限を持つメールアドレスのリスト
 const ADMIN_EMAILS = ["gongedonghuam@gmail.com"];
+
+// AIモデルの候補リスト
+const CANDIDATE_MODELS = [
+  "gemini-1.5-flash", // 速いモデル (メイン)
+  "gemini-1.5-flash-001",
+  "gemini-1.5-pro", // 賢いモデル (サブ)
+  "gemini-pro",
+];
 
 // --- リアクティブな状態変数 (State) ---
 // ref() で囲むことで、中身が変わった時に画面も自動で更新されるようになります。
@@ -9461,28 +9690,35 @@ function formatIsoDate(dateStr: string): string {
 
 /**
  * Google APIを呼び出すためのラッパー関数（共通処理）
- * トークン切れ（401エラー）が発生した場合、自動的にログアウト処理へ誘導します。
+ * トークン切れチェックとエラーハンドリングを行います。
  * @param callback 実行したいAPI処理
  */
 const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
   let token = localStorage.getItem("google_calendar_token");
-  if (!token) {
+  const expiry = localStorage.getItem("google_calendar_token_expiry");
+
+  // ★トークンが無い、または有効期限切れの場合
+  if (!token || (expiry && new Date().getTime() > Number(expiry))) {
+    console.warn("Access token expired or missing. Triggering reconnection.");
     isCalendarConnected.value = false;
-    return null;
+    localStorage.removeItem("google_calendar_token");
+    localStorage.removeItem("google_calendar_token_expiry");
+    return null; // 無理にAPIを呼ばずに終了
   }
+
   try {
     const res = await callback(token);
     isCalendarConnected.value = true;
     return res;
   } catch (e: any) {
-    // ★重要: 401エラー（トークン切れ）なら強制ログアウトしてログイン画面へ
+    // 401エラー（トークン切れ）なら強制ログアウトしてログイン画面へ
     if (e.response && e.response.status === 401) {
-      console.warn("Calendar token expired. Redirecting to login...");
+      console.warn("Calendar token expired (401). Redirecting to login...");
       localStorage.removeItem("google_calendar_token");
+      localStorage.removeItem("google_calendar_token_expiry");
       isCalendarConnected.value = false;
 
       await signOut(auth);
-      // リロードして強制的にログイン画面へ飛ばす
       window.location.href = "/login";
       return null;
     }
@@ -9506,11 +9742,22 @@ const reconnectCalendar = async () => {
     });
 
     const result = await signInWithPopup(auth, provider);
+    const tokenResponse = (result as any)._tokenResponse;
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const token = credential?.accessToken;
+    const expiresIn = tokenResponse?.expiresIn || 3600;
 
     if (token) {
       localStorage.setItem("google_calendar_token", token);
+
+      // 有効期限も更新
+      const expiryTime =
+        new Date().getTime() + (Number(expiresIn) - 300) * 1000;
+      localStorage.setItem(
+        "google_calendar_token_expiry",
+        expiryTime.toString(),
+      );
+
       isCalendarConnected.value = true;
       alert("カレンダーを再接続しました！");
       window.location.reload();
@@ -9958,7 +10205,31 @@ export function useMyBrain() {
   const startSubscription = async () => {
     if (!currentUser.value) return;
     if (confirm("PROプラン（月額980円）の決済画面へ移動しますか？")) {
+      if (!STRIPE_PAYMENT_LINK) {
+        alert("管理者に連絡してください (決済リンク未設定)");
+        return;
+      }
       window.location.href = STRIPE_PAYMENT_LINK;
+    }
+  };
+
+  /**
+   * ★追加: サブスクリプション管理（解約）画面へ遷移する関数
+   */
+  const manageSubscription = async () => {
+    if (!currentUser.value) return;
+
+    const isConfirmed = confirm(
+      "【PROプランの管理】\n\n解約やクレジットカードの変更は、Stripeの管理画面で行います。\n管理画面へ移動しますか？",
+    );
+
+    if (isConfirmed) {
+      // URLが未設定の場合は警告を出す
+      if (!STRIPE_PORTAL_LINK) {
+        alert("管理者に連絡してください。\n(StripeポータルURLが未設定です)");
+        return;
+      }
+      window.location.href = STRIPE_PORTAL_LINK;
     }
   };
 
@@ -10101,6 +10372,7 @@ export function useMyBrain() {
   const logout = async () => {
     await signOut(auth);
     localStorage.removeItem("google_calendar_token");
+    localStorage.removeItem("google_calendar_token_expiry");
     localStorage.removeItem("last_memory_id");
     window.location.reload();
   };
@@ -10628,6 +10900,7 @@ export function useMyBrain() {
     askBrain,
     selectTag,
     startSubscription,
+    manageSubscription,
     updateMemory,
     deleteMemory,
     deleteChatLog,
@@ -10645,68 +10918,68 @@ export function useMyBrain() {
 </file>
 
 <file path=".firebase/hosting.ZGlzdA.cache">
-registerSW.js,1770295725164,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-sw.js,1770295725862,2cd0ff2c01900ffa21d48c976151c3f85d2451e8e1ceee44d9daf49dbc93cb09
-manifest.webmanifest,1770295725164,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-workbox-8c29f6e4.js,1770295725863,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-index.html,1770295725164,9585d553bd9749c76cf3c2f92fd71f1089607ca335f15df4d50d8ed42e54749f
-firebase-messaging-sw.js,1770295724708,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-assets/stateDiagram-v2-4FDKWEC3-DkYshMCD.js,1770295725163,9ad90686d42b1d21d68c65a87db5873e2830890fe678d9d28675d097eec14033
-assets/stateDiagram-FKZM4ZOC-BS792KDL.js,1770295725163,dfd2fafb46646a932bef755a5a42a5413c141dce3f20898a005925b85214bbd1
-lp.html,1770295724712,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/timeline-definition-IT6M3QCI-Car3-gZ_.js,1770295725163,4d4fea7ec5bc0c5249ec9189e72d210e033f9b58a11e8758f1d5efe60aab1fb1
-assets/xychartDiagram-PRI3JC2R-Ch4ZEFLU.js,1770295725163,c498139e15fe9656f19b5b7965a4befb920554469d34d0c922d8677462e4d8ae
-assets/sankeyDiagram-TZEHDZUN-1qifOw1d.js,1770295725163,47dd188c7e26c4ace461d83671bec97cb84e29f88faa2b1f27095d0345443a37
-assets/pieDiagram-ADFJNKIX-DT51bc-N.js,1770295725163,14796843503404e93d25daf761ac0d7b07fb9cfb5aaeafced7e710d6736f52ad
-assets/ordinal-Cboi1Yqb.js,1770295725163,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/requirementDiagram-UZGBJVZJ-Bp3sjHuc.js,1770295725163,19f4ef781c9b5e7af842ed36c1f022fe3ca6e13ca08c81d2f59a323b89c0d4f9
-assets/quadrantDiagram-AYHSOK5B-B0lUVFhB.js,1770295725162,b4d781e961cec7eddc292e1b43347bff0e04b59bc00bcb9cb2a09d7b7cb90bf1
-assets/linear-CMW4QvIl.js,1770295725163,cd8acdf79a82e2a6d7ab6559a15561aad396ed9058258d8960f75fd7ebb4d111
-assets/min-lhPzHBKK.js,1770295725163,eb621edc620891a48773c86f1f4e1ab013f04fec2a6720e123480938cb8d6225
-assets/init-Gi6I4Gst.js,1770295725163,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/mindmap-definition-VGOIOE7T-D5jOju-q.js,1770295725163,764544424b0a3e5ff69170c18f56d9aefed4a75cbe51266631824af581f6db69
-assets/infoDiagram-WHAUD3N6-N2uP5YAH.js,1770295725162,7149a950cb0a12b8a0e82a371b972c1ed4dc14542ae5660616885af89f8dc8ea
-assets/kanban-definition-3W4ZIXB7-BcroXK4r.js,1770295725163,6c39bf9ebc88724e6792d7163a82b5e773a41f765e8a4417b290fe31c0bfb64f
-assets/graph-j_h8DkBU.js,1770295725164,16d8cdccf25af1b6b2a0985e2e3f5b8e28596be453af30c512b2b9ae9a121116
-assets/journeyDiagram-XKPGCS4Q-DzcQjCeq.js,1770295725163,ac7c3ccbb78815caf9c43b28ad395be983fb02c7bc3f578ace7e2fa1768768b7
-assets/layout-CWM0Gupg.js,1770295725164,6d0cb6e3cc782dd5d1a4f3645c4d17a84acddb601fe9ec124249feface653d01
-assets/gitGraphDiagram-NY62KEGX-BylTWV71.js,1770295725163,9b022b660d0d0633c63ffd42f51a3539712147db7f592f69270d2629cedce990
-assets/diagram-QEK2KX5R-CVRXlvWI.js,1770295725163,3530954d81a2f469073dccb0a190e14e349f3ba825cb01ac80460bfabd22db31
-assets/index-Dgj8Zynm.css,1770295725162,768813f00b1885b71d0a3dc1da560abcb4a96761c598e2a9d288324506d59519
-assets/diagram-S2PKOQOG-Cei8RVIZ.js,1770295725163,81619c239c7632cfa2115432cc3c32e229b3ae43a1eb4bbc3426ef06eae07be8
-assets/erDiagram-Q2GNP2WA-4jS5C4u9.js,1770295725163,5f17aae1112ca0f386528f305b50b780f17312449d14019913c7965f202ca145
-assets/defaultLocale-DX6XiGOO.js,1770295725163,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/diagram-PSM6KHXK-D0QUclMN.js,1770295725163,f9e91d9b55b720e4a6e3e014f291c4b35436946630731a3ca872d30495c23df7
-assets/clone-CNM8k2DL.js,1770295725163,254ec625cc72a0d28b5bb986a3b356c1fc19ab68b08e97a12675bcc4866aeda6
-assets/dagre-6UL2VRFP-DVUlxLta.js,1770295725163,b3edd358e19dfdab54058e840b2d46716c0ef7452be38ad711d07f49066f229c
-assets/classDiagram-2ON5EDUG-CSQzwVeZ.js,1770295725163,86f4e5c9a0614bc5a7e78824e3e9c0d24d9e6aac72189ca24c3ee56f34e271b8
-assets/classDiagram-v2-WZHVMYZB-CSQzwVeZ.js,1770295725163,86f4e5c9a0614bc5a7e78824e3e9c0d24d9e6aac72189ca24c3ee56f34e271b8
-assets/chunk-TZMSLE5B-CAXXqOAG.js,1770295725163,cb051d53aa7ec6212dbdee1727a66de3521ab471719d2628c33db851dc330b39
-assets/chunk-QZHKN3VN-BA14YRP9.js,1770295725163,1537ae02f200e742fb15c4909c506ca6b216bf3cce166bf7adcc8e0ad9185955
-assets/flowDiagram-NV44I4VS-RQoj4Jl2.js,1770295725162,705b179477d3962248a98cce9bd67d0ed31ddf547df2d2e29ac020e006bfd3a3
-assets/sequenceDiagram-WL72ISMW-DR9lFNd-.js,1770295725163,8e2963cdccef636105696b5dc2e383d35b7bfc5e93508ce4168f7fb4c1c67c27
-assets/ganttDiagram-JELNMOA3-FFtV9pKE.js,1770295725164,d97486888c8bb8dd66fa687e6f6821d52cee9a8e184896aced78c3b7e78ecbc6
-assets/cose-bilkent-S5V4N54A-BSASFH4d.js,1770295725163,2296b7b63d4d12d95f0b904e57a283e8b1889c7d0c73c15a6abbd1169e4a754d
-assets/chunk-QN33PNHL-Kmom4B44.js,1770295725163,a539b32eb61424147fe03a9d5b3b5a41b7238d049f17c7ca6be044826bfb92c4
-assets/chunk-FMBD7UC4-Bvd7vkTm.js,1770295725163,643678fd49a8eb0915c033120349dd458f5d72a02d17d163156085e657c98530
-assets/chunk-DI55MBZ5-D_8JfwTF.js,1770295725163,8fd17b3df1dd78942eaf06caedd88a022c5917138d28fb0ffef6601f3a1b81a6
-assets/chunk-55IACEB6-Bgo_GlZm.js,1770295725163,e22831a607fd3be1fcf7befa75d0d3040602dfdee548f3549c81c02fb8948d23
-assets/chunk-4BX2VUAB--Q1mRrQS.js,1770295725163,64fba22a516a7ca7274359195938b4b0f86eefe9e2f54e50fbf1d1559ed1475a
-assets/chunk-B4BG7PRW-dDT33kVD.js,1770295725163,93a8962f3f149a71ed4044b5176a47546d523245bb886ae2d6ea6f83e2b52ca6
-assets/channel-CkmIK4IU.js,1770295725163,2e76e8f57152f2fd9f8da1a0618de71f540cf118702d5bfa8d33467bfce1972d
-assets/arc-DG9sEist.js,1770295725163,a3ff7ce09c3b89a407c2726d98a63e6d866fbcd49eeab70e0b044901f5019878
-assets/_baseUniq-JJtUirLP.js,1770295725164,e16a4cc9a8bd91b29cfb4d1f4366ed1d9d106508ca352d889bfebdcd779364a5
-assets/c4Diagram-YG6GDRKO-D4LqQrt1.js,1770295725163,215d0a705354ffc35c33cf2e2b4ffcf47f28d09f84b62cbbb75ef86158c73137
-assets/blockDiagram-VD42YOAC-6-OcvJHv.js,1770295725163,31215aa5653f948bb6e4aed2901e76e26d67acb37e2b72cf522ed66f663db6b8
-assets/architectureDiagram-VXUJARFQ-DHCA_GMO.js,1770295725163,c5a3bdd37d286f27ca1dd5a36fe8dfc9ce6a1c04fd73707b9263d9e251883a45
-assets/katex-Cu_Erd72.js,1770295725163,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-CotJlNer.js,1770295725164,7c4f8e0fcb0437d4ea920574d7130577f6b422f74ed40f3d85c680bfaecde5bd
-assets/cytoscape.esm-CyJtwmzi.js,1770295725163,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-4FHUD7hd.js,1770295725164,26f9946446feab9b7369bf0de223473ba8ad7375ec4f52bfb70b728af01629dc
-pwa-512x512.png,1770295724726,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-logo.png,1770295724711,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-192x192.png,1770295724718,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-apple-touch-icon.png,1770295724707,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+sw.js,1770442373507,c29db1932310539a4f916525979916ef33e63e848a6a2eae3c31c45698612a76
+manifest.webmanifest,1770442372646,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+index.html,1770442372646,5b27f9bd88a37eaa687fce9ee6301a51fee65e9e5912527dd93895a91b21768c
+firebase-messaging-sw.js,1770442372177,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+registerSW.js,1770442372646,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+workbox-8c29f6e4.js,1770442373507,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+lp.html,1770442372180,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/stateDiagram-FKZM4ZOC-DEyHP204.js,1770442372644,5b202715cb276b3794d54e97a97b774f6218d609e617e59b0886b09cddd91b4d
+assets/stateDiagram-v2-4FDKWEC3-C763nhbr.js,1770442372644,00f5c174fd12977ec2b0ddab2aca1e2a7dc84a48cd259b10b52ba78631c01cf5
+assets/xychartDiagram-PRI3JC2R-CJTy2fZU.js,1770442372645,c7cef4d7d186b5ffeff93827012d0052e19161221f92fd0e94adbcb69efe8a3c
+assets/pieDiagram-ADFJNKIX-BVR4yKZM.js,1770442372645,fea9df55fc2fa2b3d438565df691896bf4da636e5ca795eb4bbabc79b53d8221
+assets/ordinal-Cboi1Yqb.js,1770442372646,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/sankeyDiagram-TZEHDZUN-cf8IIVtw.js,1770442372646,f858d8aced90d93a1e2cc5d07407fe06bf06d27add14aa8203ee0d8bc40a0a0f
+assets/min-1c0G6RYG.js,1770442372646,40b05af312b85634dff8356c53e81ef78be063e63a58745ffdb888ef25dc7f4f
+assets/timeline-definition-IT6M3QCI-a4EsUKsw.js,1770442372644,5a3ae20ee831722ed3c2bd181b9615c1d4ac5829781ad7e3e18fbc138d6ccd8a
+assets/linear-QhI8wC8j.js,1770442372646,a22d93bbedd59c5b03a4078dba0ae85110d087e56b12495a3ceb0bbeecd231a1
+assets/requirementDiagram-UZGBJVZJ-CI4zvyNR.js,1770442372644,2fa2d8cb51b724baf9db0425326258fc35f6058dbcc180e02c40f4d89ed6e664
+assets/init-Gi6I4Gst.js,1770442372644,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/quadrantDiagram-AYHSOK5B-BhCK3ERT.js,1770442372644,13997dc071198ec1b3ace4abc1027332a1471b6cfe0b04586ce67d1e507aa4ae
+assets/kanban-definition-3W4ZIXB7-fPaj01EU.js,1770442372644,3268f79a5485f8eddd218297b2c1e47f8f2c69477598e6a8912c655d840a5a7e
+assets/infoDiagram-WHAUD3N6-B2ivtPmF.js,1770442372644,b397580215fd98fc9df85a6991c2d27cfd2f2eb0aa020da4f521c4c469a77423
+assets/mindmap-definition-VGOIOE7T-CdXvfywS.js,1770442372645,dde7e306a67b6a19585408896b2f223f0781195fa34845657ca17f27a121821f
+assets/graph-C35VKZ2q.js,1770442372646,9f20e938f21eac16e916820f3d5480f9d5b7dd7b2b7128ba47150a624188655d
+assets/journeyDiagram-XKPGCS4Q-P4XVsr3m.js,1770442372644,ec50d746bae9e6c75bc3e5948ca52fed98c16a6590b7d0d59f4dd058da2225a4
+assets/gitGraphDiagram-NY62KEGX-pqIYg6zM.js,1770442372644,1c74ed83059dd41eee09ea0a04707611df0c9b72ab4059db5c183cdfb0d88ffd
+assets/layout-0pAHdiW4.js,1770442372646,14e0349f3ffcb9f869b758ed7fe30055d30078b3bc75012b191ad8f15afdfc57
+assets/erDiagram-Q2GNP2WA-BVtbXNVT.js,1770442372646,220cb35d8aeece041a249136512551858b3f265b49d28704f9714b156a324585
+assets/diagram-S2PKOQOG-gHwLo6BD.js,1770442372644,e03130c6ca2c71a1c055e70658fdd02b0fa212aa66275070f4a8732b76729743
+assets/index-BqNE6pW9.css,1770442372644,dc4edbb26ae7db903680b58e1162e154191dcc50b7e829c802d52f45ab6a874c
+assets/diagram-QEK2KX5R-J4lnj218.js,1770442372644,2b271487507e1660e1b8c3c3fa73035509d65034ddaf1583539d0138544c1b8b
+assets/dagre-6UL2VRFP-C_gzuw9B.js,1770442372645,7d122310acaedc365e7472957fa45166b3c74d43f50ee6ba75b6a914be1b8acb
+assets/diagram-PSM6KHXK-BIT8O90-.js,1770442372646,ed79d391e1033b045387252bbe1a82d7a14c9f2ef29982a571f64835ef030d99
+assets/clone-tRzb63M8.js,1770442372644,7750bee6ad34ddf86ac1eb14cbffe31b6b076d34701a8b16004ffffbdb0d22be
+assets/defaultLocale-DX6XiGOO.js,1770442372646,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/classDiagram-2ON5EDUG-CBlh5ioZ.js,1770442372644,aa48e539049ebad5c691d60ac4860dc13295a00a53ba353cbea8572de0324368
+assets/classDiagram-v2-WZHVMYZB-CBlh5ioZ.js,1770442372645,aa48e539049ebad5c691d60ac4860dc13295a00a53ba353cbea8572de0324368
+assets/chunk-QZHKN3VN-QX9uB7GZ.js,1770442372644,318991a78bf92e5cf15b29c76619b23d1e8fe6e4afaa12daa59d9b94e69f6335
+assets/chunk-TZMSLE5B-ChIjjGF5.js,1770442372644,fe751a53a402cd68c2003fff9c3094291459f8b817ed83265e452ee2be7e74c6
+assets/flowDiagram-NV44I4VS-DMSWwras.js,1770442372644,1739d933f2b8490cc53c83f16dfd6dc84dedcc9de160c861630757019c343b20
+assets/sequenceDiagram-WL72ISMW-BFScH-uK.js,1770442372644,c583242211beb46b179c3da76d7f68d82dba1c27650230027e699f08447241c4
+assets/ganttDiagram-JELNMOA3-D_Q7Z9R_.js,1770442372646,1a937ad13668d9de93e55ca7c8b113380373a369013db004efd448cb7f96d4e3
+assets/cose-bilkent-S5V4N54A-CbAY0T8O.js,1770442372646,09956a5014ac44f4e78505e4e4ebc6d7390a95b7bb3e832947b4e67ebe491b04
+assets/chunk-QN33PNHL-D828HhsV.js,1770442372645,5cd66e6e250fa682cad45a75488582c880faee51d83276e5266a055d43713307
+assets/chunk-FMBD7UC4-DU5CaGaK.js,1770442372644,0815b05339b4bbd8eda861805bca22b7452d0eb06cd57bd17c29858c89a7c062
+assets/chunk-55IACEB6-BuHR5Z-1.js,1770442372644,557dd6aa29a255a2b0b27a0936ae148c39c8d4796e2d4c9cf9a7b3c652df1b8b
+assets/channel-DnSCYuqL.js,1770442372644,b26662fea22b4b25aaca2a731aafb968b24f6d9e5dce2284642f0cec25bbe5eb
+assets/chunk-4BX2VUAB-Mmv3TQfF.js,1770442372645,869492b5cf780c510877c5d3773b57244cd13d315f104f362548d19bbe62959b
+assets/chunk-DI55MBZ5-DemuKVR9.js,1770442372644,d01a91ce6800ee27acbb4bd14847c515ffb78053797accc9696c40f40958d531
+assets/chunk-B4BG7PRW-C-AiZrOR.js,1770442372644,1f14baeb259e0ef6840122e5f336fefa7cdf39383fe4b71bfa73058f105c108c
+assets/arc-D-jG64z2.js,1770442372644,d7fdc00a559edb4fd77b078746498083a77dbaf77eb4f7ef6666cb0784e395e8
+assets/_baseUniq-pAjr0qg0.js,1770442372646,5a8373dd224cc83cd8421b6e8dc22007ca65c472aa540633a3a3d556c4920a47
+assets/c4Diagram-YG6GDRKO-CNZZsyn9.js,1770442372644,dbf1fb7e3ce5cec19dc2852bde0e38d059ecfb29904ff235cb62d2f23df3a0b0
+assets/blockDiagram-VD42YOAC-BG-J79_n.js,1770442372644,64e21af9285a190bad9e6f488473f1e8b084a915104eb34fe539189d1028474a
+assets/architectureDiagram-VXUJARFQ-D-L09ruh.js,1770442372646,4cf5b3c6029a78256feb46157655ca3382205e921762c68d829733d1e9e23fff
+assets/katex-Cu_Erd72.js,1770442372645,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-B8SFpvGB.js,1770442372646,768505f21b9697200bc2309212b152f5fbade4d72d6fb6bbf32ddbc3add3bcbf
+assets/cytoscape.esm-CyJtwmzi.js,1770442372645,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-VyI3io2F.js,1770442372647,e3741e12ee8cb24176bd9ee884bf0f7c0f9871a3d3c76412a430b4ea2bf428ba
+logo.png,1770442372179,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1770442372177,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1770442372196,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-192x192.png,1770442372185,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>

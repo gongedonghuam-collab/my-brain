@@ -9,6 +9,10 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_APP_ID: string;
   readonly VITE_FIREBASE_MEASUREMENT_ID: string;
   readonly VITE_GEMINI_API_KEY: string;
+  readonly VITE_LINE_LOGIN_CHANNEL_ID: string;
+  // ★追加: Stripe関連
+  readonly VITE_STRIPE_PAYMENT_LINK: string;
+  readonly VITE_STRIPE_PORTAL_LINK: string;
 }
 
 interface ImportMeta {

@@ -1,36 +1,35 @@
 import { ref, onMounted, watch, nextTick, computed } from "vue";
 import { useMyBrain } from "@/composables/useMyBrain";
 import type { Memory } from "@/types";
-import mermaid from "mermaid"; // 図解を描画するライブラリ
+import mermaid from "mermaid";
 import { httpsCallable, getFunctions } from "firebase/functions";
 import { getApp } from "firebase/app";
 import { useRouter, useRoute } from "vue-router";
 import axios from "axios";
 
-// カレンダープラグイン（FullCalendar）
-import dayGridPlugin from "@fullcalendar/daygrid";
-import timeGridPlugin from "@fullcalendar/timegrid";
-import interactionPlugin from "@fullcalendar/interaction";
-import listPlugin from "@fullcalendar/list";
+// FullCalendar（カレンダーライブラリ）のプラグイン
+import dayGridPlugin from "@fullcalendar/daygrid"; // 月表示用
+import timeGridPlugin from "@fullcalendar/timegrid"; // 週/日表示用
+import interactionPlugin from "@fullcalendar/interaction"; // クリック操作用
+import listPlugin from "@fullcalendar/list"; // リスト表示用
 import type { CalendarOptions } from "@fullcalendar/core";
 
-// Googleカレンダーの色定義（IDと色の対応表）
+// Googleカレンダーの色ID定義
 const GOOGLE_CALENDAR_COLORS: Record<string, string> = {
-  "1": "#7986cb", // ラベンダー
-  "2": "#33b679", // セージ
-  "3": "#8e24aa", // グレープ
-  "4": "#e67c73", // フラミンゴ
-  "5": "#f6c026", // バナナ
-  "6": "#f4511e", // みかん
-  "7": "#039be5", // ピーコック
-  "8": "#616161", // グラファイト
-  "9": "#3f51b5", // ブルーベリー（デフォルト）
-  "10": "#0b8043", // バジル
-  "11": "#d50000", // トマト
+  "1": "#7986cb",
+  "2": "#33b679",
+  "3": "#8e24aa",
+  "4": "#e67c73",
+  "5": "#f6c026",
+  "6": "#f4511e",
+  "7": "#039be5",
+  "8": "#616161",
+  "9": "#3f51b5",
+  "10": "#0b8043",
+  "11": "#d50000",
 };
 
 export function useHomeView() {
-  // `useMyBrain` から必要な機能を借りてきます
   const {
     initAuth,
     chatLogs,
@@ -47,17 +46,11 @@ export function useHomeView() {
   } = useMyBrain();
 
   // --- 画面の状態管理変数 ---
-  /** 現在の入力モード（メモ/チャット/URL/カレンダー） */
   const inputMode = ref<"memo" | "chat" | "url" | "calendar">("memo");
-  /** 編集中のメモ（モーダルで開く用） */
   const editingMemory = ref<Memory | null>(null);
-  /** チャット画面のスクロール制御用 */
   const chatContainerRef = ref<HTMLElement | null>(null);
-  /** 成功トースト表示フラグ */
   const showSuccessToast = ref(false);
-  /** カレンダー読み込み中フラグ */
   const calendarLoading = ref(false);
-  /** 日報モーダル表示フラグ */
   const isReportModalOpen = ref(false);
 
   const route = useRoute();
@@ -70,15 +63,11 @@ export function useHomeView() {
   const relatedMemories = ref<Memory[]>([]);
   const isSearchingMemories = ref(false);
 
-  /**
-   * カレンダーの日付をクリックした時に、下からニョキッと詳細画面を出す関数
-   */
   const openBottomSheet = async (dateStr: string) => {
     selectedDateStr.value = dateStr;
     relatedMemories.value = [];
     isSearchingMemories.value = false;
 
-    // その日の予定をフィルタリングして表示
     const events = (calendarOptions.value.events as any[]) || [];
     selectedDateEvents.value = events
       .filter((ev: any) => ev.start && ev.start.startsWith(dateStr))
@@ -87,7 +76,6 @@ export function useHomeView() {
       );
     isBottomSheetOpen.value = true;
 
-    // その日の予定に関連するメモをAI検索して表示
     if (selectedDateEvents.value.length > 0) {
       isSearchingMemories.value = true;
       const queryText = selectedDateEvents.value.map((e) => e.title).join(" ");
@@ -105,9 +93,6 @@ export function useHomeView() {
     isBottomSheetOpen.value = false;
   };
 
-  /**
-   * カレンダーの予定を削除する関数
-   */
   const deleteEvent = async (eventId: string) => {
     if (!confirm("削除しますか？")) return;
     try {
@@ -117,7 +102,6 @@ export function useHomeView() {
           { headers: { Authorization: `Bearer ${token}` } },
         );
       });
-      // 画面上のリストからも削除
       selectedDateEvents.value = selectedDateEvents.value.filter(
         (e) => e.id !== eventId,
       );
@@ -131,75 +115,20 @@ export function useHomeView() {
   };
 
   /**
-   * FullCalendarの設定オブジェクト
-   * ここでカレンダーの見た目や挙動を定義しています。
-   */
-  const calendarOptions = ref<CalendarOptions>({
-    plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
-    initialView: "dayGridMonth",
-    headerToolbar: { left: "prev", center: "title", right: "next" },
-    events: [] as any[], // ここに予定データが入る
-    locale: "ja", // 日本語化
-    height: "100%",
-    expandRows: true, // 行の高さを均等にする
-    dayMaxEvents: 2, // 1日に表示する最大件数
-
-    displayEventTime: false, // 時間は詳細で見せるので非表示
-
-    // イベントの見た目をカスタマイズ
-    eventContent: function (arg: any) {
-      const timeText = arg.event.allDay ? "" : arg.timeText;
-      return {
-        html: `
-          <div class="fc-content-custom">
-            ${timeText ? `<span class="fc-time-custom">${timeText}</span>` : ""}
-            <span class="fc-title-custom">${arg.event.title}</span>
-          </div>
-        `,
-      };
-    },
-
-    moreLinkClick: (arg) => {
-      openBottomSheet(arg.date.toISOString().split("T")[0]);
-      return "void";
-    },
-    dateClick: (info) => {
-      openBottomSheet(info.dateStr);
-    },
-    eventClick: (info) => {
-      info.jsEvent.preventDefault();
-      openBottomSheet(info.event.startStr.split("T")[0]);
-    },
-    eventTimeFormat: {
-      hour: "numeric",
-      minute: "2-digit",
-      meridiem: false,
-      hour12: false,
-    },
-    longPressDelay: 500,
-    handleWindowResize: true,
-  });
-
-  /**
    * Googleカレンダーから全ての予定を取得する関数
-   * ★デバッグ用のログ出力を追加しています
+   * 引数で期間を指定できるように変更
+   * ★重要: calendarOptionsで使うため、上に移動しました
    */
-  const fetchAllCalendars = async () => {
+  const fetchAllCalendars = async (startStr?: string, endStr?: string) => {
     calendarLoading.value = true;
     try {
-      console.log("📅 カレンダー取得開始...");
       const calendars = await callGoogleApi(async (token) => {
-        console.log(
-          "🔑 トークンを使ってリスト取得を試みます:",
-          token ? token.substring(0, 10) + "..." : "なし",
-        );
         let list = [{ id: "primary", backgroundColor: "#818cf8" }];
         try {
           const listRes = await axios.get(
             "https://www.googleapis.com/calendar/v3/users/me/calendarList",
             { headers: { Authorization: `Bearer ${token}` } },
           );
-          console.log("✅ カレンダーリスト取得成功:", listRes.data);
           if (listRes.data.items) {
             list = listRes.data.items.map((cal: any) => ({
               id: cal.id,
@@ -207,32 +136,23 @@ export function useHomeView() {
             }));
           }
         } catch (e: any) {
-          console.error("❌ カレンダーリスト取得失敗:", e.response?.data || e);
-          if (e.response && e.response.status === 401) {
-            throw e;
-          }
-          console.warn("List fetch failed, using primary only");
+          if (e.response && e.response.status === 401) throw e;
+          console.warn("List fetch failed");
         }
         return list;
       });
 
-      if (!calendars) {
-        console.warn("⚠️ カレンダー情報がnullでした");
-        return;
-      }
+      if (!calendars) return;
 
+      // 期間指定がない場合は前後1年を取得 (デフォルト)
       const now = new Date();
-      // 表示範囲: 前後数ヶ月分
-      const timeMin = new Date(
-        now.getFullYear(),
-        now.getMonth() - 1,
-        1,
-      ).toISOString();
-      const timeMax = new Date(
-        now.getFullYear(),
-        now.getMonth() + 2,
-        0,
-      ).toISOString();
+      const timeMin = startStr
+        ? new Date(startStr).toISOString()
+        : new Date(now.getFullYear() - 1, now.getMonth(), 1).toISOString();
+
+      const timeMax = endStr
+        ? new Date(endStr).toISOString()
+        : new Date(now.getFullYear() + 1, now.getMonth(), 0).toISOString();
 
       const promises = calendars.map((cal: any) =>
         callGoogleApi(async (token) => {
@@ -245,17 +165,11 @@ export function useHomeView() {
                   timeMin,
                   timeMax,
                   singleEvents: true,
-                  maxResults: 250,
+                  maxResults: 2500,
                 },
               },
             )
-            .catch((e) => {
-              console.error(
-                `❌ イベント取得失敗 (ID: ${cal.id}):`,
-                e.response?.data || e,
-              );
-              return { data: { items: [] } };
-            });
+            .catch(() => ({ data: { items: [] } }));
         }),
       );
 
@@ -277,12 +191,9 @@ export function useHomeView() {
           };
         });
       });
-      console.log(`✅ 合計 ${allEvents.length} 件の予定を取得しました`);
       calendarOptions.value.events = allEvents;
     } catch (e: any) {
-      console.error("🔥 fetchAllCalendars 全体エラー:", e);
       if (e.response && e.response.status === 401) {
-        console.error("🚫 401エラー検知: トークンを削除して未接続にします");
         localStorage.removeItem("google_calendar_token");
         isCalendarConnected.value = false;
       }
@@ -292,8 +203,91 @@ export function useHomeView() {
   };
 
   /**
-   * チャット画面を一番下まで自動スクロールする関数
+   * FullCalendarの設定オブジェクト
    */
+  const calendarOptions = ref<CalendarOptions>({
+    plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
+    initialView: window.innerWidth < 768 ? "listMonth" : "dayGridMonth",
+
+    headerToolbar: {
+      left: "prev,next",
+      center: "title",
+      right: "dayGridMonth,listMonth",
+    },
+
+    buttonText: {
+      today: "今日",
+      month: "月",
+      list: "一覧",
+    },
+
+    locale: "ja",
+    height: "100%",
+    expandRows: true,
+    dayMaxEvents: true,
+    navLinks: true,
+
+    eventTimeFormat: {
+      hour: "numeric",
+      minute: "2-digit",
+      meridiem: false,
+    },
+
+    views: {
+      dayGridMonth: {
+        titleFormat: { year: "numeric", month: "short" },
+        dayMaxEvents: 2,
+      },
+      listMonth: {
+        buttonText: "一覧",
+        displayEventTime: true,
+      },
+    },
+
+    windowResize: (arg) => {
+      if (arg.view.type === "dayGridMonth" && window.innerWidth < 768) {
+        arg.view.calendar.changeView("listMonth");
+      } else if (arg.view.type === "listMonth" && window.innerWidth >= 768) {
+        arg.view.calendar.changeView("dayGridMonth");
+      }
+    },
+
+    // ★修正: CSS変数(--event-color)に色情報を渡す
+    eventContent: function (arg: any) {
+      if (arg.view.type === "listMonth") {
+        return {
+          html: `<div class="fc-list-custom-title">${arg.event.title}</div>`,
+        };
+      }
+      return {
+        html: `
+          <div class="fc-content-custom" style="--event-color: ${arg.event.backgroundColor}">
+            <span class="fc-title-custom">${arg.event.title}</span>
+          </div>
+        `,
+      };
+    },
+
+    dateClick: (info) => {
+      openBottomSheet(info.dateStr);
+    },
+    eventClick: (info) => {
+      info.jsEvent.preventDefault();
+      openBottomSheet(info.event.startStr.split("T")[0]);
+    },
+
+    // ★追加: 表示期間（月など）が変わった時にデータを再取得する
+    datesSet: (arg) => {
+      // カレンダーモードで、かつローディング中でなければ再取得
+      if (inputMode.value === "calendar" && !calendarLoading.value) {
+        fetchAllCalendars(arg.startStr, arg.endStr);
+      }
+    },
+
+    longPressDelay: 500,
+    handleWindowResize: true,
+  });
+
   const scrollToBottom = async () => {
     if (inputMode.value !== "chat") return;
     await nextTick();
@@ -308,15 +302,11 @@ export function useHomeView() {
 
   onMounted(async () => {
     initAuth();
-    // 図解ライブラリの初期化
     mermaid.initialize({
       startOnLoad: false,
       theme: "dark",
       securityLevel: "loose",
-      suppressErrorRendering: true,
     });
-
-    // LINEログインからのコールバック処理
     const code = route.query.code as string;
     if (code) {
       window.history.replaceState({}, document.title, "/app");
@@ -330,10 +320,10 @@ export function useHomeView() {
         alert("LINE連携失敗");
       }
     }
-    if (currentUser.value) fetchAllCalendars();
+    // 初期ロードはdatesSetが自動で発火するのでここでは呼ばない（重複防止）
+    // if (currentUser.value) fetchAllCalendars();
   });
 
-  // モード切替時の処理
   watch(inputMode, (newMode) => {
     if (newMode === "chat") {
       nextTick(() => {
@@ -344,8 +334,8 @@ export function useHomeView() {
       scrollToBottom();
     } else if (newMode === "calendar") {
       setTimeout(() => {
-        // カレンダーのサイズを再計算させるハック
         window.dispatchEvent(new Event("resize"));
+        // モード切替時は明示的にリロード（datesSetの発火を期待しても良いが、念のため）
         fetchAllCalendars();
       }, 100);
     }

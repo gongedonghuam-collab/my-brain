@@ -44,15 +44,26 @@ const handleGoogleLogin = async () => {
       tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const accessToken = credential?.accessToken;
+    // ★追加: トークンの有効期限（秒）
+    const expiresIn = tokenResponse?.expiresIn || 3600;
 
     // ★トークンを保存するためのデータ準備
     const tokenData: any = { updatedAt: new Date() };
 
     if (accessToken) {
       tokenData.accessToken = accessToken; // 今すぐ使える鍵
+
       // ★修正: ブラウザのlocalStorageにも即座に保存
       // これにより、ログイン直後の画面遷移でもカレンダーが即座に表示されます
       localStorage.setItem("google_calendar_token", accessToken);
+
+      // ★追加: 有効期限を計算して保存 (現在時刻 + 有効秒数 - マージン300秒)
+      const expiryTime =
+        new Date().getTime() + (Number(expiresIn) - 300) * 1000;
+      localStorage.setItem(
+        "google_calendar_token_expiry",
+        expiryTime.toString(),
+      );
     }
 
     if (refreshToken) {

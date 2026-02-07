@@ -1,16 +1,21 @@
 <script setup lang="ts">
+/**
+ * HomeView.vue
+ * アプリのメイン画面です。ヘッダー、メインコンテンツ、フッターを統括します。
+ * 入力モード（inputMode）によって表示内容（メモ、チャット、カレンダー）を切り替えます。
+ */
 import { ref } from "vue";
 import { useHomeView } from "./useHomeView";
 import { useMyBrain } from "@/composables/useMyBrain";
 
-// コンポーネント
+// コンポーネント群のインポート
 import AppHeader from "@/components/AppHeader/AppHeader.vue";
 import TagFilter from "@/components/TagFilter/TagFilter.vue";
 import MemoList from "@/components/MemoList/MemoList.vue";
 import ChatList from "@/components/ChatList/ChatList.vue";
 import InputFooter from "@/components/InputFooter/InputFooter.vue";
 import MemoryModal from "@/components/MemoryModal/MemoryModal.vue";
-import FullCalendar from "@fullcalendar/vue3";
+import FullCalendar from "@fullcalendar/vue3"; // カレンダーコンポーネント
 
 const {
   inputMode,
@@ -38,7 +43,7 @@ const {
   reconnectCalendar,
 } = useHomeView();
 
-// ★修正: currentUser, startLineAuth を追加で取得
+// ユーザー情報と手動タスク追加ロジック
 const { addManualTodo, currentUser, startLineAuth } = useMyBrain();
 const newTaskTitle = ref("");
 
@@ -51,7 +56,7 @@ const submitTask = async () => {
 const latestReport =
   dailyReports.value.length > 0 ? dailyReports.value[0] : null;
 
-// バイブレーション機能
+// バイブレーション機能（UX向上）
 const haptic = () => {
   if (navigator.vibrate) navigator.vibrate(10);
 };
@@ -183,11 +188,13 @@ const haptic = () => {
         v-if="inputMode === 'calendar'"
         class="w-full h-full flex flex-col animate-fade-in relative bg-[#09090b]"
       >
-        <div class="flex-1 p-0 md:p-6 overflow-hidden relative">
-          <div class="absolute top-4 left-4 right-4 z-20 flex flex-col gap-2">
+        <div class="flex-1 p-2 md:p-6 overflow-hidden relative">
+          <div
+            class="absolute top-14 left-4 right-4 z-20 flex flex-col gap-2 pointer-events-none"
+          >
             <div
               v-if="!isCalendarConnected"
-              class="bg-red-500/10 border border-red-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between"
+              class="bg-red-500/10 border border-red-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between pointer-events-auto"
             >
               <span class="text-red-400 text-xs font-bold">未接続</span>
               <button
@@ -200,7 +207,7 @@ const haptic = () => {
 
             <div
               v-if="currentUser && !currentUser.isLineLinked"
-              class="bg-green-500/10 border border-green-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between animate-fade-in"
+              class="bg-green-500/10 border border-green-500/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-between animate-fade-in pointer-events-auto"
             >
               <div class="flex items-center gap-2">
                 <span class="text-xl">💬</span>

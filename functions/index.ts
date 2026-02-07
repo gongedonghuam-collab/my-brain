@@ -14,6 +14,8 @@ import { defineSecret } from "firebase-functions/params"; // パスワードな�
 import * as admin from "firebase-admin"; // データベース(Firestore)を管理者権限で操作する機能
 import axios from "axios"; // 外部のサイト(Googleや天気予報)と通信する機能
 import * as line from "@line/bot-sdk"; // LINEにメッセージを送るための公式ツール
+// ★修正: GoogleGenerativeAI をインポート
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // --- 2. アプリの起動準備 ---
 // サーバーが立ち上がった時に一度だけ実行され、管理者としてログインします。
@@ -696,50 +698,36 @@ async function resolveGeminiModel(apiKey: string): Promise<string> {
 }
 
 /**
- * AIに文章を作らせる（リトライ機能・安全装置解除付き）
- * AIが「それは答えられません」とエラーを吐くのを防ぐため、安全設定を緩めています。
- * また、エラーが出たら別のモデルで再挑戦する根性も持っています。
+ * AIにコンテンツ生成を依頼する関数（リトライ機能付き）
+ * メインモデルが失敗したら、自動的にバックアップモデル（Gemini Pro）で再試行します。
  */
 async function generateContentWithRetry(
   apiKey: string,
-  prompt: string,
-): Promise<string> {
-  const bestModel = await resolveGeminiModel(apiKey);
-  // 重複を除いて試行順序リストを作成
-  const models = [...new Set([bestModel, ...CANDIDATE_MODELS])].filter(Boolean);
-
-  for (const m of models) {
+  promptParts: any[],
+  isJsonMode = false,
+) {
+  try {
+    const modelName = await resolveGeminiModel(apiKey);
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const config = isJsonMode ? { responseMimeType: "application/json" } : {};
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: config,
+    });
+    const result = await model.generateContent(promptParts);
+    return result.response.text();
+  } catch (e: any) {
+    console.error("AI Generation Error (Primary):", e);
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`;
-      const res = await axios.post(
-        url,
-        {
-          contents: [{ parts: [{ text: prompt }] }],
-          // ★ここが重要: 安全フィルターを「ブロックなし」にしてエラーを防ぐ
-          // これがないと「タスクを殺して(消して)」等の表現で止まってしまう
-          safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-            {
-              category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-              threshold: "BLOCK_NONE",
-            },
-            {
-              category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-              threshold: "BLOCK_NONE",
-            },
-          ],
-        },
-        { headers: { "Content-Type": "application/json" } },
-      );
-      // 結果を取り出す
-      const txt = res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (txt) return txt;
-    } catch (e: any) {
-      console.warn(`Model ${m} failed:`, e.message);
+      console.log("Retrying with gemini-pro...");
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      const result = await model.generateContent(promptParts);
+      return result.response.text();
+    } catch (retryError: any) {
+      throw new Error("AI processing failed completely: " + retryError.message);
     }
   }
-  throw new Error("All AI models failed.");
 }
 
 /**
@@ -749,7 +737,7 @@ async function generateContentWithRetry(
 async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
   if (!apiKey) return { action: "CHAT", reply: "⚠️ APIキー未設定" };
   try {
-    const text = await generateContentWithRetry(apiKey, prompt);
+    const text = await generateContentWithRetry(apiKey, [{ text: prompt }]);
     return extractJson(text);
   } catch (e: any) {
     // エラーメッセージを人間に優しくする
@@ -767,7 +755,7 @@ async function callGeminiJson(apiKey: string, prompt: string): Promise<any> {
 async function callGeminiText(apiKey: string, prompt: string): Promise<string> {
   if (!apiKey) return "";
   try {
-    const text = await generateContentWithRetry(apiKey, prompt);
+    const text = await generateContentWithRetry(apiKey, [{ text: prompt }]);
     return text
       .replace(/^```.*\n/gm, "")
       .replace(/```/g, "")
@@ -1012,8 +1000,9 @@ async function deleteCalendarEvent(
     );
     const events = searchRes.data.items || [];
     if (events.length === 0) return null;
+
     const target = events[0];
-    // 見つかったら削除
+    // 特定したIDを使って削除
     await axios.delete(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events/${target.id}`,
       { headers: { Authorization: `Bearer ${token}` } },
@@ -1240,8 +1229,15 @@ export const lineWebhook = onRequest(
           const now = new Date();
           const nowStr = now.toLocaleString("ja-JP", {
             timeZone: "Asia/Tokyo",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
           });
-          const currentHour = now.getHours();
+          const currentHour = parseInt(nowStr.split(" ")[1].split(":")[0], 10);
           const dayOfWeek = now.getDay();
 
           let emotionPrompt = "";
@@ -1257,6 +1253,7 @@ export const lineWebhook = onRequest(
           }
 
           // 6. AIへの指令書 (プロンプト) 作成
+          // ★修正: 返信のフォーマットに関する指示を具体的に追加
           const routerPrompt = `
       あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr}
       
@@ -1280,6 +1277,10 @@ export const lineWebhook = onRequest(
       2. **返信の口調**:
          - ユーザーの口調に合わせ、${emotionPrompt}
          - 「承知いたしました」等の定型句は禁止。人間味のある反応をしてください。
+         - **フォーマット指示**: 
+           - 長文になる場合は適宜改行を入れてください。
+           - 重要な情報は **太字** ではなく「【 】」や「■」などの記号を使って目立たせてください（LINEは見出し記法がないため）。
+           - 感情表現として絵文字（😊, 👍, ✅, 📅 など）を適度に使用してください。
 
       3. **削除アクション (重要)**: 
          - ユーザーが「〇〇を削除」「消して」と言ったら、言い訳せず必ず削除アクションを選んでください。

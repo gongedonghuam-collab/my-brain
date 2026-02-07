@@ -4,9 +4,14 @@ import { useMyBrain } from "@/composables/useMyBrain";
 import NotificationBell from "@/components/NotificationBell/NotificationBell.vue";
 
 const { logout } = useAppHeader();
-// startSubscription: 課金画面へ飛ばす関数
-const { currentUser, startLineAuth, unlinkLine, startSubscription } =
-  useMyBrain();
+// ★修正: manageSubscription を追加で取得して使えるようにする
+const {
+  currentUser,
+  startLineAuth,
+  unlinkLine,
+  startSubscription,
+  manageSubscription,
+} = useMyBrain();
 </script>
 
 <template>
@@ -43,10 +48,14 @@ const { currentUser, startLineAuth, unlinkLine, startSubscription } =
       </div>
 
       <div v-else-if="currentUser && currentUser.isPro" class="mr-2">
-        <span
-          class="text-[10px] font-bold text-amber-400 border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 rounded"
-          >PRO Plan</span
+        <button
+          @click="manageSubscription"
+          class="text-[10px] font-bold text-amber-400 border border-amber-400/30 bg-amber-400/10 px-2 py-1 rounded transition hover:bg-amber-400/20 cursor-pointer flex items-center gap-1"
+          title="プラン管理・解約"
         >
+          <span>PRO Plan</span>
+          <span class="text-[8px] opacity-60">⚙️</span>
+        </button>
       </div>
 
       <NotificationBell />

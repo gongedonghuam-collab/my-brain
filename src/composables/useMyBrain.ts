@@ -36,10 +36,22 @@ import axios from "axios";
 import type { Memory, ChatLog, User, Todo, DailyReport } from "@/types";
 
 // --- 定数定義 ---
-// Stripeの決済リンク（課金ページ）
-const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/6oU28r4Hi71dglzd1z6AM00";
+// Stripeの決済リンク（課金ページ） - 環境変数から取得
+const STRIPE_PAYMENT_LINK = import.meta.env.VITE_STRIPE_PAYMENT_LINK || "";
+
+// Stripeのカスタマーポータル（解約・カード変更画面）のURL - 環境変数から取得
+const STRIPE_PORTAL_LINK = import.meta.env.VITE_STRIPE_PORTAL_LINK || "";
+
 // 管理者権限を持つメールアドレスのリスト
 const ADMIN_EMAILS = ["gongedonghuam@gmail.com"];
+
+// AIモデルの候補リスト
+const CANDIDATE_MODELS = [
+  "gemini-1.5-flash", // 速いモデル (メイン)
+  "gemini-1.5-flash-001",
+  "gemini-1.5-pro", // 賢いモデル (サブ)
+  "gemini-pro",
+];
 
 // --- リアクティブな状態変数 (State) ---
 // ref() で囲むことで、中身が変わった時に画面も自動で更新されるようになります。
@@ -146,28 +158,35 @@ function formatIsoDate(dateStr: string): string {
 
 /**
  * Google APIを呼び出すためのラッパー関数（共通処理）
- * トークン切れ（401エラー）が発生した場合、自動的にログアウト処理へ誘導します。
+ * トークン切れチェックとエラーハンドリングを行います。
  * @param callback 実行したいAPI処理
  */
 const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
   let token = localStorage.getItem("google_calendar_token");
-  if (!token) {
+  const expiry = localStorage.getItem("google_calendar_token_expiry");
+
+  // ★トークンが無い、または有効期限切れの場合
+  if (!token || (expiry && new Date().getTime() > Number(expiry))) {
+    console.warn("Access token expired or missing. Triggering reconnection.");
     isCalendarConnected.value = false;
-    return null;
+    localStorage.removeItem("google_calendar_token");
+    localStorage.removeItem("google_calendar_token_expiry");
+    return null; // 無理にAPIを呼ばずに終了
   }
+
   try {
     const res = await callback(token);
     isCalendarConnected.value = true;
     return res;
   } catch (e: any) {
-    // ★重要: 401エラー（トークン切れ）なら強制ログアウトしてログイン画面へ
+    // 401エラー（トークン切れ）なら強制ログアウトしてログイン画面へ
     if (e.response && e.response.status === 401) {
-      console.warn("Calendar token expired. Redirecting to login...");
+      console.warn("Calendar token expired (401). Redirecting to login...");
       localStorage.removeItem("google_calendar_token");
+      localStorage.removeItem("google_calendar_token_expiry");
       isCalendarConnected.value = false;
 
       await signOut(auth);
-      // リロードして強制的にログイン画面へ飛ばす
       window.location.href = "/login";
       return null;
     }
@@ -191,11 +210,22 @@ const reconnectCalendar = async () => {
     });
 
     const result = await signInWithPopup(auth, provider);
+    const tokenResponse = (result as any)._tokenResponse;
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const token = credential?.accessToken;
+    const expiresIn = tokenResponse?.expiresIn || 3600;
 
     if (token) {
       localStorage.setItem("google_calendar_token", token);
+
+      // 有効期限も更新
+      const expiryTime =
+        new Date().getTime() + (Number(expiresIn) - 300) * 1000;
+      localStorage.setItem(
+        "google_calendar_token_expiry",
+        expiryTime.toString(),
+      );
+
       isCalendarConnected.value = true;
       alert("カレンダーを再接続しました！");
       window.location.reload();
@@ -643,7 +673,31 @@ export function useMyBrain() {
   const startSubscription = async () => {
     if (!currentUser.value) return;
     if (confirm("PROプラン（月額980円）の決済画面へ移動しますか？")) {
+      if (!STRIPE_PAYMENT_LINK) {
+        alert("管理者に連絡してください (決済リンク未設定)");
+        return;
+      }
       window.location.href = STRIPE_PAYMENT_LINK;
+    }
+  };
+
+  /**
+   * ★追加: サブスクリプション管理（解約）画面へ遷移する関数
+   */
+  const manageSubscription = async () => {
+    if (!currentUser.value) return;
+
+    const isConfirmed = confirm(
+      "【PROプランの管理】\n\n解約やクレジットカードの変更は、Stripeの管理画面で行います。\n管理画面へ移動しますか？",
+    );
+
+    if (isConfirmed) {
+      // URLが未設定の場合は警告を出す
+      if (!STRIPE_PORTAL_LINK) {
+        alert("管理者に連絡してください。\n(StripeポータルURLが未設定です)");
+        return;
+      }
+      window.location.href = STRIPE_PORTAL_LINK;
     }
   };
 
@@ -786,6 +840,7 @@ export function useMyBrain() {
   const logout = async () => {
     await signOut(auth);
     localStorage.removeItem("google_calendar_token");
+    localStorage.removeItem("google_calendar_token_expiry");
     localStorage.removeItem("last_memory_id");
     window.location.reload();
   };
@@ -1313,6 +1368,7 @@ export function useMyBrain() {
     askBrain,
     selectTag,
     startSubscription,
+    manageSubscription,
     updateMemory,
     deleteMemory,
     deleteChatLog,
