@@ -12,7 +12,10 @@ const db = getFirestore(); // Firestore Database
 
 /**
  * Googleログイン処理
- * ここでGoogleにログインし、「合鍵」をもらってきます。
+ * ユーザーにGoogleアカウントでのログインを求め、以下の処理を行います。
+ * 1. カレンダーへのアクセス権限を取得
+ * 2. 取得したトークン（合鍵）をFirestoreとlocalStorageに保存
+ * 3. ユーザー情報を保存してアプリ画面へ遷移
  */
 const handleGoogleLogin = async () => {
   loading.value = true;
@@ -42,13 +45,22 @@ const handleGoogleLogin = async () => {
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const accessToken = credential?.accessToken;
 
-    // ★トークンをDBに保存（システム用）
-    // ユーザーには見えない場所に保存します。
+    // ★トークンを保存するためのデータ準備
     const tokenData: any = { updatedAt: new Date() };
-    if (accessToken) tokenData.accessToken = accessToken; // 今すぐ使える鍵
-    if (refreshToken) tokenData.refreshToken = refreshToken; // 期限が切れた時のための合鍵
 
-    // どちらか片方でもあれば保存
+    if (accessToken) {
+      tokenData.accessToken = accessToken; // 今すぐ使える鍵
+      // ★修正: ブラウザのlocalStorageにも即座に保存
+      // これにより、ログイン直後の画面遷移でもカレンダーが即座に表示されます
+      localStorage.setItem("google_calendar_token", accessToken);
+    }
+
+    if (refreshToken) {
+      tokenData.refreshToken = refreshToken; // 期限が切れた時のための合鍵
+    }
+
+    // Firestore（サーバー側）への保存処理
+    // 裏側のCloud Functionsがカレンダーを操作するために必要です
     if (refreshToken || accessToken) {
       try {
         await setDoc(
