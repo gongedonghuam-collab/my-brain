@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore, doc, setDoc } from "firebase/firestore";
 import { useRouter } from "vue-router";
@@ -10,6 +10,17 @@ const loading = ref(false); // ローディング中かどうか
 const auth = getAuth(); // Firebase Auth
 const db = getFirestore(); // Firestore Database
 
+// LINEブラウザ判定フラグ
+const isLineBrowser = ref(false);
+
+onMounted(() => {
+  // ユーザーエージェントに "Line" が含まれているかチェック
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.indexOf("line") !== -1) {
+    isLineBrowser.value = true;
+  }
+});
+
 /**
  * Googleログイン処理
  * ユーザーにGoogleアカウントでのログインを求め、以下の処理を行います。
@@ -18,6 +29,12 @@ const db = getFirestore(); // Firestore Database
  * 3. ユーザー情報を保存してアプリ画面へ遷移
  */
 const handleGoogleLogin = async () => {
+  if (isLineBrowser.value) {
+    alert(
+      "LINEブラウザではGoogle認証がブロックされることがあります。\n右上のメニューなどから「ブラウザで開く（Safari/Chrome）」を選択して再試行してください。",
+    );
+  }
+
   loading.value = true;
   try {
     const provider = new GoogleAuthProvider();
@@ -34,7 +51,7 @@ const handleGoogleLogin = async () => {
       access_type: "offline", // 裏側（Cloud Functions）で接続するために必須
     });
 
-    // ポップアップでログイン画面を表示（リダイレクト方式だとiPhone等でエラーになりやすいため）
+    // ポップアップでログイン画面を表示
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
 
@@ -132,6 +149,20 @@ const handleGoogleLogin = async () => {
         </h1>
         <p class="text-slate-400 text-xs font-bold tracking-widest uppercase">
           ズボラ専用 AI秘書
+        </p>
+      </div>
+
+      <div
+        v-if="isLineBrowser"
+        class="w-full mb-6 bg-amber-500/10 border border-amber-500/50 rounded-xl p-4 text-amber-200 text-xs leading-relaxed"
+      >
+        <p class="font-bold mb-1">⚠️ 動作環境のご注意</p>
+        <p>
+          現在LINEアプリ内で開いています。Google連携がエラーになる場合があります。
+        </p>
+        <p class="mt-2 text-white font-bold underline">
+          右上のメニュー(︙)
+          または「共有」アイコンから「デフォルトのブラウザで開く」を選択してください。
         </p>
       </div>
 

@@ -5,7 +5,7 @@
     <div class="max-w-3xl mx-auto pb-20">
       <h1 class="text-2xl font-bold text-white mb-8">プライバシーポリシー</h1>
 
-      <div class="space-y-6 text-sm leading-relaxed">
+      <div class="space-y-8 text-sm leading-relaxed">
         <section>
           <h2 class="font-bold text-slate-100 mb-2">1. 収集する情報</h2>
           <p>当アプリ「My Brain」は、以下の情報を収集します。</p>
@@ -31,7 +31,44 @@
         </section>
 
         <section>
-          <h2 class="font-bold text-slate-100 mb-2">3. 第三者への提供</h2>
+          <h2 class="font-bold text-slate-100 mb-2">
+            3. Googleユーザーデータの取り扱い（重要）
+          </h2>
+          <p>
+            当アプリは、Google Calendar
+            APIを通じてユーザーのカレンダー情報にアクセスします。
+            このデータは以下の目的でのみ使用され、その他の目的で利用したり、第三者に販売したりすることはありません。
+          </p>
+          <ul class="list-disc list-inside ml-4 mt-2 space-y-2 text-slate-400">
+            <li>
+              <strong>情報の取得:</strong>
+              ユーザーの指示に基づき、空き状況の確認や予定の参照を行うため。
+            </li>
+            <li>
+              <strong>情報の作成・編集:</strong>
+              ユーザーの指示（チャットでの依頼）に基づき、カレンダーに新しい予定を作成、または既存の予定を編集・削除するため。
+            </li>
+            <li>
+              <strong>データの保存:</strong>
+              取得したカレンダー情報は、ユーザーへの通知やリマインダー機能を提供するために一時的にキャッシュされる場合がありますが、AIの学習データとして外部に共有されることはありません。
+            </li>
+          </ul>
+          <div class="mt-4 p-3 bg-slate-900 rounded-lg border border-slate-800">
+            <p class="text-xs text-slate-500">
+              My Brain's use and transfer to any other app of information
+              received from Google APIs will adhere to
+              <a
+                href="https://developers.google.com/terms/api-services-user-data-policy"
+                target="_blank"
+                class="text-blue-400 underline"
+                >Google API Services User Data Policy</a
+              >, including the Limited Use requirements.
+            </p>
+          </div>
+        </section>
+
+        <section>
+          <h2 class="font-bold text-slate-100 mb-2">4. 第三者への提供</h2>
           <p>
             当アプリは、法令に基づく場合を除き、ユーザーの同意なく個人情報を第三者に提供することはありません。
           </p>
@@ -43,7 +80,7 @@
 
         <section>
           <h2 class="font-bold text-slate-100 mb-2">
-            4. データの保存とセキュリティ
+            5. データの保存とセキュリティ
           </h2>
           <p>
             ユーザーデータはFirebase（Google
@@ -52,7 +89,7 @@
         </section>
 
         <section>
-          <h2 class="font-bold text-slate-100 mb-2">5. お問い合わせ</h2>
+          <h2 class="font-bold text-slate-100 mb-2">6. お問い合わせ</h2>
           <p>
             本ポリシーに関するお問い合わせは、以下のメールアドレスまでお願いいたします。
           </p>

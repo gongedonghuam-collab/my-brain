@@ -110,6 +110,8 @@ const attemptTokenRefresh = async (): Promise<string | null> => {
         newExpiry.toString(),
       );
       console.log("Token refreshed successfully.");
+      // リフレッシュ成功＝接続OK
+      isCalendarConnected.value = true;
       return newToken;
     }
   } catch (e) {
@@ -129,7 +131,10 @@ const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
 
   if (!token) {
     token = await attemptTokenRefresh();
-    if (!token) return null;
+    if (!token) {
+      isCalendarConnected.value = false;
+      return null;
+    }
   }
 
   try {
@@ -154,7 +159,6 @@ const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
         localStorage.removeItem("google_calendar_token");
         localStorage.removeItem("google_calendar_token_expiry");
         isCalendarConnected.value = false;
-        // 強制ログアウトはせず、UI側で再接続を促す
         return null;
       }
     }
@@ -182,6 +186,7 @@ const reconnectCalendar = async (isAuto: boolean = false) => {
     });
 
     const result = await signInWithPopup(auth, provider);
+    const user = result.user;
 
     const tokenResponse = (result as any)._tokenResponse;
     const credential = GoogleAuthProvider.credentialFromResult(result);
@@ -189,15 +194,6 @@ const reconnectCalendar = async (isAuto: boolean = false) => {
 
     const refreshToken =
       tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
-
-    console.log("=== 🔍 Google認証デバッグ ===");
-    console.log("AccessToken (短期鍵):", token ? "あり" : "なし");
-    console.log(
-      "RefreshToken (合鍵):",
-      refreshToken
-        ? "★あり！受け取り成功"
-        : "❌なし！(Googleが渡してくれませんでした)",
-    );
 
     if (!refreshToken) {
       alert(
@@ -208,7 +204,7 @@ const reconnectCalendar = async (isAuto: boolean = false) => {
 
     const expiresIn = tokenResponse?.expiresIn || 3600;
 
-    if (token && currentUser.value) {
+    if (token && user) {
       // 1. ローカル保存
       localStorage.setItem("google_calendar_token", token);
       const expiryTime =
@@ -225,14 +221,7 @@ const reconnectCalendar = async (isAuto: boolean = false) => {
         updatedAt: serverTimestamp(),
       };
 
-      const tokenRef = doc(
-        db,
-        "users",
-        currentUser.value.uid,
-        "system",
-        "tokens",
-      );
-      // merge: true を削除し、DBにある「古い腐った鍵」を完全に上書き
+      const tokenRef = doc(db, "users", user.uid, "system", "tokens");
       await setDoc(tokenRef, tokenData);
 
       isCalendarConnected.value = true;
@@ -548,7 +537,6 @@ export function useMyBrain() {
         sourceMemoryId: null,
         createdAt: serverTimestamp(),
       });
-      // ★追加: タスク手動追加時の通知
       await addDoc(collection(db, "notifications"), {
         userId: currentUser.value.uid,
         type: "info",
@@ -727,6 +715,12 @@ export function useMyBrain() {
           dailyUsage: 0,
           isLineLinked: false,
         };
+
+        // ★★★ ここで強制リフレッシュ ★★★
+        // LINEで再接続してリフレッシュトークンが変わっている可能性があるため、
+        // アプリ起動時（またはリロード時）に必ず最新のアクセストークンを取得しにいく
+        attemptTokenRefresh();
+
         onSnapshot(doc(db, "users", user.uid), (docSnap) => {
           const data = docSnap.data();
           if (data && currentUser.value) {
@@ -1071,8 +1065,8 @@ export function useMyBrain() {
           });
         }
       } else if (data.action === "CALENDAR_ADD") {
+        // ★修正ポイント: カレンダー登録が成功したら、その後の通知失敗で「失敗」扱いにしない
         try {
-          // 1. カレンダー登録 (メイン処理)
           await addEventToGoogleCalendar(
             data.data.title,
             data.data.start,
@@ -1080,8 +1074,7 @@ export function useMyBrain() {
             "9",
           );
           finalAnswer += `\n\n✅ 予定を登録しました: ${data.data.title}`;
-
-          // 2. 通知追加 (サブ処理: 失敗してもメインは成功扱い)
+          // 通知処理は独立して実行（失敗してもメイン処理には影響させない）
           try {
             await addDoc(collection(db, "notifications"), {
               userId: currentUser.value!.uid,
@@ -1091,15 +1084,15 @@ export function useMyBrain() {
               isRead: false,
               timestamp: serverTimestamp(),
             });
-          } catch (notifError) {
-            console.error(
-              "通知の追加に失敗しましたが、予定は登録されました。",
-              notifError,
+          } catch (notificationError) {
+            console.warn(
+              "通知の保存に失敗しました（予定は登録済み）",
+              notificationError,
             );
           }
-        } catch (calError: any) {
-          console.error("カレンダー登録失敗:", calError);
-          finalAnswer += `\n⚠️ 予定登録に失敗しました: ${calError.message}`;
+        } catch (calendarError: any) {
+          console.error("Calendar Add Error:", calendarError);
+          finalAnswer += `\n⚠️ 予定登録に失敗しました: ${calendarError.message}`;
         }
       } else if (data.action === "TASK_ADD") {
         await addManualTodo(data.data.title);
