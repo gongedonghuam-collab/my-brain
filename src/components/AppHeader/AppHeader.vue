@@ -58,7 +58,7 @@ const {
         </button>
       </div>
 
-      <NotificationBell />
+      <!-- <NotificationBell /> -->
 
       <button
         v-if="currentUser && !currentUser.isLineLinked"

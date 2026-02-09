@@ -315,6 +315,8 @@ export function useHomeView() {
       theme: "dark",
       securityLevel: "loose",
     });
+
+    // --- LINE連携コールバック処理 ---
     const code = route.query.code as string;
     if (code) {
       window.history.replaceState({}, document.title, "/app");
@@ -329,12 +331,25 @@ export function useHomeView() {
       }
     }
 
+    // --- ★追加: LINEからの「再接続」リクエスト処理 ---
+    // URLに ?reconnect=true が付いていたら、自動的に再接続処理を開始する
+    if (route.query.reconnect === "true") {
+      // クエリパラメータを削除（リロードループ防止）
+      window.history.replaceState({}, document.title, "/app");
+      // 少し待ってから実行（Auth初期化待ち）
+      setTimeout(() => {
+        // ★ true を渡して「完了したらLINEに戻る」ように指示
+        reconnectCalendar(true);
+      }, 1000);
+    }
+
     // ★修正: 明示的に初期ロードを行う（datesSetだけに頼るとタイミングによっては呼ばれないことがあるため）
     if (currentUser.value && !isInitialLoaded.value) {
       fetchAllCalendars();
     }
   });
 
+  // --- ★追加修正: モード切替時のスクロール制御 ---
   watch(inputMode, (newMode) => {
     if (newMode === "chat") {
       nextTick(() => {
@@ -351,6 +366,11 @@ export function useHomeView() {
           fetchAllCalendars();
         }
       }, 100);
+    } else {
+      // ★ここが修正点: 「memo」や「url」モードならスクロールを一番上に戻す
+      nextTick(() => {
+        if (chatContainerRef.value) chatContainerRef.value.scrollTop = 0;
+      });
     }
   });
 
@@ -398,9 +418,9 @@ export function useHomeView() {
     relatedMemories,
     isSearchingMemories,
     todos,
-    dailyReports,
     toggleTodo,
     deleteTodo,
+    dailyReports,
     isReportModalOpen,
     isCalendarConnected,
     reconnectCalendar,

@@ -27,13 +27,14 @@ const handleGoogleLogin = async () => {
     provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
 
     // ★修正ポイント: リフレッシュトークン（永続的な合鍵）を強制的に取得する設定
-    // これがないと1時間で期限切れになり、LINEで使えなくなります。
+    // 'select_account' を追加することで、Googleの自動ログインを回避し、
+    // アカウント選択画面を出すことで確実にリフレッシュトークンを発行させます。
     provider.setCustomParameters({
-      prompt: "consent", // 毎回承認画面を出して合鍵を確実に取得
+      prompt: "select_account consent",
       access_type: "offline", // 裏側（Cloud Functions）で接続するために必須
     });
 
-    // ポップアップでログイン画面を表示
+    // ポップアップでログイン画面を表示（リダイレクト方式だとiPhone等でエラーになりやすいため）
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
 
