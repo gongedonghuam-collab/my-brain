@@ -49,7 +49,6 @@ export interface User {
   photoURL?: string | null;
   isPro?: boolean; // 課金ユーザーかどうか
   dailyUsage?: number; // 本日のAI使用回数
-  maxDailyLimit?: number; // 最大AI使用回数
   lastUsageDate?: string; // 最後に使用した日付 (YYYY-MM-DD)
   stripeId?: string; // Stripeの顧客ID
   role?: string; // ロール（admin, pro, freeなど）
@@ -62,6 +61,7 @@ export interface User {
   invitedBy?: string; // 誰に招待されたか（招待コード）
   referralCount?: number; // 何人招待したか
   isReferralRedeemed?: boolean; // 招待特典を受け取り済みか
+  maxDailyLimit?: number; // ★追加: 1日の利用上限数（永続特典用）
 }
 
 /**
@@ -87,5 +87,18 @@ export interface DailyReport {
   date: string; // 日付文字列 (YYYY-MM-DD)
   content: string; // 日報の本文（AI生成）
   highlights: string[]; // 重要ポイントのリスト
+  createdAt: any;
+}
+
+/**
+ * ⏰ リマインダーのデータ構造 (新規追加)
+ * Firestoreの 'reminders' コレクションに保存されます。
+ */
+export interface Reminder {
+  id: string;
+  userId: string;
+  message: string; // 通知する内容
+  scheduledAt: string; // 通知予定日時 (ISO 8601)
+  isSent: boolean; // 送信済みフラグ
   createdAt: any;
 }

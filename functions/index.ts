@@ -1,7 +1,8 @@
 // ==============================================================================
-//  My Brain (AI秘書) バックエンドプログラム 【完全修正版 + 二重登録防止】
-//  - 修正: lineWebhook内で「先行ロック（Processing書き込み）」を導入し、リトライによる重複実行を防止
-//  - 維持: 招待コード機能、カレンダー登録、AIプロンプト、通知機能
+//  My Brain (AI秘書) バックエンドプログラム 【完全修正版 + リマインダー機能追加】
+//  - 修正: AIプロンプトに「REMINDER_ADD」を追加
+//  - 追加: checkReminders (1分ごとの通知チェック)
+//  - 維持: 既存の全機能（カレンダー、招待、通知、ロック処理など）
 // ==============================================================================
 
 import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
@@ -84,13 +85,13 @@ function formatJstTime(isoString: string) {
     });
     const weekDayJA = d.toLocaleDateString("ja-JP", { weekday: "short" });
     const weekDayMap: any = {
-      日: "Sun",
-      月: "Mon",
-      火: "Tue",
-      水: "Wed",
-      木: "Thu",
-      金: "Fri",
-      土: "Sat",
+      日: "日",
+      月: "月",
+      火: "火",
+      水: "水",
+      木: "木",
+      金: "金",
+      土: "土",
     };
     return {
       dateStr,
@@ -117,13 +118,13 @@ function formatJstTime(isoString: string) {
     weekday: "short",
   });
   const weekDayMap: any = {
-    日: "Sun",
-    月: "Mon",
-    火: "Tue",
-    水: "Wed",
-    木: "Thu",
-    金: "Fri",
-    土: "Sat",
+    日: "日",
+    月: "月",
+    火: "火",
+    水: "水",
+    木: "木",
+    金: "金",
+    土: "土",
   };
   const weekDay = weekDayMap[weekDayJA] || weekDayJA;
 
@@ -920,7 +921,7 @@ async function getValidAccessToken(uid: string): Promise<string | null> {
   return null;
 }
 
-// --- API calls ---
+// ... API calls ...
 async function getCalendarEvents(uid: string): Promise<string> {
   try {
     const token = await getValidAccessToken(uid);
@@ -1280,7 +1281,6 @@ export const lineWebhook = onRequest(
           const lineUserId = event.source.userId;
           const messageId = event.message.id;
 
-          // ★重要: 重複チェック (既存のログがあれば何もしない)
           const existingLog = await db
             .collection("chat_logs")
             .where("lineMessageId", "==", messageId)
@@ -1291,7 +1291,7 @@ export const lineWebhook = onRequest(
             return;
           }
 
-          // ★追加: 先行ロック (Processingとして登録)
+          // ★重要: 先行ロック (Processingとして登録)
           // ユーザーIDを取得してから、処理中フラグを立てたドキュメントを作成
           const usersSnap = await db
             .collection("users")
@@ -1369,7 +1369,8 @@ export const lineWebhook = onRequest(
           });
 
           // ★重要: AIへの指示
-          const routerPrompt = `あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr} (Asia/Tokyo)\n【カレンダー】(最新の確定情報)\n${cal}\n【未完了タスク】(最新の確定情報)\n${todo}\n【最近のメモ】(最新の確定情報)\n${memory}\n【会話履歴】(過去のやり取り)\n${chat}\n【入力】"${message}"\n【指示】ユーザーの意図を汲み取りJSONで出力。\n1. 「明日」「来週の水曜」などの指示語は、現在日時(${nowStr})を基準に正確な日付に変換してください。\n2. カレンダー、タスク、メモの情報が「現在」の正しい状態です。会話履歴にある予定でも、カレンダーに含まれていなければ「削除された」または「存在しない」と判断し、絶対に参照しないでください。\n出力JSON: { "action": "CALENDAR_ADD"|"CALENDAR_DELETE"|"TASK_ADD"|"TASK_DELETE"|"MEMORY_ADD"|"MEMORY_EDIT"|"MEMORY_APPEND"|"CHAT", "data": { "title", "start", "end", "location": "場所名(なければnull)", "isOutdoor": boolean(天気が影響する予定か), "content", "targetId", "instruction" }, "reply": "整形済み返信テキスト" }`;
+          // REMINDER_ADDを追加し、「リマインドして」等の依頼に対応
+          const routerPrompt = `あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr} (Asia/Tokyo)\n【カレンダー】(最新の確定情報)\n${cal}\n【未完了タスク】(最新の確定情報)\n${todo}\n【最近のメモ】(最新の確定情報)\n${memory}\n【会話履歴】(過去のやり取り)\n${chat}\n【入力】"${message}"\n【指示】ユーザーの意図を汲み取りJSONで出力。\n1. 「明日」「来週の水曜」などの指示語は、現在日時(${nowStr})を基準に正確な日付に変換してください。\n2. カレンダー、タスク、メモの情報が「現在」の正しい状態です。会話履歴にある予定でも、カレンダーに含まれていなければ「削除された」または「存在しない」と判断し、絶対に参照しないでください。\n3. 「リマインドして」「教えて」などの通知依頼は REMINDER_ADD を使用。これはカレンダー登録とは別物です。\n出力JSON: { "action": "REMINDER_ADD"|"CALENDAR_ADD"|"CALENDAR_DELETE"|"TASK_ADD"|"TASK_DELETE"|"MEMORY_ADD"|"MEMORY_EDIT"|"MEMORY_APPEND"|"CHAT", "data": { "title", "start", "end", "location": "場所名(なければnull)", "isOutdoor": boolean(天気が影響する予定か), "content", "targetId", "instruction" }, "reply": "整形済み返信テキスト" }`;
 
           const aiRes = await callGeminiJson(apiKey, routerPrompt);
           const action = aiRes.action || "CHAT";
@@ -1441,8 +1442,7 @@ export const lineWebhook = onRequest(
               if (messages.length > 0) {
                 await client.replyMessage(event.replyToken, messages);
               }
-
-              // ★完了時にロック解除（結果を更新）
+              // ★重要: ロック解除 (Update with result)
               await logRef.update({
                 answer: replyText,
                 isProcessing: false,
@@ -1457,83 +1457,82 @@ export const lineWebhook = onRequest(
                   "⚠️ 申し訳ありません。カレンダーへの登録に失敗しました。時間をおいて再度お試しください。";
               }
             }
+          } else if (action === "REMINDER_ADD") {
+            // ★リマインダー登録処理
+            const scheduleTime = new Date(data.start);
+            await db.collection("reminders").add({
+              userId: uid,
+              message: data.title || "リマインダー",
+              scheduledAt: data.start, // ISO string
+              isSent: false,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            replyText = `⏰ リマインダーをセットしました\n${data.start ? new Date(data.start).toLocaleString("ja-JP") : ""} に「${data.title}」とお知らせします。`;
           } else if (action === "CALENDAR_DELETE") {
             const del = await deleteCalendarEvent(uid, data.title || message);
             if (del) {
               replyText = `🗑️ 予定「${del}」を削除しました`;
-              await db
-                .collection("notifications")
-                .add({
-                  userId: uid,
-                  type: "cancel",
-                  title: "予定削除",
-                  message: `「${del}」を削除しました`,
-                  isRead: false,
-                  timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                });
+              await db.collection("notifications").add({
+                userId: uid,
+                type: "cancel",
+                title: "予定削除",
+                message: `「${del}」を削除しました`,
+                isRead: false,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+              });
             } else {
               replyText =
                 "⚠️ 該当する予定が見つからないか、削除に失敗しました。";
             }
           } else if (action === "TASK_ADD") {
-            await db
-              .collection("todos")
-              .add({
-                userId: uid,
-                title: data.title || message,
-                isCompleted: false,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-              });
+            await db.collection("todos").add({
+              userId: uid,
+              title: data.title || message,
+              isCompleted: false,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
             flex = createTaskFlex(data.title || message);
-            await db
-              .collection("notifications")
-              .add({
-                userId: uid,
-                type: "info",
-                title: "タスク追加",
-                message: `「${data.title || message}」を追加しました`,
-                isRead: false,
-                timestamp: admin.firestore.FieldValue.serverTimestamp(),
-              });
+            await db.collection("notifications").add({
+              userId: uid,
+              type: "info",
+              title: "タスク追加",
+              message: `「${data.title || message}」を追加しました`,
+              isRead: false,
+              timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            });
           } else if (action === "TASK_DELETE") {
             const del = await deleteTodoByTitle(uid, data.title || message);
             replyText = del
               ? `✅ タスク「${del}」完了`
               : "タスクが見つかりません";
             if (del) {
-              await db
-                .collection("notifications")
-                .add({
-                  userId: uid,
-                  type: "info",
-                  title: "タスク完了",
-                  message: `「${del}」を完了しました`,
-                  isRead: false,
-                  timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                });
-            }
-          } else if (action === "MEMORY_ADD") {
-            const ref = await db
-              .collection("memories")
-              .add({
-                userId: uid,
-                text: data.content || message,
-                aiSummary: (data.content || message).slice(0, 20),
-                tags: ["LINE"],
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-              });
-            flex = createMemoryFlex(data.content || message);
-            newMemId = ref.id;
-            await db
-              .collection("notifications")
-              .add({
+              await db.collection("notifications").add({
                 userId: uid,
                 type: "info",
-                title: "メモ保存",
-                message: "新しい記憶を保存しました",
+                title: "タスク完了",
+                message: `「${del}」を完了しました`,
                 isRead: false,
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
               });
+            }
+          } else if (action === "MEMORY_ADD") {
+            const ref = await db.collection("memories").add({
+              userId: uid,
+              text: data.content || message,
+              aiSummary: (data.content || message).slice(0, 20),
+              tags: ["LINE"],
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            flex = createMemoryFlex(data.content || message);
+            newMemId = ref.id;
+            await db.collection("notifications").add({
+              userId: uid,
+              type: "info",
+              title: "メモ保存",
+              message: "新しい記憶を保存しました",
+              isRead: false,
+              timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            });
           } else if (action === "MEMORY_EDIT" && data.targetId) {
             const docId = data.targetId.replace(/\[ID:|\]|<<|>>/g, "").trim();
             await db
@@ -1541,16 +1540,14 @@ export const lineWebhook = onRequest(
               .doc(docId)
               .update({ text: data.content });
             flex = createMemoryFlex(data.content, true);
-            await db
-              .collection("notifications")
-              .add({
-                userId: uid,
-                type: "info",
-                title: "メモ更新",
-                message: "更新しました",
-                isRead: false,
-                timestamp: admin.firestore.FieldValue.serverTimestamp(),
-              });
+            await db.collection("notifications").add({
+              userId: uid,
+              type: "info",
+              title: "メモ更新",
+              message: "更新しました",
+              isRead: false,
+              timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            });
           } else if (action === "MEMORY_APPEND" && data.targetId) {
             const docId = data.targetId.replace(/\[ID:|\]|<<|>>/g, "").trim();
             const snap = await db.collection("memories").doc(docId).get();
@@ -1561,16 +1558,14 @@ export const lineWebhook = onRequest(
               .doc(docId)
               .update({ text: newText });
             flex = createMemoryFlex(newText, true);
-            await db
-              .collection("notifications")
-              .add({
-                userId: uid,
-                type: "info",
-                title: "メモ追記",
-                message: "追記しました",
-                isRead: false,
-                timestamp: admin.firestore.FieldValue.serverTimestamp(),
-              });
+            await db.collection("notifications").add({
+              userId: uid,
+              type: "info",
+              title: "メモ追記",
+              message: "追記しました",
+              isRead: false,
+              timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            });
           }
 
           if (newMemId)
@@ -1579,11 +1574,11 @@ export const lineWebhook = onRequest(
               .doc("user_context")
               .set({ lastMemoryId: newMemId }, { merge: true });
 
-          // ★完了時にロック解除（結果を更新）
-          // 最初に作成したドキュメントを更新する
+          // ★重要: ロック解除 (Update with result)
           await logRef.update({
             answer: replyText || "（再接続が必要です）",
-            isProcessing: false, // 処理完了
+            mermaidCode: data.mermaid || null,
+            isProcessing: false,
           });
 
           const messages: line.Message[] = [];
@@ -1735,6 +1730,48 @@ export const sendMorningBriefing = onSchedule(
   },
 );
 
+// ★追加: 1分ごとにリマインダーをチェックする関数
+export const checkReminders = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    secrets: [lineBotToken],
+  },
+  async (event) => {
+    const now = new Date().toISOString();
+    // 予定時刻を過ぎていて、まだ送信されていないリマインダーを取得
+    const snapshot = await db
+      .collection("reminders")
+      .where("isSent", "==", false)
+      .where("scheduledAt", "<=", now)
+      .get();
+
+    if (snapshot.empty) return;
+
+    const client = new line.Client({
+      channelAccessToken: lineBotToken.value(),
+    });
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      const userId = data.userId;
+
+      // ユーザー情報を取得してLINE IDを得る
+      const userDoc = await db.collection("users").doc(userId).get();
+      const lineUserId = userDoc.data()?.lineUserId;
+
+      if (lineUserId) {
+        await client.pushMessage(lineUserId, {
+          type: "text",
+          text: `⏰ リマインダー: ${data.message}`,
+        });
+
+        // 送信済みに更新
+        await doc.ref.update({ isSent: true });
+      }
+    }
+  },
+);
+
 // ★追加: 招待コード適用API (永続特典版)
 export const redeemInviteCode = onCall({ cors: true }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
@@ -1794,6 +1831,6 @@ export const redeemInviteCode = onCall({ cors: true }, async (request) => {
 
   return {
     success: true,
-    message: "招待コードを適用しました！1日の利用枠が永久に増えました。",
+    message: "招待コードを適用しました！AI利用枠が増えました。",
   };
 });
