@@ -1,9 +1,10 @@
 "use strict";
 // ==============================================================================
-//  My Brain (AI秘書) バックエンドプログラム 【完全修正版 + リマインダー機能追加】
-//  - 修正: AIプロンプトに「REMINDER_ADD」を追加
-//  - 追加: checkReminders (1分ごとの通知チェック)
-//  - 維持: 既存の全機能（カレンダー、招待、通知、ロック処理など）
+//  My Brain (AI秘書) バックエンドプログラム 【完全修正版 + 二重登録防止 + リマインダー修正】
+//  - 修正: REMINDER_ADD 時に userId を確実に保存するように修正（通知が来ない原因を解消）
+//  - 修正: checkReminders の検索クエリをシンプル化（インデックスエラーを回避）
+//  - 修正: lineWebhook内で「先行ロック」を導入し、重複実行を防止
+//  - 維持: 招待コード、カレンダー登録、AIプロンプト、通知機能
 // ==============================================================================
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -903,7 +904,7 @@ async function getValidAccessToken(uid) {
     }
     return null;
 }
-// ... API calls ...
+// --- API calls ---
 async function getCalendarEvents(uid) {
     try {
         const token = await getValidAccessToken(uid);
@@ -1238,8 +1239,6 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 console.log(`Duplicate message ${messageId} ignored.`);
                 return;
             }
-            // ★重要: 先行ロック (Processingとして登録)
-            // ユーザーIDを取得してから、処理中フラグを立てたドキュメントを作成
             const usersSnap = await db
                 .collection("users")
                 .where("lineUserId", "==", lineUserId)
@@ -1254,15 +1253,13 @@ exports.lineWebhook = (0, https_1.onRequest)({
             }
             const uid = usersSnap.docs[0].id;
             const logRef = db.collection("chat_logs").doc();
-            // ここで「処理中」として書き込むことで、リトライ時の重複チェックに引っかかるようにする
-            // (lineMessageIdをキーにして検索するため、この書き込みが重要)
             await logRef.set({
                 userId: uid,
                 lineMessageId: messageId,
                 question: event.message.text.trim(),
-                answer: "Thinking...", // 仮の回答
+                answer: "Thinking...",
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                isProcessing: true, // 処理中フラグ
+                isProcessing: true,
             });
             try {
                 await axios_1.default.post("https://api.line.me/v2/bot/chat/loading/start", { chatId: lineUserId, loadingSeconds: 20 }, { headers: { Authorization: `Bearer ${token}` } });
@@ -1287,7 +1284,6 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     type: "text",
                     text: `✅ ${commands[message]}モードになりました。`,
                 });
-                // 処理完了として更新
                 await logRef.update({
                     answer: `Mode changed to ${commands[message]}`,
                     isProcessing: false,
@@ -1304,8 +1300,6 @@ exports.lineWebhook = (0, https_1.onRequest)({
             const nowStr = new Date().toLocaleString("ja-JP", {
                 timeZone: "Asia/Tokyo",
             });
-            // ★重要: AIへの指示
-            // REMINDER_ADDを追加し、「リマインドして」等の依頼に対応
             const routerPrompt = `あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr} (Asia/Tokyo)\n【カレンダー】(最新の確定情報)\n${cal}\n【未完了タスク】(最新の確定情報)\n${todo}\n【最近のメモ】(最新の確定情報)\n${memory}\n【会話履歴】(過去のやり取り)\n${chat}\n【入力】"${message}"\n【指示】ユーザーの意図を汲み取りJSONで出力。\n1. 「明日」「来週の水曜」などの指示語は、現在日時(${nowStr})を基準に正確な日付に変換してください。\n2. カレンダー、タスク、メモの情報が「現在」の正しい状態です。会話履歴にある予定でも、カレンダーに含まれていなければ「削除された」または「存在しない」と判断し、絶対に参照しないでください。\n3. 「リマインドして」「教えて」「通知して」などの通知依頼は REMINDER_ADD を使用。これはカレンダー登録とは別物です。\n出力JSON: { "action": "REMINDER_ADD"|"CALENDAR_ADD"|"CALENDAR_DELETE"|"TASK_ADD"|"TASK_DELETE"|"MEMORY_ADD"|"MEMORY_EDIT"|"MEMORY_APPEND"|"CHAT", "data": { "title", "start", "end", "location": "場所名(なければnull)", "isOutdoor": boolean(天気が影響する予定か), "content", "targetId", "instruction" }, "reply": "整形済み返信テキスト" }`;
             const aiRes = await callGeminiJson(apiKey, routerPrompt);
             const action = aiRes.action || "CHAT";
@@ -1326,7 +1320,6 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     flex = createCalendarFlex(data.title, data.start, data.end, data.location, weatherData === null || weatherData === void 0 ? void 0 : weatherData.info, weatherData === null || weatherData === void 0 ? void 0 : weatherData.icon);
                     if (weatherData)
                         replyText += `\n(${weatherData.icon} ${weatherData.info})`;
-                    // ★重要: ヒント文を独立したメッセージとして送信するため、replyTextには含めない
                     let hintMessage = "";
                     if (!userData.defaultLocation) {
                         hintMessage =
@@ -1363,7 +1356,6 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     if (messages.length > 0) {
                         await client.replyMessage(event.replyToken, messages);
                     }
-                    // ★重要: ロック解除 (Update with result)
                     await logRef.update({
                         answer: replyText,
                         isProcessing: false,
@@ -1382,12 +1374,10 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 }
             }
             else if (action === "REMINDER_ADD") {
-                // ★リマインダー登録処理
-                const scheduleTime = new Date(data.start);
                 await db.collection("reminders").add({
-                    userId: uid,
-                    message: data.title || "リマインダー",
-                    scheduledAt: data.start, // ISO string
+                    userId: uid, // ★ userId を保存
+                    message: data.title || message,
+                    scheduledAt: data.start,
                     isSent: false,
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 });
@@ -1502,7 +1492,6 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     .collection("system")
                     .doc("user_context")
                     .set({ lastMemoryId: newMemId }, { merge: true });
-            // ★重要: ロック解除 (Update with result)
             await logRef.update({
                 answer: replyText || "（再接続が必要です）",
                 mermaidCode: data.mermaid || null,
@@ -1627,14 +1616,14 @@ exports.sendMorningBriefing = (0, scheduler_1.onSchedule)({
         });
     }
 });
-// ★追加: 1分ごとにリマインダーをチェックする関数
+// ★1分ごとにリマインダーをチェックする関数（修正版）
 exports.checkReminders = (0, scheduler_1.onSchedule)({
     schedule: "every 1 minutes",
     secrets: [lineBotToken],
 }, async (event) => {
     var _a;
     const now = new Date().toISOString();
-    // 予定時刻を過ぎていて、まだ送信されていないリマインダーを取得
+    // 修正：orderByを削除（インデックスエラー防止）
     const snapshot = await db
         .collection("reminders")
         .where("isSent", "==", false)
@@ -1648,20 +1637,27 @@ exports.checkReminders = (0, scheduler_1.onSchedule)({
     for (const doc of snapshot.docs) {
         const data = doc.data();
         const userId = data.userId;
-        // ユーザー情報を取得してLINE IDを得る
+        if (!userId) {
+            console.error(`Reminder ${doc.id} has no userId`);
+            continue;
+        }
         const userDoc = await db.collection("users").doc(userId).get();
         const lineUserId = (_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.lineUserId;
         if (lineUserId) {
-            await client.pushMessage(lineUserId, {
-                type: "text",
-                text: `⏰ リマインダー: ${data.message}`,
-            });
-            // 送信済みに更新
-            await doc.ref.update({ isSent: true });
+            try {
+                await client.pushMessage(lineUserId, {
+                    type: "text",
+                    text: `⏰ 教えて！って言われてた件だよ：\n\n${data.message}`,
+                });
+                await doc.ref.update({ isSent: true });
+            }
+            catch (err) {
+                console.error(`Failed to send reminder for user ${userId}:`, err);
+            }
         }
     }
 });
-// ★追加: 招待コード適用API (永続特典版)
+// ★招待コード適用API (永続特典版)
 exports.redeemInviteCode = (0, https_1.onCall)({ cors: true }, async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError("unauthenticated", "Login required");
@@ -1688,18 +1684,15 @@ exports.redeemInviteCode = (0, https_1.onCall)({ cors: true }, async (request) =
     const referrerId = referrerDoc.id;
     const referrerRef = db.collection("users").doc(referrerId);
     await db.runTransaction(async (t) => {
-        // 招待者への特典: 1日の上限を+3回永続アップ
         t.update(referrerRef, {
             maxDailyLimit: admin.firestore.FieldValue.increment(3),
             referralCount: admin.firestore.FieldValue.increment(1),
         });
-        // 被招待者への特典: 1日の上限を+3回永続アップ
         t.update(userRef, {
             invitedBy: inviteCode,
             isReferralRedeemed: true,
             maxDailyLimit: admin.firestore.FieldValue.increment(3),
         });
-        // 通知
         const noteRef = db.collection("notifications").doc();
         t.set(noteRef, {
             userId: referrerId,

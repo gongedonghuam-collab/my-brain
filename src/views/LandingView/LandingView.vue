@@ -37,7 +37,9 @@ onMounted(() => {
 
 <template>
   <div class="lp-container" ref="containerRef">
-    <div class="slides-container">
+    <div class="nav-hint">Scroll or Use Arrow Keys ↓</div>
+
+    <div class="slides-container" id="container">
       <section id="s1">
         <div class="bg-blob primary-blob"></div>
         <div class="logo-wrapper js-observe fade-in-up">
@@ -53,18 +55,18 @@ onMounted(() => {
           LINE-BASED AI ASSISTANT
         </p>
         <h1 class="js-observe fade-in-up delay-200">
-          LINEに送るだけ。<br />勝手にスケジュール管理。
+          LINEがあなたの<br />「第2の脳」になる。
         </h1>
         <p class="description js-observe fade-in-up delay-300">
-          カレンダー入力、タスク管理、メモの整理。<br />
-          面倒なことは全部、LINEに投げ捨てるだけ。<br />
+          カレンダー登録、<strong>リマインダー</strong>、タスク管理、メモの整理。<br />
+          面倒なことは全て、LINEに投げ捨てるだけ。<br />
           ズボラなあなたのための、最強のAI秘書です。
         </p>
         <button
           @click="goToLogin"
           class="btn-primary js-observe fade-in-up delay-400"
         >
-          LINEで秘書を雇う (無料)
+          今すぐ秘書を雇う (無料)
         </button>
 
         <div class="mock-wrapper js-observe fade-in-up delay-500">
@@ -84,6 +86,12 @@ onMounted(() => {
                     <div class="event-detail">📍 渋谷</div>
                     <div class="event-weather">☔ 雨予報 (60%)</div>
                   </div>
+                </div>
+
+                <div class="chat-bubble chat-user">3分後にカップ麺教えて</div>
+                <div class="chat-bubble chat-ai">
+                  ⏰ リマインダーをセットしました<br />
+                  3分後に「カップ麺」とお知らせします。
                 </div>
               </div>
 
@@ -156,6 +164,15 @@ onMounted(() => {
             </div>
           </div>
           <div class="feature-item">
+            <div class="f-icon-box">⏰</div>
+            <div class="f-text">
+              <h3>リマインドする</h3>
+              <p>
+                「3分後に教えて」「13時に電話」など、カレンダーに残すまでもない用件もサクッと通知。
+              </p>
+            </div>
+          </div>
+          <div class="feature-item">
             <div class="f-icon-box">✅</div>
             <div class="f-text">
               <h3>タスク管理</h3>
@@ -169,7 +186,7 @@ onMounted(() => {
             <div class="f-text">
               <h3>第2の脳（メモ）</h3>
               <p>
-                「パスワードは〇〇」「いいアイデア出た」など、何でも放り込んでOK。AIが必要な時に思い出させてくれます。
+                「パスワードは〇〇」など、何でも放り込んでOK。AIが必要な時に思い出させてくれます。
               </p>
             </div>
           </div>
@@ -183,19 +200,27 @@ onMounted(() => {
         </h1>
         <div class="grid-container js-observe fade-in-up delay-200">
           <div class="card-box highlight-box">
-            <span class="icon">🌤️</span>
-            <h3>天気を先読み</h3>
+            <span class="icon">⏰</span>
+            <h3>1秒リマインダー</h3>
             <p>
-              「その日は雨予報です☔」<br />
-              予定を入れる瞬間に天気を教えてくれるので、傘を忘れません。
+              「カップ麺3分」「21時に薬」など、LINEに送るだけ。<br />
+              指定時刻に通知が届くので、リマインダーアプリとしても優秀です。
             </p>
           </div>
           <div class="card-box">
-            <span class="icon">📢</span>
-            <h3>朝のブリーフィング</h3>
+            <span class="icon">📅</span>
+            <h3>自動スケジュール登録</h3>
             <p>
-              毎朝7時、今日の予定とタスク、天気をまとめてLINEでお知らせ。<br />
-              最高の1日のスタートをサポートします。
+              「明日」「来週」などの言葉もAIが理解。<br />
+              Googleカレンダーに即座に反映され、ダブルブッキングも防げます。
+            </p>
+          </div>
+          <div class="card-box">
+            <span class="icon">☔</span>
+            <h3>天気付きリマインド</h3>
+            <p>
+              予定の直前と、その日の朝にLINEでお知らせ。<br />
+              現地の天気も教えてくれるので傘を忘れません。
             </p>
           </div>
           <div class="card-box">
@@ -205,6 +230,56 @@ onMounted(() => {
               「先週の会議、何決まったっけ？」<br />
               キーワードを覚えていなくても、AIが文脈を理解して過去のメモから回答します。
             </p>
+          </div>
+          <div class="card-box">
+            <span class="icon">📷</span>
+            <h3>画像も読めます</h3>
+            <p>
+              書類や手書きメモを写真で送るだけ。<br />
+              AIが内容をテキスト化して保存・整理します。
+            </p>
+          </div>
+          <div class="card-box">
+            <span class="icon">🌐</span>
+            <h3>Web記事要約</h3>
+            <p>
+              「後で読む」記事のURLを送れば、3行で要約して保存。知識のインプットが加速します。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="how-to js-observe fade-in-up">
+        <h2 class="section-subtitle">HOW TO USE</h2>
+        <h1 class="section-title">使い方は、驚くほど簡単。</h1>
+
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">01</div>
+            <div class="step-content">
+              <h3>アカウント作成 & LINE連携</h3>
+              <p>
+                Googleアカウントでログインし、あなたのLINEと連携させます。所要時間は約30秒。
+              </p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">02</div>
+            <div class="step-content">
+              <h3>LINEに話しかける</h3>
+              <p>
+                予定、タスク、リマインド、メモ、愚痴、なんでも送ってください。AIが自動で分類して処理します。
+              </p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">03</div>
+            <div class="step-content">
+              <h3>必要な時に、AIがサポート</h3>
+              <p>
+                リマインド通知を受け取ったり、「〇〇って何だっけ？」と質問して情報を引き出せます。
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -264,6 +339,8 @@ onMounted(() => {
   --light: #f8fafc;
   --accent: #f59e0b;
   --text-gray: #94a3b8;
+  --glass: rgba(255, 255, 255, 0.05);
+  --border: rgba(255, 255, 255, 0.1);
 
   font-family: "Poppins", "Noto Sans JP", sans-serif;
   background-color: var(--darker);
@@ -273,32 +350,28 @@ onMounted(() => {
   min-height: 100vh;
 }
 
-/* --- スクロール設定 (修正) --- */
+/* --- スクロール設定 --- */
 .slides-container {
   width: 100%;
-  /* height: 100vh;  <- 削除 */
-  /* overflow-y: scroll; <- 削除 */
-  /* scroll-snap-type: y mandatory; <- 削除: 自然なスクロールに変更 */
   scroll-behavior: smooth;
 }
 
 section {
   width: 100%;
   min-height: 100vh; /* 最低でも画面いっぱいの高さ */
-  /* scroll-snap-align: start; <- 削除 */
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 6rem 1rem; /* 上下のパディングを少し増やす */
+  padding: 6rem 1rem; /* 上下のパディング */
   box-sizing: border-box;
   overflow: hidden;
 }
 
 /* --- テキストスタイル --- */
 h1 {
-  font-size: clamp(2.5rem, 7vw, 4rem); /* 少し大きく */
+  font-size: clamp(2.5rem, 7vw, 4rem);
   font-weight: 900;
   line-height: 1.2;
   margin-bottom: 1.5rem;
@@ -319,6 +392,26 @@ h2 {
   margin-bottom: 1rem;
   z-index: 1;
   font-weight: bold;
+}
+
+.section-title {
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 900;
+  margin-bottom: 1rem;
+  text-align: center;
+  background: linear-gradient(135deg, #fff 0%, var(--primary-light) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.section-subtitle {
+  text-align: center;
+  color: var(--primary);
+  font-weight: bold;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  font-size: 1rem;
 }
 
 .subtitle {
@@ -362,7 +455,7 @@ h2 {
 .bg-blob {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px); /* ぼかしを強く */
+  filter: blur(100px);
   opacity: 0.15;
   z-index: 0;
   width: 80vw;
@@ -382,7 +475,7 @@ h2 {
   background: #ec4899;
 }
 
-/* --- スマホモック (調整) --- */
+/* --- スマホモック --- */
 .mock-wrapper {
   margin-top: 30px;
   position: relative;
@@ -390,12 +483,12 @@ h2 {
   width: 100%;
   display: flex;
   justify-content: center;
-  perspective: 1000px; /* 奥行き感を追加 */
+  perspective: 1000px;
 }
 
 .phone {
-  width: 300px; /* 少し幅広に */
-  height: 600px; /* 少し縦長に */
+  width: 300px;
+  height: 600px;
   background: #1e293b;
   border-radius: 44px;
   border: 10px solid #334155;
@@ -404,11 +497,11 @@ h2 {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transform: rotateX(5deg); /* 少し傾ける */
+  transform: rotateX(5deg);
   transition: transform 0.3s ease;
 }
 .phone:hover {
-  transform: rotateX(0deg) scale(1.02); /* ホバーで起き上がる */
+  transform: rotateX(0deg) scale(1.02);
 }
 
 @media (max-width: 400px) {
@@ -459,7 +552,7 @@ h2 {
   overflow-y: auto;
 }
 
-/* --- チャットバブル & イベントカード (調整) --- */
+/* --- チャットバブル & イベントカード --- */
 .chat-bubble {
   padding: 12px 16px;
   border-radius: 20px;
@@ -474,7 +567,7 @@ h2 {
   color: white;
   align-self: flex-end;
   border-top-right-radius: 4px;
-  margin-left: auto; /* 右寄せ */
+  margin-left: auto;
 }
 .chat-ai {
   background-color: #1e293b;
@@ -486,7 +579,7 @@ h2 {
 .event-card {
   margin-top: 10px;
   padding: 12px;
-  background-color: #2d3748; /* 少し明るい背景 */
+  background-color: #2d3748;
   border-radius: 12px;
   border: 1px solid #4a5568;
 }
@@ -509,12 +602,12 @@ h2 {
 }
 .event-weather {
   font-size: 0.75rem;
-  color: #63b3ed; /* 青系の色 */
+  color: #63b3ed;
   margin-top: 6px;
   font-weight: bold;
 }
 
-/* --- カレンダーウィジェット (調整) --- */
+/* --- カレンダーウィジェット --- */
 .calendar-widget {
   margin-top: auto;
   background: rgba(255, 255, 255, 0.95);
@@ -523,8 +616,8 @@ h2 {
   border-top-right-radius: 24px;
   color: #333;
   box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.1);
-  transform: translateY(100%); /* 初期状態は隠す */
-  animation: slideUp 0.5s ease-out 0.8s forwards; /* 遅れて表示 */
+  transform: translateY(100%);
+  animation: slideUp 0.5s ease-out 0.8s forwards;
 }
 @keyframes slideUp {
   to {
@@ -570,10 +663,10 @@ h2 {
 /* --- グリッドレイアウト --- */
 .grid-container {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); /* 少し幅広に */
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 25px;
   width: 100%;
-  max-width: 1100px; /* 全幅を広げる */
+  max-width: 1100px;
   margin-top: 50px;
   z-index: 2;
   padding: 0 1rem;
@@ -637,7 +730,7 @@ h2 {
 }
 .feature-item {
   display: flex;
-  align-items: center; /* 中央揃え */
+  align-items: center;
   gap: 25px;
   background: rgba(255, 255, 255, 0.02);
   padding: 25px;
@@ -665,7 +758,7 @@ h2 {
 }
 .f-text h3 {
   font-size: 1.1rem;
-  color: #fff; /* 白に変更 */
+  color: #fff;
   margin-bottom: 8px;
   font-weight: bold;
 }
@@ -676,13 +769,64 @@ h2 {
   line-height: 1.7;
 }
 
+/* --- 使い方 (How to) --- */
+.how-to {
+  background: rgba(0, 0, 0, 0.2);
+  width: 100%;
+}
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  max-width: 800px;
+  margin: 50px auto 0;
+  width: 100%;
+}
+.step {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 30px;
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  transition: transform 0.3s ease;
+}
+.step:hover {
+  transform: translateX(10px);
+  background: rgba(255, 255, 255, 0.05);
+}
+.step-num {
+  font-size: 3rem;
+  font-weight: 900;
+  color: var(--primary);
+  opacity: 0.8;
+  min-width: 60px;
+  text-align: center;
+  line-height: 1;
+}
+.step-content h3 {
+  font-size: 1.2rem;
+  margin-bottom: 8px;
+  color: #fff;
+  font-weight: bold;
+}
+.step-content p {
+  font-size: 0.95rem;
+  color: var(--text-gray);
+  line-height: 1.6;
+}
+@media (max-width: 600px) {
+  .step {
+    flex-direction: column;
+    text-align: center;
+    gap: 15px;
+  }
+}
+
 /* --- ボタン --- */
 .btn-primary {
-  background: linear-gradient(
-    135deg,
-    var(--primary) 0%,
-    #4f46e5 100%
-  ); /* グラデーション */
+  background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
   color: white;
   font-weight: bold;
   padding: 1.1rem 3.5rem;
@@ -756,7 +900,6 @@ h2 {
 }
 
 /* --- アニメーション & Footer (修正) --- */
-/* js-observe クラスがついている要素は初期状態を非表示に */
 .js-observe {
   opacity: 0;
   transform: translateY(30px);
@@ -764,13 +907,10 @@ h2 {
     opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1),
     transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
-/* is-visible クラスがつくと表示される */
 .js-observe.is-visible {
   opacity: 1;
   transform: translateY(0);
 }
-
-/* 既存の @keyframes fadeInUp は不要なので削除 */
 
 .delay-100 {
   transition-delay: 0.1s;
