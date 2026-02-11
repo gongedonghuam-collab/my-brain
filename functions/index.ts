@@ -1,7 +1,8 @@
 // ==============================================================================
-//  My Brain (AI秘書) バックエンドプログラム 【完全修正版】
+//  My Brain (AI秘書) バックエンドプログラム 【完全修正版 + 永続特典対応】
 //  - 修正: カレンダー登録通知の日付を「2/12 (Thu)」の横1行表示に変更
 //  - 修正: AIプロンプトを強化 (こそあど言葉対応、データ優先指示)
+//  - 追加: 招待コード適用機能 (redeemInviteCode) -> 永続枠増加に対応
 //  - 維持: 天気予報の横並びレイアウト、ヒント文の独立送信
 // ==============================================================================
 
@@ -85,13 +86,13 @@ function formatJstTime(isoString: string) {
     });
     const weekDayJA = d.toLocaleDateString("ja-JP", { weekday: "short" });
     const weekDayMap: any = {
-      日: "Sun",
-      月: "Mon",
-      火: "Tue",
-      水: "Wed",
-      木: "Thu",
-      金: "Fri",
-      土: "Sat",
+      日: "日",
+      月: "月",
+      火: "火",
+      水: "水",
+      木: "木",
+      金: "金",
+      土: "土",
     };
     return {
       dateStr,
@@ -406,7 +407,6 @@ function createChatFlex(text: string): line.FlexBubble {
   };
 }
 
-// ★修正: カレンダー登録完了時のカードレイアウト
 function createCalendarFlex(
   title: string,
   start: string,
@@ -419,10 +419,9 @@ function createCalendarFlex(
   const displayTime = isAllDay ? "終日" : `${timeStr} ~`;
 
   const bodyContents: line.FlexComponent[] = [
-    // ★修正ポイント: 日付と曜日を横一列に統合
     {
       type: "text",
-      text: `${dateStr} (${weekDay})`, // "2/12 (Thu)" の形式
+      text: `${dateStr} (${weekDay})`,
       size: "xxl",
       weight: "bold",
       color: COLORS.text,
@@ -768,17 +767,13 @@ function extractJson(text: string): any {
 function formatIsoDate(dateStr: string): string {
   if (!dateStr) return "";
   let cleaned = dateStr.trim();
-
   if (cleaned.includes("+") || cleaned.endsWith("Z")) return cleaned;
-
   cleaned = cleaned.replace(" ", "T");
-
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(cleaned))
     return `${cleaned}:00+09:00`;
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(cleaned))
     return `${cleaned}+09:00`;
   if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) return cleaned;
-
   return cleaned;
 }
 
@@ -884,10 +879,6 @@ async function refreshAccessToken(refreshToken: string) {
     });
     return res.data;
   } catch (e: any) {
-    console.error(
-      "トークンリフレッシュ失敗:",
-      e.response ? e.response.data : e.message,
-    );
     return null;
   }
 }
@@ -931,7 +922,7 @@ async function getValidAccessToken(uid: string): Promise<string | null> {
   return null;
 }
 
-// 取得関数
+// --- API calls ---
 async function getCalendarEvents(uid: string): Promise<string> {
   try {
     const token = await getValidAccessToken(uid);
@@ -973,11 +964,9 @@ async function addCalendarEvent(
   try {
     const token = await getValidAccessToken(uid);
     if (!token) return { success: false, isAuthError: true };
-
     let startBody: any = {};
     let endBody: any = {};
     const formattedStart = formatIsoDate(eventData.start);
-
     if (formattedStart.includes("T")) {
       startBody = { dateTime: formattedStart };
       if (eventData.end) {
@@ -991,7 +980,6 @@ async function addCalendarEvent(
       startBody = { date: formattedStart };
       endBody = { date: formattedStart };
     }
-
     await axios.post(
       "https://www.googleapis.com/calendar/v3/calendars/primary/events",
       {
@@ -1002,25 +990,17 @@ async function addCalendarEvent(
       },
       { headers: { Authorization: `Bearer ${token}` } },
     );
-
-    // ★重要: カレンダー連携成功時にフラグを更新
     await db
       .collection("users")
       .doc(uid)
       .set({ isGoogleLinked: true }, { merge: true });
-
     return { success: true, isAuthError: false };
   } catch (e: any) {
-    console.error(
-      "カレンダー登録エラー:",
-      e.response?.data?.error || e.message,
-    );
     const isAuth = e.response && e.response.status === 401;
     return { success: false, isAuthError: isAuth };
   }
 }
 
-// WeatherAPI.com (日本語化済み)
 async function checkWeather(
   location: string,
   dateStr: string,
@@ -1031,16 +1011,12 @@ async function checkWeather(
     const query = location || "Tokyo";
     const targetDate = new Date(dateStr);
     const url = `http://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${encodeURIComponent(query)}&days=3&lang=ja`;
-
     const res = await axios.get(url);
     const forecastDays = res.data.forecast?.forecastday || [];
-
     const targetYMD = targetDate.toISOString().split("T")[0];
     const targetForecast = forecastDays.find((d: any) => d.date === targetYMD);
     const forecast = targetForecast || forecastDays[0];
-
     if (!forecast) return null;
-
     let hourCondition = forecast.day;
     if (dateStr.includes("T")) {
       const hour = targetDate.getHours();
@@ -1049,7 +1025,6 @@ async function checkWeather(
       );
       if (hourData) hourCondition = hourData;
     }
-
     const conditionText = hourCondition.condition?.text || "晴れ";
     const conditionCode = hourCondition.condition?.code || 1000;
     const precip =
@@ -1057,18 +1032,15 @@ async function checkWeather(
         ? hourCondition.chance_of_rain
         : hourCondition.daily_chance_of_rain || 0;
     const icon = getWeatherEmoji(conditionCode);
-
     return {
       info: `予報は「${conditionText}」(降水確率${precip}%) です。`,
       icon: icon,
     };
   } catch (e: any) {
-    console.error("WeatherAPI Error:", e.message);
     return null;
   }
 }
 
-// 削除関数
 async function deleteCalendarEvent(
   uid: string,
   query: string,
@@ -1095,7 +1067,6 @@ async function deleteCalendarEvent(
     return null;
   }
 }
-
 async function deleteTodoByTitle(
   uid: string,
   title: string,
@@ -1186,6 +1157,7 @@ async function getChatHistory(uid: string): Promise<string> {
   }
 }
 
+// --- Exports ---
 export const linkLineAccount = onCall(
   { secrets: [lineLoginChannelId, lineLoginChannelSecret], cors: true },
   async (request) => {
@@ -1277,7 +1249,6 @@ export const lineWebhook = onRequest(
     try {
       await Promise.all(
         req.body.events.map(async (event: any) => {
-          // --- 位置情報受信処理 ---
           if (event.type === "message" && event.message.type === "location") {
             const userId = event.source.userId;
             const usersSnap = await db
@@ -1301,7 +1272,6 @@ export const lineWebhook = onRequest(
           }
 
           if (event.type === "follow") {
-            // ★改善: 初回メッセージで位置情報のメリットを案内
             await client.replyMessage(event.replyToken, {
               type: "text",
               text: "友だち登録ありがとうございます！🎉\n\nこのアカウントはあなたの「第2の脳」です。\nアプリと連携して、AI秘書機能を活用してください✨\n\n📍 便利な機能:\nトーク画面の「＋」メニューから位置情報を送ると、あなたの街の天気を優先的に表示できるようになります！\n\n👇 アプリ画面に戻って連携を完了させてね！",
@@ -1347,8 +1317,6 @@ export const lineWebhook = onRequest(
           }
           const uid = usersSnap.docs[0].id;
           const userRef = db.collection("users").doc(uid);
-
-          // ユーザーのデフォルト位置情報を取得
           const userData = usersSnap.docs[0].data();
           const defaultLocation = userData.defaultLocation || "Tokyo";
 
@@ -1379,9 +1347,7 @@ export const lineWebhook = onRequest(
             timeZone: "Asia/Tokyo",
           });
 
-          // ★重要: AIへの指示（プロンプト）
-          // 削除済みのデータが会話履歴に残っていても、最新のカレンダー/タスクデータを優先させるよう指示
-          // 「明日」「来週」などのこそあど言葉を現在日時から計算するように指示
+          // ★重要: AIへの指示
           const routerPrompt = `あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr} (Asia/Tokyo)\n【カレンダー】(最新の確定情報)\n${cal}\n【未完了タスク】(最新の確定情報)\n${todo}\n【最近のメモ】(最新の確定情報)\n${memory}\n【会話履歴】(過去のやり取り)\n${chat}\n【入力】"${message}"\n【指示】ユーザーの意図を汲み取りJSONで出力。\n1. 「明日」「来週の水曜」などの指示語は、現在日時(${nowStr})を基準に正確な日付に変換してください。\n2. カレンダー、タスク、メモの情報が「現在」の正しい状態です。会話履歴にある予定でも、カレンダーに含まれていなければ「削除された」または「存在しない」と判断し、絶対に参照しないでください。\n出力JSON: { "action": "CALENDAR_ADD"|"CALENDAR_DELETE"|"TASK_ADD"|"TASK_DELETE"|"MEMORY_ADD"|"MEMORY_EDIT"|"MEMORY_APPEND"|"CHAT", "data": { "title", "start", "end", "location": "場所名(なければnull)", "isOutdoor": boolean(天気が影響する予定か), "content", "targetId", "instruction" }, "reply": "整形済み返信テキスト" }`;
 
           const aiRes = await callGeminiJson(apiKey, routerPrompt);
@@ -1404,7 +1370,6 @@ export const lineWebhook = onRequest(
                 searchLocation,
                 data.start,
               );
-
               flex = createCalendarFlex(
                 data.title,
                 data.start,
@@ -1416,6 +1381,13 @@ export const lineWebhook = onRequest(
               if (weatherData)
                 replyText += `\n(${weatherData.icon} ${weatherData.info})`;
 
+              // ★重要: ヒント文を独立したメッセージとして送信するため、replyTextには含めない
+              let hintMessage = "";
+              if (!userData.defaultLocation) {
+                hintMessage =
+                  "💡 ヒント: 位置情報を送ると、ご自宅周辺などの天気を表示できるようになります！";
+              }
+
               await db.collection("notifications").add({
                 userId: uid,
                 type: "reservation",
@@ -1425,7 +1397,6 @@ export const lineWebhook = onRequest(
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
               });
 
-              // メッセージ送信ロジック（ヒント対応）
               const messages: line.Message[] = [];
               if (flex) {
                 messages.push({
@@ -1442,12 +1413,8 @@ export const lineWebhook = onRequest(
                   });
                 }
               }
-              // ヒント文を追加
-              if (!userData.defaultLocation) {
-                messages.push({
-                  type: "text",
-                  text: "💡 ヒント: トーク画面から「位置情報」を送ると、ご自宅周辺などの天気を表示できるようになります！",
-                });
+              if (hintMessage) {
+                messages.push({ type: "text", text: hintMessage });
               }
 
               if (messages.length > 0) {
@@ -1578,7 +1545,6 @@ export const lineWebhook = onRequest(
           });
 
           const messages: line.Message[] = [];
-
           if (flex) {
             messages.push({
               type: "flex",
@@ -1597,8 +1563,6 @@ export const lineWebhook = onRequest(
 
           if (messages.length > 0) {
             await client.replyMessage(event.replyToken, messages);
-          } else {
-            console.warn("Empty message avoided.");
           }
         }),
       );
@@ -1630,18 +1594,14 @@ export const checkUpcomingMeetings = onSchedule(
 
     for (const doc of users.docs) {
       const uid = doc.id;
-      const lineUserId = doc.data().lineUserId;
       const token = await getValidAccessToken(uid);
       if (!token) continue;
-
       const userData = doc.data();
       const defaultLocation = userData.defaultLocation || "Tokyo";
 
       const now = new Date();
-      // 1. 直前 (29分後〜45分後) -> 16分幅に拡大して漏れ防止
       const soonMin = new Date(now.getTime() + 29 * 60000).toISOString();
       const soonMax = new Date(now.getTime() + 45 * 60000).toISOString();
-      // 2. 前日 (23時間59分後〜24時間15分後) -> 16分幅に拡大
       const dayMin = new Date(
         now.getTime() + (24 * 60 - 1) * 60000,
       ).toISOString();
@@ -1712,7 +1672,6 @@ export const sendMorningBriefing = onSchedule(
     const client = new line.Client({
       channelAccessToken: lineBotToken.value(),
     });
-
     const todayStr = new Date().toLocaleDateString("ja-JP", {
       timeZone: "Asia/Tokyo",
     });
@@ -1725,7 +1684,6 @@ export const sendMorningBriefing = onSchedule(
       ]);
       const prompt = `今日は${todayStr}です。予定:${cal}、タスク:${todos}。元気が出る朝のブリーフィングを作成して。`;
       const text = await callGeminiText(apiKey!, prompt);
-
       await client.pushMessage(doc.data().lineUserId, {
         type: "flex",
         altText: "☀️ おはようございます！",
@@ -1734,3 +1692,66 @@ export const sendMorningBriefing = onSchedule(
     }
   },
 );
+
+// ★追加: 招待コード適用API (永続特典版)
+export const redeemInviteCode = onCall({ cors: true }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+  const { inviteCode } = request.data;
+  const uid = request.auth.uid;
+
+  const userRef = db.collection("users").doc(uid);
+  const userSnap = await userRef.get();
+  const userData = userSnap.data();
+
+  if (userData?.invitedBy) {
+    return { success: false, message: "既に招待コード適用済みです。" };
+  }
+  if (userData?.inviteCode === inviteCode) {
+    return { success: false, message: "自分のコードは入力できません。" };
+  }
+
+  const query = db
+    .collection("users")
+    .where("inviteCode", "==", inviteCode)
+    .limit(1);
+  const querySnap = await query.get();
+
+  if (querySnap.empty) {
+    return { success: false, message: "無効な招待コードです。" };
+  }
+
+  const referrerDoc = querySnap.docs[0];
+  const referrerId = referrerDoc.id;
+  const referrerRef = db.collection("users").doc(referrerId);
+
+  await db.runTransaction(async (t) => {
+    // 招待者への特典: 1日の上限を+3回永続アップ
+    t.update(referrerRef, {
+      maxDailyLimit: admin.firestore.FieldValue.increment(3),
+      referralCount: admin.firestore.FieldValue.increment(1),
+    });
+
+    // 被招待者への特典: 1日の上限を+3回永続アップ
+    t.update(userRef, {
+      invitedBy: inviteCode,
+      isReferralRedeemed: true,
+      maxDailyLimit: admin.firestore.FieldValue.increment(3),
+    });
+
+    // 通知
+    const noteRef = db.collection("notifications").doc();
+    t.set(noteRef, {
+      userId: referrerId,
+      type: "info",
+      title: "招待成功！",
+      message: "友達がコードを使いました。1日の利用枠が永久に増えました！",
+      isRead: false,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  return {
+    success: true,
+    message: "招待コードを適用しました！1日の利用枠が永久に増えました。",
+  };
+});

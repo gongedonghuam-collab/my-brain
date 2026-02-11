@@ -49,12 +49,19 @@ export interface User {
   photoURL?: string | null;
   isPro?: boolean; // 課金ユーザーかどうか
   dailyUsage?: number; // 本日のAI使用回数
+  maxDailyLimit?: number; // 最大AI使用回数
   lastUsageDate?: string; // 最後に使用した日付 (YYYY-MM-DD)
   stripeId?: string; // Stripeの顧客ID
   role?: string; // ロール（admin, pro, freeなど）
   isLineLinked?: boolean; // LINE連携済みかどうか
-  isGoogleLinked?: boolean; // ★追加: Googleカレンダー連携済みフラグ
-  defaultLocation?: string; // ★追加: デフォルトの位置情報
+  isGoogleLinked?: boolean; // Googleカレンダー連携済みフラグ
+  defaultLocation?: string; // デフォルトの位置情報
+
+  // ★追加: バイラルループ用フィールド
+  inviteCode?: string; // 自分の招待コード
+  invitedBy?: string; // 誰に招待されたか（招待コード）
+  referralCount?: number; // 何人招待したか
+  isReferralRedeemed?: boolean; // 招待特典を受け取り済みか
 }
 
 /**

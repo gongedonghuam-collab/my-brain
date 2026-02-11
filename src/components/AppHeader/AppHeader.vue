@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { useAppHeader } from "./useAppHeader";
 import { useMyBrain } from "@/composables/useMyBrain";
 import NotificationBell from "@/components/NotificationBell/NotificationBell.vue";
+import InviteModal from "@/components/InviteModal/InviteModal.vue"; // 追加
 
 const { logout } = useAppHeader();
-// ★修正: manageSubscription を追加で取得して使えるようにする
 const {
   currentUser,
   startLineAuth,
@@ -12,6 +13,8 @@ const {
   startSubscription,
   manageSubscription,
 } = useMyBrain();
+
+const isInviteModalOpen = ref(false); // モーダル開閉用
 </script>
 
 <template>
@@ -30,6 +33,14 @@ const {
     </div>
 
     <div class="flex items-center gap-2 md:gap-4">
+      <button
+        @click="isInviteModalOpen = true"
+        class="text-lg p-2 rounded-full hover:bg-[#18181b] transition"
+        title="招待して特典GET"
+      >
+        🎁
+      </button>
+
       <div
         v-if="currentUser && !currentUser.isPro"
         class="flex items-center gap-2 mr-2"
@@ -57,8 +68,6 @@ const {
           <span class="text-[8px] opacity-60">⚙️</span>
         </button>
       </div>
-
-      <!-- <NotificationBell /> -->
 
       <button
         v-if="currentUser && !currentUser.isLineLinked"
@@ -103,6 +112,8 @@ const {
       </button>
     </div>
   </header>
+
+  <InviteModal :isOpen="isInviteModalOpen" @close="isInviteModalOpen = false" />
 </template>
 
 <style scoped>

@@ -60,6 +60,28 @@ const latestReport =
 const haptic = () => {
   if (navigator.vibrate) navigator.vibrate(10);
 };
+
+// ★追加: 予定をシェアする機能
+const shareSchedule = async () => {
+  if (!selectedDateEvents.value.length) return;
+  const eventsText = selectedDateEvents.value
+    .map((e) => `・${formatTimeRange(e)} ${e.title}`)
+    .join("\n");
+  const shareText = `📅 ${selectedDateStr.value} の予定\n\n${eventsText}\n\n---\nMy Brainで管理中`;
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: "予定の共有",
+        text: shareText,
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  } else {
+    navigator.clipboard.writeText(shareText);
+    alert("予定をコピーしました！");
+  }
+};
 </script>
 
 <template>
@@ -198,7 +220,7 @@ const haptic = () => {
             >
               <span class="text-red-400 text-xs font-bold">未接続</span>
               <button
-                @click="reconnectCalendar"
+                @click="() => reconnectCalendar()"
                 class="bg-red-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold"
               >
                 再接続
@@ -262,12 +284,23 @@ const haptic = () => {
             {{ selectedDateStr }}
           </div>
         </div>
-        <button
-          @click="closeBottomSheet"
-          class="bg-[#27272a] p-2 rounded-full text-slate-400 hover:text-white"
-        >
-          ✕
-        </button>
+
+        <div class="flex gap-2">
+          <button
+            v-if="selectedDateEvents.length > 0"
+            @click="shareSchedule"
+            class="bg-indigo-500/20 text-indigo-400 p-2 rounded-full hover:bg-indigo-500/30"
+            title="予定をシェア"
+          >
+            📤
+          </button>
+          <button
+            @click="closeBottomSheet"
+            class="bg-[#27272a] p-2 rounded-full text-slate-400 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <div class="flex-1 overflow-y-auto p-6 pb-12">

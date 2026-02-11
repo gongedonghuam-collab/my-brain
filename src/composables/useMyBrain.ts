@@ -32,7 +32,11 @@ import type { Memory, ChatLog, User, Todo, DailyReport } from "@/types";
 
 const STRIPE_PAYMENT_LINK = import.meta.env.VITE_STRIPE_PAYMENT_LINK || "";
 const STRIPE_PORTAL_LINK = import.meta.env.VITE_STRIPE_PORTAL_LINK || "";
-const ADMIN_EMAILS = ["gongedonghuam@gmail.com", "taku.03302003@gmail.com"];
+const ADMIN_EMAILS = [
+  "gongedonghuam@gmail.com",
+  "taku.03302003@gmail.com",
+  "h.nanami1111@gmail.com",
+];
 
 const currentUser = ref<User | null>(null);
 const memories = ref<Memory[]>([]);
@@ -456,6 +460,10 @@ export function useMyBrain() {
     const userRef = doc(db, "users", currentUser.value.uid);
     const snap = await getDoc(userRef);
     const data = snap.data();
+
+    // ★修正: ユーザーごとの上限を取得（なければデフォルト5回）
+    const limit = data?.maxDailyLimit || 5;
+
     let currentCount = 0;
     if (data?.lastUsageDate !== todayStr) {
       currentCount = 0;
@@ -463,8 +471,12 @@ export function useMyBrain() {
     } else {
       currentCount = data?.dailyUsage || 0;
     }
-    if (currentCount >= 5) {
-      alert("本日の無料枠（5回）を使い切りました。");
+
+    // ★修正: 固定の5ではなく変数limitと比較
+    if (currentCount >= limit) {
+      alert(
+        `本日の無料枠（${limit}回）を使い切りました。\n友達を招待すると枠が増えます！`,
+      );
       return false;
     }
     await updateDoc(userRef, {
@@ -665,11 +677,12 @@ export function useMyBrain() {
           dailyUsage: 0,
           isLineLinked: false,
           isGoogleLinked: false,
+          inviteCode: "", // 仮の値
         };
 
         await attemptTokenRefresh();
 
-        onSnapshot(doc(db, "users", user.uid), (docSnap) => {
+        onSnapshot(doc(db, "users", user.uid), async (docSnap) => {
           const data = docSnap.data();
           if (data && currentUser.value) {
             const isAdmin = ADMIN_EMAILS.includes(user.email || "");
@@ -686,11 +699,26 @@ export function useMyBrain() {
               isLineLinked: data.isLineLinked || false,
               isGoogleLinked: data.isGoogleLinked || false,
               defaultLocation: data.defaultLocation || undefined,
+              inviteCode: data.inviteCode || "",
+              invitedBy: data.invitedBy || undefined,
+              isReferralRedeemed: data.isReferralRedeemed || false,
+              maxDailyLimit: data.maxDailyLimit || 5, // ★追加: 上限を取得
             };
 
             // ★重要: Firestoreで連携済みなら、ローカルの接続フラグも強制的にTrueにする
             if (data.isGoogleLinked) {
               isCalendarConnected.value = true;
+            }
+
+            // ★追加: 招待コードが未発行なら生成して保存
+            if (!data.inviteCode) {
+              const newCode = Math.random()
+                .toString(36)
+                .substring(2, 8)
+                .toUpperCase();
+              await updateDoc(doc(db, "users", user.uid), {
+                inviteCode: newCode,
+              });
             }
           }
         });
@@ -840,8 +868,8 @@ export function useMyBrain() {
       await addDoc(collection(db, "notifications"), {
         userId: currentUser.value!.uid,
         type: "info",
-        title: "メモ保存",
-        message: "新しい記憶を保存しました",
+        title: "Saved",
+        message: "Saved memory",
         isRead: false,
         timestamp: serverTimestamp(),
       });
@@ -1115,6 +1143,37 @@ export function useMyBrain() {
     }
   };
 
+  // ★追加: 招待コードを適用する関数
+  const redeemInvite = async (code: string) => {
+    loading.value = true;
+    try {
+      const functions = getFunctions(getApp(), "asia-northeast1");
+      const func = httpsCallable(functions, "redeemInviteCode");
+      const res: any = await func({ inviteCode: code });
+      if (res.data.success) {
+        alert(res.data.message);
+        // ローカルの状態も更新: 永続アップなので maxDailyLimit を増やす
+        if (currentUser.value) {
+          currentUser.value.isReferralRedeemed = true;
+          currentUser.value.invitedBy = code;
+          // UI上も即時反映するためローカルで加算
+          if (currentUser.value.maxDailyLimit) {
+            currentUser.value.maxDailyLimit += 3;
+          } else {
+            currentUser.value.maxDailyLimit = 8; // デフォルト5 + 3
+          }
+        }
+      } else {
+        alert(res.data.message);
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert("エラーが発生しました: " + e.message);
+    } finally {
+      loading.value = false;
+    }
+  };
+
   return {
     currentUser,
     memories,
@@ -1149,5 +1208,6 @@ export function useMyBrain() {
     reconnectCalendar,
     startLineAuth,
     unlinkLine,
+    redeemInvite, // ★追加
   };
 }
