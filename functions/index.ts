@@ -1370,7 +1370,7 @@ export const lineWebhook = onRequest(
 
           // ★重要: AIへの指示
           // REMINDER_ADDを追加し、「リマインドして」等の依頼に対応
-          const routerPrompt = `あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr} (Asia/Tokyo)\n【カレンダー】(最新の確定情報)\n${cal}\n【未完了タスク】(最新の確定情報)\n${todo}\n【最近のメモ】(最新の確定情報)\n${memory}\n【会話履歴】(過去のやり取り)\n${chat}\n【入力】"${message}"\n【指示】ユーザーの意図を汲み取りJSONで出力。\n1. 「明日」「来週の水曜」などの指示語は、現在日時(${nowStr})を基準に正確な日付に変換してください。\n2. カレンダー、タスク、メモの情報が「現在」の正しい状態です。会話履歴にある予定でも、カレンダーに含まれていなければ「削除された」または「存在しない」と判断し、絶対に参照しないでください。\n3. 「リマインドして」「教えて」などの通知依頼は REMINDER_ADD を使用。これはカレンダー登録とは別物です。\n出力JSON: { "action": "REMINDER_ADD"|"CALENDAR_ADD"|"CALENDAR_DELETE"|"TASK_ADD"|"TASK_DELETE"|"MEMORY_ADD"|"MEMORY_EDIT"|"MEMORY_APPEND"|"CHAT", "data": { "title", "start", "end", "location": "場所名(なければnull)", "isOutdoor": boolean(天気が影響する予定か), "content", "targetId", "instruction" }, "reply": "整形済み返信テキスト" }`;
+          const routerPrompt = `あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr} (Asia/Tokyo)\n【カレンダー】(最新の確定情報)\n${cal}\n【未完了タスク】(最新の確定情報)\n${todo}\n【最近のメモ】(最新の確定情報)\n${memory}\n【会話履歴】(過去のやり取り)\n${chat}\n【入力】"${message}"\n【指示】ユーザーの意図を汲み取りJSONで出力。\n1. 「明日」「来週の水曜」などの指示語は、現在日時(${nowStr})を基準に正確な日付に変換してください。\n2. カレンダー、タスク、メモの情報が「現在」の正しい状態です。会話履歴にある予定でも、カレンダーに含まれていなければ「削除された」または「存在しない」と判断し、絶対に参照しないでください。\n3. 「リマインドして」「教えて」「通知して」などの通知依頼は REMINDER_ADD を使用。これはカレンダー登録とは別物です。\n出力JSON: { "action": "REMINDER_ADD"|"CALENDAR_ADD"|"CALENDAR_DELETE"|"TASK_ADD"|"TASK_DELETE"|"MEMORY_ADD"|"MEMORY_EDIT"|"MEMORY_APPEND"|"CHAT", "data": { "title", "start", "end", "location": "場所名(なければnull)", "isOutdoor": boolean(天気が影響する予定か), "content", "targetId", "instruction" }, "reply": "整形済み返信テキスト" }`;
 
           const aiRes = await callGeminiJson(apiKey, routerPrompt);
           const action = aiRes.action || "CHAT";
