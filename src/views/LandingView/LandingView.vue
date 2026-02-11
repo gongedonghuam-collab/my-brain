@@ -21,19 +21,20 @@ const goToLogin = () => {
             width="80"
             height="80"
             class="lp-logo fade-in-up"
+            alt="My Brain Logo"
           />
         </div>
-        <p class="fade-in-up subtitle">CONTEXT AWARE AI ASSISTANT</p>
+        <p class="fade-in-up subtitle">LINE-BASED AI ASSISTANT</p>
         <h1 class="fade-in-up delay-100">
           LINEに送るだけ。<br />勝手にスケジュール管理。
         </h1>
         <p class="fade-in-up delay-200 description">
           カレンダー入力、タスク管理、メモの整理。<br />
-          面倒なことは全部、AIに丸投げしよう。<br />
-          あなたの生活を守る、次世代のパートナーです。
+          面倒なことは全部、LINEに投げ捨てるだけ。<br />
+          ズボラなあなたのための、最強のAI秘書です。
         </p>
         <button @click="goToLogin" class="btn-primary fade-in-up delay-300">
-          無料で使い始める
+          LINEで秘書を雇う (無料)
         </button>
 
         <div class="fade-in-up delay-500 mock-wrapper">
@@ -42,18 +43,30 @@ const goToLogin = () => {
             <div class="screen">
               <div class="line-header">My Brain (LINE)</div>
               <div class="chat-bubble chat-user">
-                来週の土曜、12時から代々木公園でピクニック！
+                明日19時 渋谷で田中さんと焼き鳥！
               </div>
               <div class="chat-bubble chat-ai">
-                登録しました！✨<br /><br />
-                📅 <strong>来週土曜 12:00 ピクニック</strong><br />
-                📍 代々木公園<br /><br />
-                ⚠️ <strong>Weather Alert</strong><br />
-                当日は降水確率60%の予報です☔<br />
-                念のため、近くのカフェも探しておきましょうか？
+                <div>承知しました！登録完了です🫡</div>
+                <div
+                  class="mt-2 p-2 bg-slate-800 rounded-lg border border-slate-700"
+                >
+                  <div class="text-[10px] text-slate-400 font-bold">
+                    SCHEDULED
+                  </div>
+                  <div class="text-sm font-bold">19:00 田中さんと焼き鳥</div>
+                  <div class="text-xs text-slate-400">📍 渋谷</div>
+                  <div class="text-xs text-blue-300 mt-1">☔ 雨予報 (60%)</div>
+                </div>
               </div>
+
               <div class="calendar-widget">
-                <div class="cal-event">12:00 🥪 ピクニック (雨?)</div>
+                <div class="cal-header">Google Calendar</div>
+                <div class="cal-grid">
+                  <div class="cal-time">19:00</div>
+                  <div class="cal-event">
+                    <span class="font-bold">田中さんと焼き鳥</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -61,30 +74,33 @@ const goToLogin = () => {
       </section>
 
       <section id="s2">
-        <h2 class="fade-in-up">The Stress</h2>
+        <h2 class="fade-in-up">The Pain</h2>
         <h1 class="fade-in-up delay-100 section-title">
-          アプリの使い分け、<br />疲れませんか？
+          アプリの使い分け、<br />疲れていませんか？
         </h1>
         <div class="grid-container fade-in-up delay-200">
           <div class="card-box">
             <span class="icon">📱</span>
-            <h3>アプリが多すぎ</h3>
+            <h3>アプリを行き来する</h3>
             <p>
-              予定はカレンダー、買い物はToDo、<br />アイデアはメモ帳...。<br />情報が散らばって結局忘れる。
+              予定はカレンダー、タスクはToDo、メモはNotion...。<br />
+              情報が散らばって、結局どこに書いたか忘れる。
             </p>
           </div>
           <div class="card-box">
-            <span class="icon">🌧️</span>
-            <h3>天気を忘れる</h3>
+            <span class="icon">📅</span>
+            <h3>入力がめんどくさい</h3>
             <p>
-              せっかくの予定なのに雨。<br />カレンダーに入力するとき<br />そこまで気が回らない。
+              カレンダーアプリを開いて、日付を選んで、タイトルを入れて...。<br />
+              その「数タップ」すら億劫で、後回しにしてしまう。
             </p>
           </div>
           <div class="card-box">
-            <span class="icon">😵‍💫</span>
+            <span class="icon">😱</span>
             <h3>ダブルブッキング</h3>
             <p>
-              美容室と会議が被った。<br />後から気づいて<br />冷や汗をかいた経験ありませんか？
+              「あ、その日美容院だった...」<br />
+              予定を入れる瞬間に空き状況を確認し忘れて、冷や汗をかく。
             </p>
           </div>
         </div>
@@ -98,7 +114,7 @@ const goToLogin = () => {
         </h1>
         <p class="fade-in-up delay-200 description">
           新しいアプリを覚える必要はありません。<br />
-          友達に連絡するように、AIに話しかけるだけです。
+          いつも使っているLINEで、友達に話すように送るだけです。
         </p>
 
         <div class="feature-list fade-in-up delay-300">
@@ -107,24 +123,23 @@ const goToLogin = () => {
             <div class="f-text">
               <h3>予定を入れる</h3>
               <p>
-                「明日19時
-                飲み会」と送るだけ。AIが勝手にカレンダーを埋めてくれます。もう日付選択でイライラしません。
+                「来週の水曜ランチ」と送るだけ。AIが日付を解釈してGoogleカレンダーに登録します。
               </p>
             </div>
           </div>
           <div class="feature-item">
             <div class="f-icon-box">✅</div>
             <div class="f-text">
-              <h3>やることを管理する</h3>
+              <h3>タスク管理</h3>
               <p>
-                「洗剤買う」「振込」もLINEへ。完了したら「洗剤買ったよ」と報告すれば、リストから消し込んでくれます。
+                「洗剤買う」「振込する」もLINEへ。完了したら報告すれば消し込みまでやってくれます。
               </p>
             </div>
           </div>
           <div class="feature-item">
-            <div class="f-icon-box">📝</div>
+            <div class="f-icon-box">🧠</div>
             <div class="f-text">
-              <h3>何でもメモする</h3>
+              <h3>第2の脳（メモ）</h3>
               <p>
                 「パスワードは〇〇」「いいアイデア出た」など、何でも放り込んでOK。AIが必要な時に思い出させてくれます。
               </p>
@@ -140,79 +155,45 @@ const goToLogin = () => {
         </h1>
         <div class="grid-container fade-in-up delay-200">
           <div class="card-box highlight-box">
-            <span class="icon">🛡️</span>
-            <h3>鉄壁のガード</h3>
+            <span class="icon">🌤️</span>
+            <h3>天気を先読み</h3>
             <p>
-              「その時間は雨です」「移動時間が足りません」<br />人間が見落とすミスを、AIが事前に気づいて教えてくれます。
+              「その日は雨予報です☔」<br />
+              予定を入れる瞬間に天気を教えてくれるので、傘を忘れません。
             </p>
           </div>
           <div class="card-box">
-            <span class="icon">🔄</span>
-            <h3>阿吽の呼吸</h3>
+            <span class="icon">📢</span>
+            <h3>朝のブリーフィング</h3>
             <p>
-              「毎週火曜はゴミ出しですよね？」<br />あなたの行動パターンを学習し、言わなくても先回りして提案します。
+              毎朝7時、今日の予定とタスク、天気をまとめてLINEでお知らせ。<br />
+              最高の1日のスタートをサポートします。
             </p>
           </div>
           <div class="card-box">
-            <span class="icon">🔔</span>
-            <h3>直前カンペ</h3>
+            <span class="icon">🔍</span>
+            <h3>文脈検索</h3>
             <p>
-              会議の直前に「前回のメモ」や「関連タスク」をLINEに通知。<br />「あれ何だっけ？」をゼロにします。
+              「先週の会議、何決まったっけ？」<br />
+              キーワードを覚えていなくても、AIが文脈を理解して過去のメモから回答します。
             </p>
           </div>
         </div>
       </section>
 
       <section id="s5">
-        <div class="bg-blob primary-blob" style="top: 30%; left: 30%"></div>
-        <h2 class="fade-in-up">Partner</h2>
-        <h1 class="fade-in-up delay-100 section-title">
-          システムじゃない。<br />「相棒」です。
-        </h1>
-        <div class="ai-features fade-in-up delay-200">
-          <div class="ai-card">
-            <div class="ai-icon">❤️</div>
-            <h3>あなたの頑張りを、誰よりも知っている。</h3>
-            <p class="ai-desc">
-              あなたがフランクに話せば、AIもフレンドリーに。<br />
-              深夜に残業していれば、労いの言葉を。<br />
-              使うほどに、あなた好みの秘書へと成長します。
-            </p>
-            <div class="chat-preview-box">
-              <div class="chat-row">
-                <div class="chat-time">AM 2:30</div>
-                <div class="chat-msg">
-                  こんな時間まで...本当にお疲れ様です🌙<br />
-                  明日は少し朝寝坊してもバチは当たりませんよ。
-                </div>
-              </div>
-              <div class="chat-row">
-                <div class="chat-time">User</div>
-                <div class="chat-msg user-msg">あざす！もう寝るわー</div>
-              </div>
-              <div class="chat-row">
-                <div class="chat-time">AI</div>
-                <div class="chat-msg">おやすみ！いい夢見てね👍</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="s6">
         <p class="fade-in-up primary-text">START FREE</p>
         <h1 class="fade-in-up delay-100 section-title">
-          基本はずっと無料。<br />課金で「最強」へ。
+          あなたの脳を、<br />アップデートしよう。
         </h1>
 
         <p class="fade-in-up delay-200 description" style="margin-bottom: 30px">
           基本的な機能はすべて無料で使えます。<br />
-          さらに、ランチ1回分の課金（月額980円）で、<br />
-          AIの記憶力や提案力が劇的に進化します。
+          ランチ1回分の課金で、AIの記憶力や提案力が劇的に進化します。
         </p>
 
         <div class="fade-in-up delay-300 badge-wrapper">
-          <div class="pulse-badge">🚀 まずは無料で試してみる</div>
+          <div class="pulse-badge">🚀 ベータ版につき完全無料</div>
         </div>
 
         <button @click="goToLogin" class="btn-primary fade-in-up delay-400">
@@ -221,10 +202,14 @@ const goToLogin = () => {
 
         <div class="fade-in-up delay-500 footer-container">
           <div class="flex gap-4 text-xs text-slate-500 mb-2 justify-center">
-            <router-link to="/privacy" class="hover:text-white transition"
+            <router-link
+              to="/privacy"
+              class="hover:text-white transition underline"
               >プライバシーポリシー</router-link
             >
-            <router-link to="/legal" class="hover:text-white transition"
+            <router-link
+              to="/legal"
+              class="hover:text-white transition underline"
               >利用規約</router-link
             >
           </div>
@@ -288,8 +273,8 @@ h1 {
   -webkit-text-fill-color: transparent;
   text-align: center;
   z-index: 1;
-  word-break: keep-all; /* 改行の制御 */
-  padding: 0 10px; /* スマホで見切れないように */
+  word-break: keep-all;
+  padding: 0 10px;
 }
 
 h2 {
@@ -321,6 +306,12 @@ h2 {
   z-index: 1;
   margin-bottom: 2rem;
   padding: 0 1rem;
+}
+
+.primary-text {
+  color: var(--primary);
+  font-weight: bold;
+  margin-bottom: 0.5rem;
 }
 
 /* --- ロゴ --- */
@@ -356,7 +347,7 @@ h2 {
   background: #ec4899;
 }
 
-/* --- スマホモック (レスポンシブ対応強化) --- */
+/* --- スマホモック --- */
 .mock-wrapper {
   margin-top: 20px;
   position: relative;
@@ -367,7 +358,7 @@ h2 {
 }
 
 .phone {
-  width: 280px; /* 基本サイズ */
+  width: 280px;
   height: 560px;
   background: #1e293b;
   border-radius: 40px;
@@ -381,7 +372,7 @@ h2 {
 
 @media (max-width: 400px) {
   .phone {
-    width: 240px; /* 小さい画面用に縮小 */
+    width: 240px;
     height: 480px;
     border-width: 6px;
   }
@@ -420,18 +411,34 @@ h2 {
 }
 .calendar-widget {
   margin-top: auto;
-  background: #1e293b;
+  background: #fff;
   padding: 10px;
   border-radius: 12px;
-  border: 1px solid #334155;
+  color: #333;
+}
+.cal-header {
+  font-size: 0.7rem;
+  color: #666;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+.cal-grid {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.cal-time {
+  font-size: 0.7rem;
+  color: #999;
 }
 .cal-event {
-  background: rgba(99, 102, 241, 0.2);
+  background: #e0e7ff;
   border-left: 3px solid var(--primary);
-  padding: 6px 10px;
+  padding: 4px 8px;
   border-radius: 4px;
   font-size: 0.7rem;
-  color: #e2e8f0;
+  color: #333;
+  flex: 1;
 }
 
 /* --- チャットバブル --- */
@@ -440,7 +447,7 @@ h2 {
   border-radius: 18px;
   font-size: 0.75rem;
   margin-bottom: 10px;
-  max-width: 85%;
+  max-width: 90%;
   line-height: 1.5;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
@@ -458,7 +465,7 @@ h2 {
   border-top-left-radius: 4px;
 }
 
-/* --- グリッドレイアウト (課題・機能) 完全修正版 --- */
+/* --- グリッドレイアウト --- */
 .grid-container {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -467,20 +474,20 @@ h2 {
   max-width: 1000px;
   margin-top: 40px;
   z-index: 2;
-  padding: 0 1rem; /* スマホでの横マージン確保 */
+  padding: 0 1rem;
 }
 
 .card-box {
   background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 30px 20px; /* パディングを調整 */
+  padding: 30px 20px;
   border-radius: 24px;
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start; /* 上寄せ */
+  justify-content: flex-start;
   transition: transform 0.3s;
 }
 
@@ -502,10 +509,9 @@ h2 {
   font-size: 0.9rem;
   color: #cbd5e1;
   line-height: 1.6;
-  word-wrap: break-word;
-} /* 文字のはみ出し防止 */
+}
 
-/* --- 機能リスト (S3: All-in-One用) --- */
+/* --- 機能リスト --- */
 .feature-list {
   display: flex;
   flex-direction: column;
@@ -546,68 +552,6 @@ h2 {
   color: #cbd5e1;
   margin: 0;
   line-height: 1.6;
-}
-
-/* --- AIカード (S5: Partner用) --- */
-.ai-features {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  z-index: 2;
-}
-.ai-card {
-  width: 100%;
-  max-width: 500px;
-  background: #1e293b;
-  border: 1px solid #334155;
-  padding: 30px;
-  border-radius: 30px;
-  text-align: center;
-}
-.ai-icon {
-  font-size: 3rem;
-  margin-bottom: 10px;
-}
-.ai-desc {
-  margin-top: 15px;
-  line-height: 1.8;
-  color: #e2e8f0;
-  font-size: 0.9rem;
-}
-.chat-preview-box {
-  margin-top: 30px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.chat-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.chat-time {
-  font-size: 0.6rem;
-  color: #64748b;
-  margin-left: 5px;
-  text-align: left;
-}
-.chat-msg {
-  background: rgba(99, 102, 241, 0.1);
-  border: 1px solid rgba(99, 102, 241, 0.2);
-  color: #bfdbfe;
-  padding: 10px 14px;
-  border-radius: 12px;
-  border-top-left-radius: 2px;
-  font-size: 0.8rem;
-  text-align: left;
-}
-.chat-msg.user-msg {
-  align-self: flex-end;
-  border-radius: 12px;
-  border-top-right-radius: 2px;
-  background: #06c755;
-  color: white;
-  border: none;
 }
 
 /* --- ボタン --- */

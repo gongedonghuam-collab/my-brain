@@ -1,4 +1,4 @@
-import { ref, onMounted, watch, nextTick, computed } from "vue";
+import { ref, onMounted, watch, nextTick } from "vue";
 import { useMyBrain } from "@/composables/useMyBrain";
 import type { Memory } from "@/types";
 import mermaid from "mermaid";
@@ -121,7 +121,6 @@ export function useHomeView() {
    * Googleカレンダーから全ての予定を取得する関数
    */
   const fetchAllCalendars = async (startStr?: string, endStr?: string) => {
-    // 既にロード中ならスキップ（重複防止）
     if (calendarLoading.value) return;
 
     calendarLoading.value = true;
@@ -148,8 +147,6 @@ export function useHomeView() {
 
       if (!calendars) return;
 
-      // 期間のデフォルト値を設定（前後3ヶ月程度に広げて取得）
-      // FullCalendarのstartStr/endStrは表示範囲なので、少し広めに取るとスクロール時にスムーズです
       const now = new Date();
 
       const timeMin = startStr
@@ -198,7 +195,6 @@ export function useHomeView() {
         });
       });
 
-      // ★修正: 重複取得を防ぐため、eventsを上書きする
       calendarOptions.value.events = allEvents;
       isInitialLoaded.value = true;
     } catch (e: any) {
@@ -216,7 +212,7 @@ export function useHomeView() {
    */
   const calendarOptions = ref<CalendarOptions>({
     plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
-    initialView: window.innerWidth < 768 ? "listMonth" : "dayGridMonth",
+    initialView: "dayGridMonth",
 
     headerToolbar: {
       left: "prev,next",
@@ -245,7 +241,7 @@ export function useHomeView() {
     views: {
       dayGridMonth: {
         titleFormat: { year: "numeric", month: "short" },
-        dayMaxEvents: 2,
+        dayMaxEvents: 3, // デフォルト
       },
       listMonth: {
         buttonText: "一覧",
@@ -253,23 +249,28 @@ export function useHomeView() {
       },
     },
 
+    // ウィンドウサイズで表示件数を調整
     windowResize: (arg) => {
-      if (arg.view.type === "dayGridMonth" && window.innerWidth < 768) {
-        arg.view.calendar.changeView("listMonth");
-      } else if (arg.view.type === "listMonth" && window.innerWidth >= 768) {
-        arg.view.calendar.changeView("dayGridMonth");
+      if (window.innerWidth < 768) {
+        arg.view.calendar.setOption("dayMaxEvents", 4); // スマホは狭いので4件まで
+      } else {
+        arg.view.calendar.setOption("dayMaxEvents", 5); // PCは広め
       }
     },
 
+    // ★重要: イベントの見た目をカスタマイズ（ドットではなく帯にする）
     eventContent: function (arg: any) {
       if (arg.view.type === "listMonth") {
         return {
           html: `<div class="fc-list-custom-title">${arg.event.title}</div>`,
         };
       }
+
+      // CSS変数をセットして、スタイル側で色を反映
+      const color = arg.event.backgroundColor;
       return {
         html: `
-          <div class="fc-content-custom" style="--event-color: ${arg.event.backgroundColor}">
+          <div class="fc-content-custom" style="--event-color: ${color}">
             <span class="fc-title-custom">${arg.event.title}</span>
           </div>
         `,
@@ -284,9 +285,7 @@ export function useHomeView() {
       openBottomSheet(info.event.startStr.split("T")[0]);
     },
 
-    // ★修正: 表示期間が変わった時にデータを再取得
     datesSet: (arg) => {
-      // カレンダーモードで、まだ初期ロードしていないか、ユーザー操作で期間が変わった場合に実行
       if (inputMode.value === "calendar") {
         fetchAllCalendars(arg.startStr, arg.endStr);
       }
@@ -316,7 +315,6 @@ export function useHomeView() {
       securityLevel: "loose",
     });
 
-    // --- LINE連携コールバック処理 ---
     const code = route.query.code as string;
     if (code) {
       window.history.replaceState({}, document.title, "/app");
@@ -331,25 +329,18 @@ export function useHomeView() {
       }
     }
 
-    // --- ★追加: LINEからの「再接続」リクエスト処理 ---
-    // URLに ?reconnect=true が付いていたら、自動的に再接続処理を開始する
     if (route.query.reconnect === "true") {
-      // クエリパラメータを削除（リロードループ防止）
       window.history.replaceState({}, document.title, "/app");
-      // 少し待ってから実行（Auth初期化待ち）
       setTimeout(() => {
-        // ★ true を渡して「完了したらLINEに戻る」ように指示
         reconnectCalendar(true);
       }, 1000);
     }
 
-    // ★修正: 明示的に初期ロードを行う（datesSetだけに頼るとタイミングによっては呼ばれないことがあるため）
     if (currentUser.value && !isInitialLoaded.value) {
       fetchAllCalendars();
     }
   });
 
-  // --- ★追加修正: モード切替時のスクロール制御 ---
   watch(inputMode, (newMode) => {
     if (newMode === "chat") {
       nextTick(() => {
@@ -361,13 +352,11 @@ export function useHomeView() {
     } else if (newMode === "calendar") {
       setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
-        // モード切替時にデータをリフレッシュ
         if (!calendarLoading.value) {
           fetchAllCalendars();
         }
       }, 100);
     } else {
-      // ★ここが修正点: 「memo」や「url」モードならスクロールを一番上に戻す
       nextTick(() => {
         if (chatContainerRef.value) chatContainerRef.value.scrollTop = 0;
       });

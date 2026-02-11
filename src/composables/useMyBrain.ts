@@ -44,7 +44,8 @@ const isAiThinking = ref(false);
 const isSaving = ref(false);
 const isSpeaking = ref(false);
 const activeTag = ref<string | null>(null);
-const isCalendarConnected = ref(true);
+
+const isCalendarConnected = ref(false);
 
 const lastReferencedMemoryId = ref<string | null>(
   localStorage.getItem("last_memory_id"),
@@ -87,16 +88,10 @@ function formatIsoDate(dateStr: string): string {
 }
 
 // --- トークン自動更新ロジック ---
-/**
- * Cloud Functions経由でカレンダーのアクセストークンをリフレッシュします。
- * 有効期限切れを検知した際に自動的に呼ばれます。
- */
 const attemptTokenRefresh = async (): Promise<string | null> => {
   try {
     const functions = getFunctions(getApp(), "asia-northeast1");
     const refreshFunc = httpsCallable(functions, "refreshCalendarToken");
-
-    // Cloud Functions 呼び出し
     const result: any = await refreshFunc();
 
     if (result.data && result.data.accessToken) {
@@ -110,22 +105,17 @@ const attemptTokenRefresh = async (): Promise<string | null> => {
         newExpiry.toString(),
       );
       console.log("Token refreshed successfully.");
-      // リフレッシュ成功＝接続OK
+
       isCalendarConnected.value = true;
       return newToken;
     }
   } catch (e) {
-    console.error("Token auto-refresh failed:", e);
+    console.error("Token sync failed:", e);
   }
   return null;
 };
 
 // --- APIラッパー ---
-/**
- * Google APIを呼び出すためのラッパー関数。
- * 401エラー（認証切れ）が発生した場合、自動的にトークンリフレッシュを試みます。
- * それでもダメな場合はログアウト等の処理を行います。
- */
 const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
   let token = localStorage.getItem("google_calendar_token");
 
@@ -166,20 +156,12 @@ const callGoogleApi = async (callback: (token: string) => Promise<any>) => {
   }
 };
 
-// ==============================================================================
-//  ★修正完了: カレンダー再接続 (LINEリダイレクト対応版)
-// ==============================================================================
-/**
- * Googleカレンダーとの連携を再確立します。
- * リフレッシュトークン（永続的な合鍵）を再取得し、Firestoreに上書き保存します。
- * @param isAuto - trueの場合、処理完了後にLINEアプリへリダイレクトします。
- */
+// --- カレンダー再接続 ---
 const reconnectCalendar = async (isAuto: boolean = false) => {
   try {
     const provider = new GoogleAuthProvider();
     provider.addScope("https://www.googleapis.com/auth/calendar");
 
-    // ★重要: 必ず「アカウント選択画面」を出して、合鍵を強制発行させる
     provider.setCustomParameters({
       prompt: "select_account consent",
       access_type: "offline",
@@ -191,13 +173,12 @@ const reconnectCalendar = async (isAuto: boolean = false) => {
     const tokenResponse = (result as any)._tokenResponse;
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const token = credential?.accessToken;
-
     const refreshToken =
       tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
 
     if (!refreshToken) {
       alert(
-        "⚠️ 再接続に失敗しました。\nGoogleから「リフレッシュトークン」が発行されませんでした。\n\n対策:\n1. Googleアカウントの連携設定を一度解除してください。\n2. もう一度「再接続」を試してください。",
+        "⚠️ 再接続に失敗しました（リフレッシュトークン未発行）。\nGoogleアカウントの連携設定を一度解除してから再試行してください。",
       );
       return;
     }
@@ -205,7 +186,6 @@ const reconnectCalendar = async (isAuto: boolean = false) => {
     const expiresIn = tokenResponse?.expiresIn || 3600;
 
     if (token && user) {
-      // 1. ローカル保存
       localStorage.setItem("google_calendar_token", token);
       const expiryTime =
         new Date().getTime() + (Number(expiresIn) - 300) * 1000;
@@ -214,25 +194,23 @@ const reconnectCalendar = async (isAuto: boolean = false) => {
         expiryTime.toString(),
       );
 
-      // 2. Firestore保存 (リフレッシュトークンを確実に上書き)
       const tokenData: any = {
         accessToken: token,
         refreshToken: refreshToken,
         updatedAt: serverTimestamp(),
       };
-
       const tokenRef = doc(db, "users", user.uid, "system", "tokens");
       await setDoc(tokenRef, tokenData);
 
+      // ★重要: フロントエンドでフラグを更新
+      await updateDoc(doc(db, "users", user.uid), { isGoogleLinked: true });
       isCalendarConnected.value = true;
 
-      // ★ここが修正ポイント: LINEに戻るかどうか
       if (isAuto) {
         alert("✅ 再接続しました！\nLINEに戻ります。");
-        // LINEアプリのURLスキームを叩いてアプリを切り替える
         window.location.href = "line://";
       } else {
-        alert("✅ カレンダーを再接続しました！\n新しい合鍵を保存しました。");
+        alert("✅ カレンダーを再接続しました！");
         window.location.reload();
       }
     }
@@ -241,8 +219,8 @@ const reconnectCalendar = async (isAuto: boolean = false) => {
     alert("再接続エラー: " + e.message);
   }
 };
-// ==============================================================================
 
+// ... (省略なしでその他の関数を記述)
 const fileToGenerativePart = async (file: File) => {
   return new Promise<{ inlineData: { data: string; mimeType: string } }>(
     (resolve, reject) => {
@@ -281,6 +259,7 @@ function extractJson(text: string): string {
   return clean;
 }
 
+// ... AI Model Management ...
 async function fetchAvailableModels(apiKey: string): Promise<any[]> {
   try {
     const res = await axios.get(
@@ -374,6 +353,7 @@ async function callGeminiText(apiKey: string, prompt: string): Promise<string> {
   }
 }
 
+// ... Calendar/Todo API ...
 const fetchCalendarEvents = async () => {
   return await callGoogleApi(async (token) => {
     const now = new Date().toISOString();
@@ -494,9 +474,6 @@ export function useMyBrain() {
     return true;
   };
 
-  /**
-   * メモからToDoを抽出して保存する
-   */
   const generateTasksFromMemory = async (memoryId: string, text: string) => {
     if (!currentUser.value) return;
     try {
@@ -524,9 +501,6 @@ export function useMyBrain() {
     }
   };
 
-  /**
-   * 手動でToDoを追加する
-   */
   const addManualTodo = async (title: string) => {
     if (!currentUser.value || !title.trim()) return;
     try {
@@ -550,9 +524,6 @@ export function useMyBrain() {
     }
   };
 
-  /**
-   * 日報を生成する
-   */
   const generateDailyReport = async () => {
     if (!currentUser.value) return;
     const yesterday = new Date();
@@ -596,9 +567,6 @@ export function useMyBrain() {
     }
   };
 
-  /**
-   * サブスクリプションを開始する
-   */
   const startSubscription = async () => {
     if (!currentUser.value) return;
     if (confirm("PROプラン（月額980円）の決済画面へ移動しますか？")) {
@@ -610,9 +578,6 @@ export function useMyBrain() {
     }
   };
 
-  /**
-   * サブスクリプションを管理する
-   */
   const manageSubscription = async () => {
     if (!currentUser.value) return;
     const isConfirmed = confirm(
@@ -627,9 +592,6 @@ export function useMyBrain() {
     }
   };
 
-  /**
-   * メモ一覧を取得する
-   */
   const fetchMemories = async () => {
     if (!currentUser.value) return;
     loading.value = true;
@@ -650,9 +612,6 @@ export function useMyBrain() {
     }
   };
 
-  /**
-   * チャット履歴を取得する
-   */
   const fetchChatLogs = async () => {
     if (!currentUser.value) return;
     const q = query(
@@ -667,9 +626,6 @@ export function useMyBrain() {
       .reverse();
   };
 
-  /**
-   * ToDo一覧を取得する（リアルタイム）
-   */
   const fetchTodos = async () => {
     if (!currentUser.value) return;
     const q = query(
@@ -682,9 +638,6 @@ export function useMyBrain() {
     });
   };
 
-  /**
-   * 日報を取得する（リアルタイム）
-   */
   const fetchReports = async () => {
     if (!currentUser.value) return;
     const q = query(
@@ -700,9 +653,6 @@ export function useMyBrain() {
     });
   };
 
-  /**
-   * 認証状態を監視し、初期データを読み込む
-   */
   const initAuth = () => {
     onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -714,12 +664,10 @@ export function useMyBrain() {
           isPro: false,
           dailyUsage: 0,
           isLineLinked: false,
+          isGoogleLinked: false,
         };
 
-        // ★★★ ここで強制リフレッシュ ★★★
-        // LINEで再接続してリフレッシュトークンが変わっている可能性があるため、
-        // アプリ起動時（またはリロード時）に必ず最新のアクセストークンを取得しにいく
-        attemptTokenRefresh();
+        await attemptTokenRefresh();
 
         onSnapshot(doc(db, "users", user.uid), (docSnap) => {
           const data = docSnap.data();
@@ -736,7 +684,14 @@ export function useMyBrain() {
               stripeId: data.stripeId,
               role: data.role,
               isLineLinked: data.isLineLinked || false,
+              isGoogleLinked: data.isGoogleLinked || false,
+              defaultLocation: data.defaultLocation || undefined,
             };
+
+            // ★重要: Firestoreで連携済みなら、ローカルの接続フラグも強制的にTrueにする
+            if (data.isGoogleLinked) {
+              isCalendarConnected.value = true;
+            }
           }
         });
         await Promise.all([
@@ -758,9 +713,6 @@ export function useMyBrain() {
     });
   };
 
-  /**
-   * ログアウトする
-   */
   const logout = async () => {
     await signOut(auth);
     localStorage.removeItem("google_calendar_token");
@@ -769,27 +721,18 @@ export function useMyBrain() {
     window.location.reload();
   };
 
-  /**
-   * タグを選択してメモを絞り込む
-   */
   const selectTag = async (tag: string | null) => {
     activeTag.value = tag;
   };
-
   const filteredMemories = computed(() => {
     if (!activeTag.value) return memories.value;
     return memories.value.filter((m) => m.tags?.includes(activeTag.value!));
   });
-
   const allTags = computed(() => {
     const tags = new Set<string>();
     memories.value.forEach((m) => m.tags?.forEach((t) => tags.add(t)));
     return Array.from(tags);
   });
-
-  /**
-   * 類似する記憶を検索する
-   */
   const findRelatedMemories = async (text: string): Promise<Memory[]> => {
     if (!text.trim() || memories.value.length === 0) return [];
     try {
@@ -838,10 +781,6 @@ export function useMyBrain() {
       return [];
     }
   };
-
-  /**
-   * メモを追加する（画像対応）
-   */
   const addMemory = async (text: string, files?: File[] | null) => {
     if (!(await checkAndIncrementUsage())) return null;
     isSaving.value = true;
@@ -898,8 +837,6 @@ export function useMyBrain() {
         embedding: embedding,
       });
       generateTasksFromMemory(docRef.id, finalText);
-
-      // ★追加: メモ保存通知（うるさければ削除可）
       await addDoc(collection(db, "notifications"), {
         userId: currentUser.value!.uid,
         type: "info",
@@ -908,7 +845,6 @@ export function useMyBrain() {
         isRead: false,
         timestamp: serverTimestamp(),
       });
-
       return [];
     } catch (e) {
       alert("保存エラー");
@@ -917,10 +853,6 @@ export function useMyBrain() {
       isSaving.value = false;
     }
   };
-
-  /**
-   * URLからメモを追加する
-   */
   const addUrlMemory = async (url: string) => {
     if (!(await checkAndIncrementUsage())) return;
     isSaving.value = true;
@@ -942,10 +874,6 @@ export function useMyBrain() {
       isSaving.value = false;
     }
   };
-
-  /**
-   * AIに質問・指示をする（チャット）
-   */
   const askBrain = async (
     question: string,
     voiceMode: boolean = false,
@@ -1037,7 +965,6 @@ export function useMyBrain() {
         finalAnswer += deletedTitle
           ? `\n\n✅ タスク削除: ${deletedTitle}`
           : `\n⚠️ タスクが見つかりませんでした`;
-        // ★追加: タスク削除通知
         if (deletedTitle) {
           await addDoc(collection(db, "notifications"), {
             userId: currentUser.value!.uid,
@@ -1053,7 +980,6 @@ export function useMyBrain() {
         finalAnswer += deletedTitle
           ? `\n\n🗑️ 予定削除: ${deletedTitle}`
           : `\n⚠️ 予定が見つかりませんでした`;
-        // ★追加: 予定削除通知
         if (deletedTitle) {
           await addDoc(collection(db, "notifications"), {
             userId: currentUser.value!.uid,
@@ -1065,7 +991,6 @@ export function useMyBrain() {
           });
         }
       } else if (data.action === "CALENDAR_ADD") {
-        // ★修正ポイント: カレンダー登録が成功したら、その後の通知失敗で「失敗」扱いにしない
         try {
           await addEventToGoogleCalendar(
             data.data.title,
@@ -1074,7 +999,6 @@ export function useMyBrain() {
             "9",
           );
           finalAnswer += `\n\n✅ 予定を登録しました: ${data.data.title}`;
-          // 通知処理は独立して実行（失敗してもメイン処理には影響させない）
           try {
             await addDoc(collection(db, "notifications"), {
               userId: currentUser.value!.uid,
@@ -1097,11 +1021,9 @@ export function useMyBrain() {
       } else if (data.action === "TASK_ADD") {
         await addManualTodo(data.data.title);
         finalAnswer += `\n\n✅ タスクに追加しました: ${data.data.title}`;
-        // addManualTodo 内で通知しているのでここでは不要
       } else if (data.action === "MEMORY_ADD") {
         await addMemory(data.data.content || question, null);
         finalAnswer += `\n\n📝 メモしました`;
-        // addMemory 内で通知しているのでここでは不要
       } else if (data.action === "CHAT" && targetId) {
         setLastMemoryId(cleanId(targetId));
       }
@@ -1130,10 +1052,6 @@ export function useMyBrain() {
       isAiThinking.value = false;
     }
   };
-
-  /**
-   * メモを更新する
-   */
   const updateMemory = async (id: string, newText: string) => {
     await updateDoc(doc(db, "memories", id), { text: newText });
     setLastMemoryId(id);
@@ -1142,10 +1060,6 @@ export function useMyBrain() {
       memories.value[index].text = newText;
     }
   };
-
-  /**
-   * メモを削除する
-   */
   const deleteMemory = async (id: string) => {
     if (confirm("削除?")) {
       await deleteDoc(doc(db, "memories", id));
@@ -1153,28 +1067,15 @@ export function useMyBrain() {
       memories.value = memories.value.filter((m) => m.id !== id);
     }
   };
-
-  /**
-   * チャットログを削除する
-   */
   const deleteChatLog = async (id: string) => {
     await deleteDoc(doc(db, "chat_logs", id));
     chatLogs.value = chatLogs.value.filter((l) => l.id !== id);
   };
-
-  /**
-   * ToDoの完了状態を切り替える
-   */
   const toggleTodo = async (id: string, currentStatus: boolean) => {
     await updateDoc(doc(db, "todos", id), { isCompleted: !currentStatus });
   };
-
-  /**
-   * ToDoを削除する
-   */
   const deleteTodo = async (id: string) => {
     await deleteDoc(doc(db, "todos", id));
-    // ★追加: タスクリストから削除した場合の通知
     await addDoc(collection(db, "notifications"), {
       userId: currentUser.value!.uid,
       type: "info",
@@ -1184,10 +1085,6 @@ export function useMyBrain() {
       timestamp: serverTimestamp(),
     });
   };
-
-  /**
-   * LINE連携を開始する
-   */
   const startLineAuth = () => {
     const channelId = import.meta.env.VITE_LINE_LOGIN_CHANNEL_ID;
     const redirectUri = window.location.origin + "/app";
@@ -1199,10 +1096,6 @@ export function useMyBrain() {
     const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${channelId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=profile%20openid&bot_prompt=aggressive`;
     window.location.href = url;
   };
-
-  /**
-   * LINE連携を解除する
-   */
   const unlinkLine = async () => {
     if (!confirm("LINE連携を解除しますか？")) return;
     loading.value = true;

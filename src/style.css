@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  /* モダンSaaS ダークテーマ (Notion/Cron風) */
+  /* モダンSaaS ダークテーマ */
   --bg-main: #09090b; /* 漆黒の背景 */
   --bg-sub: #18181b; /* カード背景 */
   --bg-hover: #27272a; /* ホバー時 */
@@ -14,7 +14,7 @@
 
   /* FullCalendar カスタマイズ変数 */
   --fc-border-color: #27272a;
-  --fc-today-bg-color: rgba(99, 102, 241, 0.05); /* 今日の背景は極薄く */
+  --fc-today-bg-color: transparent; /* 背景色は消して丸だけで表現 */
   --fc-page-bg-color: transparent;
   --fc-neutral-bg-color: transparent;
   --fc-list-event-hover-bg-color: #27272a;
@@ -43,7 +43,7 @@ body {
   scrollbar-width: none;
 }
 
-/* --- FullCalendar モダンUIカスタマイズ --- */
+/* === FullCalendar デザイン刷新 === */
 
 .fc {
   font-family: inherit;
@@ -51,10 +51,11 @@ body {
 
 /* ヘッダー全体の余白と背景 */
 .fc .fc-toolbar {
-  padding: 0 4px;
-  margin-bottom: 1rem !important;
-  flex-wrap: nowrap; /* ボタンが改行しないように */
-  gap: 8px;
+  padding: 0 8px;
+  margin-bottom: 0.5rem !important;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 /* タイトルのスタイル（年月） */
@@ -70,10 +71,10 @@ body {
   border: 1px solid #3f3f46 !important;
   color: #a1a1aa !important; /* 薄い文字色 */
   font-size: 0.75rem !important;
-  font-weight: bold !important;
-  padding: 6px 10px !important;
+  padding: 6px 12px !important;
   border-radius: 8px !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: none !important;
+  font-weight: bold !important;
   transition: all 0.2s ease !important;
 }
 .fc .fc-button:hover {
@@ -86,7 +87,6 @@ body {
   background-color: var(--primary) !important; /* ブランドカラー */
   border-color: var(--primary) !important;
   color: white !important;
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4) !important;
 }
 
 /* カレンダーグリッド */
@@ -99,147 +99,142 @@ body {
 .fc .fc-col-header-cell-cushion {
   color: var(--text-muted);
   font-size: 0.7rem;
+  padding: 8px 0 !important;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 12px 0 !important;
 }
 
-/* 日付 */
+/* --- 日付セルのレイアウト (ズレ・縦並び修正の要) --- */
+
+/* 日付セル上部エリア */
 .fc-daygrid-day-top {
-  justify-content: center;
-  padding-top: 6px;
+  display: flex !important;
+  justify-content: center !important; /* 横方向ど真ん中 */
+  align-items: center !important; /* 縦方向ど真ん中 */
+  padding-top: 4px;
+  margin-bottom: 2px;
+  flex-direction: row !important; /* 横並びを強制 */
 }
+
+/* 日付の数字 */
 .fc-daygrid-day-number {
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--text-muted);
-  padding: 4px 6px;
+  padding: 0;
+
+  /* 丸を作るためのサイズ固定 */
+  width: 30px !important;
+  height: 30px !important;
+
+  /* 文字を中央に配置 */
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+
+  text-decoration: none !important;
+  border-radius: 50%;
+  margin: 0 !important;
+  z-index: 2;
+  position: relative;
+
+  /* ★重要: 「11」と「日」が改行されないようにする */
+  white-space: nowrap !important;
 }
-/* 今日の日付 */
+
+/* 今日の日付（紫色の丸） */
 .fc-day-today .fc-daygrid-day-number {
   background-color: var(--primary);
-  color: white;
-  font-weight: 700;
-  border-radius: 50%;
-  width: 32px; /* 24pxから拡大 */
-  height: 32px; /* 24pxから拡大 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
-  line-height: 1; /* 行間をリセットして垂直中央揃えを確実に */
+  color: white !important;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.5);
+  opacity: 1;
 }
 
-/* --- ★ここから下がカレンダーイベントのデザイン修正 --- */
+/* --- イベント（予定）のデザイン --- */
 
-/* イベントの枠（コンテナ） */
+/* イベントコンテナの余白 */
+.fc-daygrid-event {
+  margin: 1px 2px 0 !important;
+  border: none !important;
+  background: transparent !important;
+}
+
+/* カスタムイベント表示 (文字が見える帯) */
 .fc-content-custom {
+  /* 背景色はJSから渡される色を薄めたもの */
+  background-color: color-mix(in srgb, var(--event-color) 20%, transparent);
+  border-left: 3px solid var(--event-color);
+  padding: 1px 3px;
+  border-radius: 3px;
+  overflow: hidden;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 6px;
-  overflow: hidden;
-  border-radius: 4px;
-
-  /* 背景色: JSから渡された変数を使い、透明度を下げる */
-  background-color: color-mix(in srgb, var(--event-color) 20%, transparent);
-
-  /* 左端のライン: 元の色をそのまま使う */
-  border-left: 3px solid var(--event-color);
-
+  height: 18px; /* スマホ用に高さを確保 */
   transition: all 0.1s ease;
 }
 
 .fc-content-custom:hover {
-  /* ホバー時は少し濃くする */
   background-color: color-mix(in srgb, var(--event-color) 30%, transparent);
 }
 
-/* 色付きのドット（今回はボーダーラインで色を出すのでドットは廃止） */
-.fc-event-dot {
-  display: none;
-}
-
-/* イベントタイトル */
 .fc-title-custom {
-  font-size: 0.75rem;
-  /* 文字色: 背景が薄いので、逆に「元の色を明るくした色」を使う */
-  color: color-mix(in srgb, var(--event-color) 100%, white);
-  /* もしくはシンプルに白にするなら color: #fff; */
-
+  font-size: 10px; /* 小さくても読めるサイズ */
+  color: #f1f5f9; /* 白に近い色 */
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-weight: 700;
-  line-height: 1.2;
-
-  /* 文字をくっきりさせる影 */
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  line-height: 1.4;
+  margin-left: 2px;
 }
 
-/* デフォルトのイベント背景リセット */
-.fc-daygrid-event {
-  background-color: transparent !important;
-  border: none !important;
-  margin-top: 2px !important;
+/* 「他N件」リンク */
+.fc-daygrid-more-link {
+  font-size: 0.7rem;
+  color: #a1a1aa !important;
+  text-decoration: none !important;
+  font-weight: bold;
+  background-color: #27272a;
+  padding: 1px 4px;
+  border-radius: 4px;
+  margin: 0 2px;
+  display: block;
+  text-align: center;
 }
 
-/* --- リスト表示 (listMonth) の調整 --- */
-
-/* リスト全体のボーダーを消してスッキリさせる */
-.fc-theme-standard .fc-list {
-  border: none !important;
-}
-
-/* 日付ヘッダー（例: 2月7日 土曜日） */
+/* リスト表示 */
 .fc-list-day-cushion {
-  background-color: #18181b !important; /* カード背景色 */
+  background-color: #18181b !important;
   border-bottom: 1px solid #27272a;
 }
 .fc-list-day-text,
 .fc-list-day-side-text {
   color: #fff !important;
   font-size: 0.9rem !important;
-  font-weight: bold;
-}
-
-/* イベント行 */
-.fc-list-event {
-  background-color: transparent !important;
-  border-bottom: 1px solid #27272a;
-  cursor: pointer;
 }
 .fc-list-event:hover td {
-  background-color: #27272a !important; /* ホバー時の色 */
+  background-color: #27272a !important;
 }
-
-/* 時間 */
 .fc-list-event-time {
   color: #a1a1aa !important;
   font-size: 0.8rem !important;
-  font-weight: 500;
 }
-
-/* ★修正: リスト表示のタイトル */
 .fc-list-custom-title {
   color: #f4f4f5 !important;
-  font-size: 0.95rem !important; /* 少し大きく */
-  font-weight: 700; /* 太く */
+  font-size: 0.9rem !important;
+  font-weight: 600;
   padding-left: 4px;
 }
-
-/* イベントの色丸 */
-.fc-list-event-dot {
-  border-width: 4px !important;
-}
-
-/* 「予定がありません」のメッセージ */
 .fc-list-empty-cushion {
-  background-color: transparent !important;
   color: var(--text-muted) !important;
+  background-color: transparent !important;
 }
 
 /* アニメーション */
+.animate-fade-in {
+  animation: fadeInUp 0.4s ease-out forwards;
+}
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -249,7 +244,4 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
-}
-.animate-fade-in {
-  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

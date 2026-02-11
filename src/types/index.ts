@@ -53,6 +53,8 @@ export interface User {
   stripeId?: string; // Stripeの顧客ID
   role?: string; // ロール（admin, pro, freeなど）
   isLineLinked?: boolean; // LINE連携済みかどうか
+  isGoogleLinked?: boolean; // ★追加: Googleカレンダー連携済みフラグ
+  defaultLocation?: string; // ★追加: デフォルトの位置情報
 }
 
 /**
