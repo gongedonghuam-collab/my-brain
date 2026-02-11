@@ -147,13 +147,13 @@ function formatJstTime(isoString) {
         weekday: "short",
     });
     const weekDayMap = {
-        日: "Sun",
-        月: "Mon",
-        火: "Tue",
-        水: "Wed",
-        木: "Thu",
-        金: "Fri",
-        土: "Sat",
+        日: "日",
+        月: "月",
+        火: "火",
+        水: "水",
+        木: "木",
+        金: "金",
+        土: "土",
     };
     const weekDay = weekDayMap[weekDayJA] || weekDayJA;
     return { dateStr, timeStr, weekDay, isAllDay: false };
