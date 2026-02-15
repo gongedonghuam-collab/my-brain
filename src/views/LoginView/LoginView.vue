@@ -14,23 +14,20 @@ const db = getFirestore(); // Firestore Database
 const isInAppBrowser = ref(false);
 
 onMounted(() => {
-  // ★修正: ユーザーエージェント検知を強化 (LINE, Instagram, TikTok, Facebook)
+  // ★重要: LINE, Instagram, TikTok, Facebook を検知
   const ua = navigator.userAgent.toLowerCase();
   if (
     ua.includes("line") ||
     ua.includes("instagram") ||
     ua.includes("tiktok") ||
-    ua.includes("fbav") // Facebook App
+    ua.includes("fbav") // Facebook
   ) {
     isInAppBrowser.value = true;
   }
 });
 
-/**
- * Googleログイン処理
- */
 const handleGoogleLogin = async () => {
-  // 念のためのガード（ボタンが表示されていれば押せないはずだが）
+  // アプリ内ブラウザならアラートを出して中断
   if (isInAppBrowser.value) {
     alert("右上のメニューから「ブラウザで開く」を選択してください🙇‍♂️");
     return;
@@ -39,22 +36,17 @@ const handleGoogleLogin = async () => {
   loading.value = true;
   try {
     const provider = new GoogleAuthProvider();
-
-    // ★重要: カレンダーへの読み書き権限を要求します
     provider.addScope("https://www.googleapis.com/auth/calendar.events");
     provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
 
-    // ★修正ポイント: リフレッシュトークン（永続的な合鍵）を強制的に取得する設定
     provider.setCustomParameters({
       prompt: "select_account consent",
-      access_type: "offline", // 裏側（Cloud Functions）で接続するために必須
+      access_type: "offline",
     });
 
-    // ポップアップでログイン画面を表示
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
 
-    // トークン情報の取得
     const tokenResponse = (result as any)._tokenResponse;
     const refreshToken =
       tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
@@ -62,16 +54,11 @@ const handleGoogleLogin = async () => {
     const accessToken = credential?.accessToken;
     const expiresIn = tokenResponse?.expiresIn || 3600;
 
-    // ★トークンを保存するためのデータ準備
     const tokenData: any = { updatedAt: new Date() };
 
     if (accessToken) {
-      tokenData.accessToken = accessToken; // 今すぐ使える鍵
-
-      // ★修正: ブラウザのlocalStorageにも即座に保存
+      tokenData.accessToken = accessToken;
       localStorage.setItem("google_calendar_token", accessToken);
-
-      // ★追加: 有効期限を計算して保存
       const expiryTime =
         new Date().getTime() + (Number(expiresIn) - 300) * 1000;
       localStorage.setItem(
@@ -81,10 +68,9 @@ const handleGoogleLogin = async () => {
     }
 
     if (refreshToken) {
-      tokenData.refreshToken = refreshToken; // 期限が切れた時のための合鍵
+      tokenData.refreshToken = refreshToken;
     }
 
-    // Firestore（サーバー側）への保存処理
     if (refreshToken || accessToken) {
       try {
         await setDoc(
@@ -96,11 +82,8 @@ const handleGoogleLogin = async () => {
       } catch (saveError: any) {
         console.error("Token save error:", saveError);
       }
-    } else {
-      console.warn("No tokens retrieved from Google.");
     }
 
-    // ユーザー基本情報の保存
     await setDoc(
       doc(db, "users", user.uid),
       {
@@ -112,16 +95,10 @@ const handleGoogleLogin = async () => {
       { merge: true },
     );
 
-    // ログイン成功したらアプリ画面へ
     router.push("/app");
   } catch (e: any) {
     console.error(e);
-    // アプリ内ブラウザ以外でのエラー（ポップアップブロックなど）へのヒント
-    alert(
-      "エラー: " +
-        e.message +
-        "\n\n※うまくいかない場合は、SafariやChromeで開き直してください。",
-    );
+    alert("Googleログインに失敗しました: " + e.message);
   } finally {
     loading.value = false;
   }
@@ -207,23 +184,21 @@ const handleGoogleLogin = async () => {
               fill="#EA4335"
             />
           </svg>
-          {{ loading ? "読み込み中..." : "Googleで連携する" }}
+          Googleで連携する
         </button>
 
         <div class="mt-6 flex justify-center gap-4 text-[10px] text-slate-500">
           <router-link
             to="/privacy"
             class="hover:text-slate-300 transition underline"
+            >プライバシーポリシー</router-link
           >
-            プライバシーポリシー
-          </router-link>
           <span class="text-slate-700">|</span>
           <router-link
             to="/legal"
             class="hover:text-slate-300 transition underline"
+            >利用規約</router-link
           >
-            利用規約
-          </router-link>
         </div>
       </div>
     </div>

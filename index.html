@@ -62,6 +62,30 @@
       <div class="loader"></div>
     </div>
 
-    <script type="module" src="/src/main.ts"></script>
+    <script>
+      // 5秒経っても画面が切り替わらなかったら、強制的に案内を表示する
+      setTimeout(function () {
+        var loader = document.getElementById("loading-screen");
+        // ローディング画面がまだ存在し、かつ透明になっていない（アプリが起動していない）場合
+        if (loader && window.getComputedStyle(loader).opacity !== "0") {
+          loader.innerHTML = `
+            <div style="text-align:center; padding:20px; color:white; max-width: 80%;">
+              <div style="font-size: 50px; margin-bottom: 20px;">⚠️</div>
+              <h1 style="font-size: 20px; margin-bottom: 10px;">ブラウザで開き直してください</h1>
+              <p style="font-size: 14px; line-height: 1.6; opacity: 0.8;">
+                TikTokやインスタのブラウザでは<br>
+                Googleログインがブロックされるため、<br>
+                アプリを起動できません。
+              </p>
+              <div style="margin-top: 30px; background: #3b82f6; padding: 15px; border-radius: 12px; font-weight: bold; box-shadow: 0 4px 15px rgba(59,130,246,0.4);">
+                右上の「・・・」から<br>
+                「ブラウザで開く」を選択！
+              </div>
+            </div>
+          `;
+          // 念のためグルグル（loader）を止めるためのクラス削除などは不要（innerHTMLで上書きするため）
+        }
+      }, 5000);
+    </script>
   </body>
 </html>

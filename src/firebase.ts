@@ -10,6 +10,7 @@ import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  memoryLocalCache,
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getMessaging } from "firebase/messaging";
@@ -34,21 +35,27 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 /** 認証機能 (ログイン/ログアウト) */
 export const auth = getAuth(app);
 
-// --- Firestore (データベース) の初期化 ---
+// --- Firestore初期化 (極限まで安全なインアプリブラウザ対策) ---
 let dbInstance;
+
 try {
-  // すでに初期化済みなら取得するだけ
+  // 既に初期化されていないかチェック
   dbInstance = getFirestore(app);
 } catch (e) {
-  // まだなら設定付きで初期化
-  // オフラインでも動くように「永続化キャッシュ」を有効にしています
-  dbInstance = initializeFirestore(app, {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager(),
-    }),
-  });
+  // 初期化に失敗（IndexedDBエラーなど）した場合
+  console.error("Firestore init failed, using fallback:", e);
+
+  try {
+    // 【対策1】IndexedDBを一切使わず、メモリ(RAM)だけ使うモードで初期化
+    dbInstance = initializeFirestore(app, {
+      localCache: memoryLocalCache(),
+    });
+  } catch (err) {
+    // 【対策2】それすら失敗した場合は、最小構成のインスタンスを生成
+    console.error("Critical Firestore Error:", err);
+    dbInstance = getFirestore(app);
+  }
 }
-/** データベース本体 */
 export const db = dbInstance;
 
 /** ファイルストレージ (画像の保存先) */
