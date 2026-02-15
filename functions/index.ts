@@ -44,6 +44,7 @@ const COLORS = {
   info: "#0ea5e9",
   dark: "#1e293b",
   text: "#334155",
+  textWhite: "#f8fafc",
   textLight: "#94a3b8",
 };
 
@@ -439,7 +440,7 @@ function createChatFlex(text: string, logId?: string): line.FlexBubble {
       type: "button",
       style: "secondary",
       height: "sm",
-      color: COLORS.text,
+      color: COLORS.textWhite,
       margin: footerContents.length > 0 ? "sm" : "none",
       action: {
         type: "postback",
@@ -1746,6 +1747,7 @@ export const lineWebhook = onRequest(
   },
 );
 
+// ▼▼▼ 修正: 重複通知バグを解消した通知機能 ▼▼▼
 export const checkUpcomingMeetings = onSchedule(
   {
     schedule: "every 15 minutes",
@@ -1774,24 +1776,36 @@ export const checkUpcomingMeetings = onSchedule(
 
       const now = new Date();
 
-      // ★重要修正: 通知範囲を「直前(25-40分後)」と「24時間後」の2点に厳格化
-      // 1. 直前リマインド (30分前を狙うため、25-40分の幅で検知)
-      const soonMin = new Date(now.getTime() + 25 * 60000).toISOString();
-      const soonMax = new Date(now.getTime() + 40 * 60000).toISOString();
+      // 1. 直前リマインド (25分後 〜 40分後)
+      // ※30分前を狙うために幅を持たせています
+      const soonMin = new Date(now.getTime() + 25 * 60000);
+      const soonMax = new Date(now.getTime() + 40 * 60000);
 
-      // 2. 明日の予定通知 (24時間後〜24時間15分後) ※1日前の同じ時間に通知
-      const dayMin = new Date(now.getTime() + 24 * 60 * 60000).toISOString();
-      const dayMax = new Date(
-        now.getTime() + (24 * 60 + 15) * 60000,
-      ).toISOString();
+      // 2. 明日の予定通知 (24時間後 〜 24時間15分後)
+      // ※ちょうど24時間前を狙います
+      const dayMin = new Date(now.getTime() + 24 * 60 * 60000);
+      const dayMax = new Date(now.getTime() + (24 * 60 + 15) * 60000);
 
       const checks = [
-        { min: soonMin, max: soonMax, title: "まもなく開始" },
-        { min: dayMin, max: dayMax, title: "明日の予定" },
+        {
+          min: soonMin.toISOString(),
+          max: soonMax.toISOString(),
+          minTime: soonMin.getTime(),
+          maxTime: soonMax.getTime(),
+          title: "まもなく開始",
+        },
+        {
+          min: dayMin.toISOString(),
+          max: dayMax.toISOString(),
+          minTime: dayMin.getTime(),
+          maxTime: dayMax.getTime(),
+          title: "明日の予定",
+        },
       ];
 
       for (const check of checks) {
         try {
+          // GoogleカレンダーAPIは「期間に被っている予定」を全て返してしまう仕様
           const res = await axios.get(
             "https://www.googleapis.com/calendar/v3/calendars/primary/events",
             {
@@ -1806,11 +1820,19 @@ export const checkUpcomingMeetings = onSchedule(
           );
 
           for (const ev of res.data.items || []) {
-            // ★重要: 終日予定（日付のみ）は除外する
+            // 終日予定（誕生日など）は通知しない
             if (ev.start.date) continue;
 
-            const startTime = ev.start.dateTime || ev.start.date;
-            const endTime = ev.end.dateTime || ev.end.date;
+            // ★重要修正: 「開始時間」がチェック範囲に入っているか厳密に確認
+            const eventStart = new Date(ev.start.dateTime).getTime();
+
+            // 開始時間が範囲外（＝単に時間が被っているだけ）なら通知しない
+            if (eventStart < check.minTime || eventStart >= check.maxTime) {
+              continue;
+            }
+
+            const startTime = ev.start.dateTime;
+            const endTime = ev.end.dateTime;
             const searchLoc = ev.location || defaultLocation;
             const w = await checkWeather(searchLoc, startTime);
 
