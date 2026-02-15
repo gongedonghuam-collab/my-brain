@@ -42,7 +42,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendWeeklyRoutineSuggestion = exports.redeemInviteCode = exports.checkReminders = exports.sendMorningBriefing = exports.checkUpcomingMeetings = exports.lineWebhook = exports.refreshCalendarToken = exports.linkLineAccount = void 0;
+exports.adminDashboard = exports.sendWeeklyRoutineSuggestion = exports.redeemInviteCode = exports.checkReminders = exports.sendMorningBriefing = exports.checkUpcomingMeetings = exports.lineWebhook = exports.refreshCalendarToken = exports.linkLineAccount = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const v2_1 = require("firebase-functions/v2");
@@ -81,6 +81,7 @@ const COLORS = {
     textWhite: "#f8fafc",
     textLight: "#94a3b8",
 };
+const ADMIN_USER_ID = "U830dd4267a9be4b0ee4786a5662e212f"; // ←ここに管理者のLINE User IDを設定
 /**
  * WeatherAPI Emoji Helper
  */
@@ -1358,6 +1359,68 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 console.error("Loading animation error:", loadingError);
             }
             const message = event.message.text.trim();
+            if (message === "admin") {
+                // 管理者チェック
+                if (lineUserId === ADMIN_USER_ID) {
+                    try {
+                        // 1. ユーザー総数
+                        const totalSnap = await db.collection("users").count().get();
+                        const totalUsers = totalSnap.data().count;
+                        // 2. プロ会員数 & 収益計算 (PROプラン 980円で計算)
+                        const proSnap = await db
+                            .collection("users")
+                            .where("isPro", "==", true)
+                            .count()
+                            .get();
+                        const proUsers = proSnap.data().count;
+                        const monthlyRevenue = proUsers * 980;
+                        const annualRevenue = monthlyRevenue * 12;
+                        // 3. 本日のAI利用回数
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const logsSnap = await db
+                            .collection("chat_logs")
+                            .where("createdAt", ">=", admin.firestore.Timestamp.fromDate(today))
+                            .count()
+                            .get();
+                        const todayCalls = logsSnap.data().count;
+                        const dashboardUrl = "https://asia-northeast1-my-brain-145b1.cloudfunctions.net/adminDashboard";
+                        const report = `
+📊 My Brain 経営レポート
+━━━━━━━━━━
+👥 ユーザー数: ${totalUsers}人
+👑 Pro会員: ${proUsers}人
+━━━━━━━━━━
+💰 月次収益: ¥${monthlyRevenue.toLocaleString()}
+💰 年次見込: ¥${annualRevenue.toLocaleString()}
+━━━━━━━━━━
+🤖 本日AI利用: ${todayCalls}回
+
+👇 詳細ダッシュボード(グラフ)
+${dashboardUrl}
+                `.trim();
+                        await client.replyMessage(event.replyToken, {
+                            type: "text",
+                            text: report,
+                        });
+                        return; // ここで終了（AI処理に行かせない）
+                    }
+                    catch (e) {
+                        console.error("Admin Report Error:", e);
+                        await client.replyMessage(event.replyToken, {
+                            type: "text",
+                            text: "⚠️ エラー: " + e.message,
+                        });
+                        return;
+                    }
+                }
+                else {
+                    // 管理者じゃない人が「admin」と打った場合
+                    console.log(`⚠️ Unauthorized admin access attempt by: ${lineUserId}`);
+                    // 何も返さないか、AIに会話させるなら return しない
+                    // ここでは無視してAIに「adminって何？」と答えさせるために処理を続行します
+                }
+            }
             const userRef = db.collection("users").doc(uid);
             const userData = usersSnap.docs[0].data();
             const defaultLocation = userData.defaultLocation || "Tokyo";
@@ -1392,6 +1455,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
             });
             // 修正後（routerPrompt全体を差し替え、または該当行を追加）
             // ★修正: リンク参照とリマインダー削除の精度を向上させるプロンプトに変更
+            // 修正後（routerPrompt全体を差し替え）
             const routerPrompt = `あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr} (Asia/Tokyo)
           【カレンダー】(最新)
           ${cal}
@@ -1408,17 +1472,18 @@ exports.lineWebhook = (0, https_1.onRequest)({
           2. 「リマインド削除」「通知消して」は REMINDER_DELETE。「会議のリマインド消して」なら "会議" を targetKeyword に設定。
           3. 「メモ削除」「忘れて」は MEMORY_DELETE。削除したい内容を targetKeyword に設定。
           4. 日付指示（明日など）は現在日時基準で変換。
+          5. 「予定削除」「キャンセル」「リスケしたい」は CALENDAR_DELETE。削除したい予定のタイトル（またはキーワード）を title に設定。
 
           出力JSON: {
           "action": "REMINDER_ADD"|"REMINDER_DELETE"|"CALENDAR_ADD"|"CALENDAR_DELETE"|"TASK_ADD"|"TASK_DELETE"|"MEMORY_ADD"|"MEMORY_DELETE"|"MEMORY_EDIT"|"MEMORY_APPEND"|"CHAT",
           "data": {
-            "title": "件名",
-            "start": "YYYY-MM-DDTHH:mm:ss+09:00",
-            "end": "YYYY-MM-DDTHH:mm:ss+09:00",
-            "location": "場所",
-            "content": "内容",
-            "targetKeyword": "削除や検索対象のキーワード(必須)",
-            "targetId": "対象ID"
+          "title": "件名",
+          "start": "YYYY-MM-DDTHH:mm:ss+09:00",
+          "end": "YYYY-MM-DDTHH:mm:ss+09:00",
+          "location": "場所",
+          "content": "内容",
+          "targetKeyword": "削除や検索対象のキーワード(必須)",
+          "targetId": "対象ID"
           },
           "reply": "ユーザーへの返信テキスト(URLはここに含める)"
           }`;
@@ -1973,4 +2038,155 @@ exports.sendWeeklyRoutineSuggestion = (0, scheduler_1.onSchedule)({
             });
         }
     }
+});
+exports.adminDashboard = (0, https_1.onRequest)(async (req, res) => {
+    // 1. Basic認証 (ユーザー名: admin / パスワード: password1234)
+    // ※必要に応じて変更してください
+    const auth = req.headers.authorization;
+    if (!auth || auth.indexOf("Basic ") === -1) {
+        res.setHeader("WWW-Authenticate", 'Basic realm="Admin Area"');
+        res.status(401).send("Auth Required");
+        return;
+    }
+    const [user, pass] = Buffer.from(auth.split(" ")[1], "base64")
+        .toString()
+        .split(":");
+    if (user !== "gongedonghuam@gmail.com" || pass !== "T0330c0209") {
+        res.status(401).send("Invalid Credentials");
+        return;
+    }
+    // 2. データ取得
+    const totalSnap = await db.collection("users").count().get();
+    const proSnap = await db
+        .collection("users")
+        .where("isPro", "==", true)
+        .count()
+        .get();
+    // 収益計算 (PROプラン 980円)
+    const monthly = proSnap.data().count * 980;
+    const annual = monthly * 12;
+    // 今日のAI利用回数
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const logsSnap = await db
+        .collection("chat_logs")
+        .where("createdAt", ">=", admin.firestore.Timestamp.fromDate(today))
+        .count()
+        .get();
+    // 直近の登録ユーザー5件
+    const recentUsersSnap = await db
+        .collection("users")
+        .orderBy("createdAt", "desc")
+        .limit(5)
+        .get();
+    let userListHtml = "";
+    recentUsersSnap.forEach((doc) => {
+        const d = doc.data();
+        const dateStr = d.createdAt
+            ? new Date(d.createdAt.toDate()).toLocaleDateString("ja-JP")
+            : "-";
+        userListHtml += `
+      <div class="flex justify-between items-center p-3 border-b border-gray-700">
+        <div>
+          <div class="font-bold text-sm text-gray-200">${d.lineDisplayName || "ゲスト"}</div>
+          <div class="text-xs text-gray-500">${dateStr}</div>
+        </div>
+        <div class="text-xs font-bold ${d.isPro ? "text-green-400" : "text-gray-500"}">
+          ${d.isPro ? "PRO" : "FREE"}
+        </div>
+      </div>`;
+    });
+    // 3. HTML生成 (スマホ対応レスポンシブデザイン)
+    const html = `
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+  <title>My Brain Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>body { background-color: #0f172a; color: #f8fafc; font-family: sans-serif; }</style>
+</head>
+<body class="p-4 pb-20"> 
+  <div class="max-w-md mx-auto">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-xl font-bold text-indigo-400 flex items-center gap-2">
+        <span>🧠</span> 経営ダッシュボード
+      </h1>
+      <span class="text-xs text-gray-500 bg-slate-800 px-2 py-1 rounded">Live</span>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3 mb-4">
+      <div class="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700">
+        <div class="text-gray-400 text-xs mb-1">月次収益 (MRR)</div>
+        <div class="text-xl font-bold text-white">¥${monthly.toLocaleString()}</div>
+      </div>
+      <div class="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700">
+        <div class="text-gray-400 text-xs mb-1">年次見込 (ARR)</div>
+        <div class="text-xl font-bold text-yellow-400">¥${annual.toLocaleString()}</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 mb-6">
+      <div class="bg-slate-800 p-3 rounded-lg text-center border border-slate-700">
+        <div class="text-gray-500 text-[10px]">総ユーザー</div>
+        <div class="text-lg font-bold">${totalSnap.data().count}</div>
+      </div>
+      <div class="bg-slate-800 p-3 rounded-lg text-center border border-slate-700">
+        <div class="text-gray-500 text-[10px]">Pro会員</div>
+        <div class="text-lg font-bold text-green-400">${proSnap.data().count}</div>
+      </div>
+      <div class="bg-slate-800 p-3 rounded-lg text-center border border-slate-700">
+        <div class="text-gray-500 text-[10px]">本日AI</div>
+        <div class="text-lg font-bold text-blue-400">${logsSnap.data().count}</div>
+      </div>
+    </div>
+
+    <div class="bg-slate-800 p-4 rounded-xl shadow mb-6 border border-slate-700">
+      <h2 class="text-sm font-bold mb-4 text-gray-300">利用推移 (直近7日)</h2>
+      <canvas id="myChart" height="200"></canvas>
+    </div>
+
+    <div class="bg-slate-800 rounded-xl shadow overflow-hidden border border-slate-700">
+      <div class="bg-slate-900 p-3 text-xs text-gray-400 font-bold uppercase tracking-wider border-b border-slate-700">
+        New Users
+      </div>
+      ${userListHtml}
+    </div>
+
+    <div class="mt-8 text-center text-xs text-gray-600">
+      My Brain Internal System
+    </div>
+  </div>
+
+  <script>
+    // ダミーデータではなく、本来はここもDBから取得して埋め込む
+    // 今回は「本日のAI利用数」だけリアルタイム反映しています
+    const ctx = document.getElementById('myChart');
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['6日前', '5日前', '4日前', '3日前', '一昨日', '昨日', '今日'],
+        datasets: [{
+          label: 'AI Calls',
+          data: [12, 19, 15, 20, 22, 18, ${logsSnap.data().count}],
+          backgroundColor: '#6366f1',
+          borderRadius: 4
+        }]
+      },
+      options: { 
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { 
+          x: { grid: { display: false }, ticks: { color: '#64748b', font: {size: 10} } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } }
+        } 
+      }
+    });
+  </script>
+</body>
+</html>
+  `;
+    res.send(html);
 });

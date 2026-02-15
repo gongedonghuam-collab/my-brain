@@ -453,6 +453,13 @@ const speakText = (text: string) => {
 
 // --- Main Composable ---
 export function useMyBrain() {
+  const isAdmin = computed(() => {
+    return (
+      currentUser.value &&
+      currentUser.value.email &&
+      ADMIN_EMAILS.includes(currentUser.value.email)
+    );
+  });
   const checkAndIncrementUsage = async (): Promise<boolean> => {
     if (!currentUser.value) return false;
     if (currentUser.value.isPro) return true;
@@ -1175,6 +1182,7 @@ export function useMyBrain() {
   };
 
   return {
+    isAdmin,
     currentUser,
     memories,
     filteredMemories,

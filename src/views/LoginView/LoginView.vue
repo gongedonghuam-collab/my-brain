@@ -10,29 +10,30 @@ const loading = ref(false); // ローディング中かどうか
 const auth = getAuth(); // Firebase Auth
 const db = getFirestore(); // Firestore Database
 
-// LINEブラウザ判定フラグ
-const isLineBrowser = ref(false);
+// アプリ内ブラウザ判定フラグ
+const isInAppBrowser = ref(false);
 
 onMounted(() => {
-  // ユーザーエージェントに "Line" が含まれているかチェック
+  // ★修正: ユーザーエージェント検知を強化 (LINE, Instagram, TikTok, Facebook)
   const ua = navigator.userAgent.toLowerCase();
-  if (ua.indexOf("line") !== -1) {
-    isLineBrowser.value = true;
+  if (
+    ua.includes("line") ||
+    ua.includes("instagram") ||
+    ua.includes("tiktok") ||
+    ua.includes("fbav") // Facebook App
+  ) {
+    isInAppBrowser.value = true;
   }
 });
 
 /**
  * Googleログイン処理
- * ユーザーにGoogleアカウントでのログインを求め、以下の処理を行います。
- * 1. カレンダーへのアクセス権限を取得
- * 2. 取得したトークン（合鍵）をFirestoreとlocalStorageに保存
- * 3. ユーザー情報を保存してアプリ画面へ遷移
  */
 const handleGoogleLogin = async () => {
-  if (isLineBrowser.value) {
-    alert(
-      "LINEブラウザではGoogle認証がブロックされることがあります。\n右上のメニューなどから「ブラウザで開く（Safari/Chrome）」を選択して再試行してください。",
-    );
+  // 念のためのガード（ボタンが表示されていれば押せないはずだが）
+  if (isInAppBrowser.value) {
+    alert("右上のメニューから「ブラウザで開く」を選択してください🙇‍♂️");
+    return;
   }
 
   loading.value = true;
@@ -44,8 +45,6 @@ const handleGoogleLogin = async () => {
     provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
 
     // ★修正ポイント: リフレッシュトークン（永続的な合鍵）を強制的に取得する設定
-    // 'select_account' を追加することで、Googleの自動ログインを回避し、
-    // アカウント選択画面を出すことで確実にリフレッシュトークンを発行させます。
     provider.setCustomParameters({
       prompt: "select_account consent",
       access_type: "offline", // 裏側（Cloud Functions）で接続するために必須
@@ -56,13 +55,11 @@ const handleGoogleLogin = async () => {
     const user = result.user;
 
     // トークン情報の取得
-    // ※ _tokenResponse は型定義に含まれていないため any でキャストして無理やり取得します
     const tokenResponse = (result as any)._tokenResponse;
     const refreshToken =
       tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const accessToken = credential?.accessToken;
-    // ★追加: トークンの有効期限（秒）
     const expiresIn = tokenResponse?.expiresIn || 3600;
 
     // ★トークンを保存するためのデータ準備
@@ -72,10 +69,9 @@ const handleGoogleLogin = async () => {
       tokenData.accessToken = accessToken; // 今すぐ使える鍵
 
       // ★修正: ブラウザのlocalStorageにも即座に保存
-      // これにより、ログイン直後の画面遷移でもカレンダーが即座に表示されます
       localStorage.setItem("google_calendar_token", accessToken);
 
-      // ★追加: 有効期限を計算して保存 (現在時刻 + 有効秒数 - マージン300秒)
+      // ★追加: 有効期限を計算して保存
       const expiryTime =
         new Date().getTime() + (Number(expiresIn) - 300) * 1000;
       localStorage.setItem(
@@ -89,13 +85,12 @@ const handleGoogleLogin = async () => {
     }
 
     // Firestore（サーバー側）への保存処理
-    // 裏側のCloud Functionsがカレンダーを操作するために必要です
     if (refreshToken || accessToken) {
       try {
         await setDoc(
           doc(db, "users", user.uid, "system", "tokens"),
           tokenData,
-          { merge: true }, // 既存のデータを消さないようにマージ保存
+          { merge: true },
         );
         console.log("Tokens saved successfully.");
       } catch (saveError: any) {
@@ -121,7 +116,12 @@ const handleGoogleLogin = async () => {
     router.push("/app");
   } catch (e: any) {
     console.error(e);
-    alert("Googleログインに失敗しました: " + e.message);
+    // アプリ内ブラウザ以外でのエラー（ポップアップブロックなど）へのヒント
+    alert(
+      "エラー: " +
+        e.message +
+        "\n\n※うまくいかない場合は、SafariやChromeで開き直してください。",
+    );
   } finally {
     loading.value = false;
   }
@@ -140,7 +140,7 @@ const handleGoogleLogin = async () => {
     ></div>
 
     <div
-      class="w-full max-w-sm bg-white/5 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/10 flex flex-col items-center"
+      class="w-full max-w-sm bg-white/5 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/10 flex flex-col items-center relative z-10"
     >
       <div class="mb-10 text-center">
         <div class="text-6xl mb-4">🧠</div>
@@ -153,20 +153,24 @@ const handleGoogleLogin = async () => {
       </div>
 
       <div
-        v-if="isLineBrowser"
-        class="w-full mb-6 bg-amber-500/10 border border-amber-500/50 rounded-xl p-4 text-amber-200 text-xs leading-relaxed"
+        v-if="isInAppBrowser"
+        class="w-full bg-amber-600 rounded-xl p-6 text-white text-center shadow-lg animate-pulse mb-6 border-2 border-white"
       >
-        <p class="font-bold mb-1">⚠️ 動作環境のご注意</p>
-        <p>
-          現在LINEアプリ内で開いています。Google連携がエラーになる場合があります。
+        <div class="text-4xl mb-2">⚠️</div>
+        <h2 class="font-bold text-lg mb-2">ブラウザで開いてください</h2>
+        <p class="text-sm leading-relaxed opacity-90 font-bold">
+          TikTokやインスタのままでは<br />
+          Googleログインができません💦
         </p>
-        <p class="mt-2 text-white font-bold underline">
-          右上のメニュー(︙)
-          または「共有」アイコンから「デフォルトのブラウザで開く」を選択してください。
-        </p>
+        <div
+          class="mt-4 p-3 bg-black/30 rounded-lg text-xs font-bold text-left"
+        >
+          ① 右上の「・・・」や「矢印」を押す<br />
+          ②「ブラウザで開く」を選択<br />
+          ③ SafariやChromeで開けばOK！
+        </div>
       </div>
-
-      <div class="w-full space-y-6">
+      <div v-else class="w-full space-y-6">
         <p class="text-slate-300 text-sm text-center leading-relaxed mb-4">
           LINEで全てを完結させるために、<br />
           <span class="text-indigo-400 font-bold">Google連携</span>
@@ -203,7 +207,7 @@ const handleGoogleLogin = async () => {
               fill="#EA4335"
             />
           </svg>
-          Googleで連携する
+          {{ loading ? "読み込み中..." : "Googleで連携する" }}
         </button>
 
         <div class="mt-6 flex justify-center gap-4 text-[10px] text-slate-500">

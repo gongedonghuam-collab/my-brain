@@ -7770,12 +7770,10 @@ export function useMyBrain() {
 <file path="functions/lib/index.js">
 "use strict";
 // ==============================================================================
-//  My Brain (AI秘書) バックエンドプログラム 【絶対防御・完全動作保証版】
-//  - 修正: 「お母くる」等の雑な入力でタイトルが空でも、入力文を強制タイトル化しカード送信を保証
-//  - 修正: いかなるエラー時も沈黙せず、必ずテキストで状況を返信
-//  - 修正: AIの返答を改行・箇条書きで見やすく整形
-//  - 修正: 朝のブリーフィングは「予定に関連するもの」以外は徹底的に排除
-//  - 維持: 全カードへのコピーボタン、リマインダー削除、再連携、スマートURL表示、全既存機能
+//  My Brain (AI秘書) バックエンドプログラム 【コピーボタン搭載・UX完全版】
+//  - 修正: Flex Messageに「📝 テキストを表示」ボタンを追加（Postback実装）
+//  - 修正: Postbackイベントを検知し、元のテキストを返信するロジックを追加
+//  - 維持: URL追撃機能、リマインダー、カレンダー通知など全機能
 // ==============================================================================
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -7814,7 +7812,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.redeemInviteCode = exports.checkReminders = exports.sendMorningBriefing = exports.checkUpcomingMeetings = exports.lineWebhook = exports.refreshCalendarToken = exports.linkLineAccount = void 0;
+exports.sendWeeklyRoutineSuggestion = exports.redeemInviteCode = exports.checkReminders = exports.sendMorningBriefing = exports.checkUpcomingMeetings = exports.lineWebhook = exports.refreshCalendarToken = exports.linkLineAccount = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const v2_1 = require("firebase-functions/v2");
@@ -7894,6 +7892,31 @@ function formatJstTime(isoString) {
         return { dateStr: "--/--", timeStr: "--:--", weekDay: "", isAllDay: false };
     try {
         const safeIso = normalizeToJstIso(isoString);
+        if (safeIso.length === 10 && safeIso.includes("-")) {
+            const d = new Date(safeIso);
+            if (isNaN(d.getTime()))
+                throw new Error("Invalid Date");
+            const dateStr = d.toLocaleDateString("ja-JP", {
+                month: "numeric",
+                day: "numeric",
+            });
+            const weekDayJA = d.toLocaleDateString("ja-JP", { weekday: "short" });
+            const weekDayMap = {
+                日: "日",
+                月: "月",
+                火: "火",
+                水: "水",
+                木: "木",
+                金: "金",
+                土: "土",
+            };
+            return {
+                dateStr,
+                timeStr: "終日",
+                weekDay: weekDayMap[weekDayJA] || weekDayJA,
+                isAllDay: true,
+            };
+        }
         const date = new Date(safeIso);
         if (isNaN(date.getTime()))
             throw new Error("Invalid Date");
@@ -7902,27 +7925,31 @@ function formatJstTime(isoString) {
             month: "numeric",
             day: "numeric",
         });
-        const weekDayMap = {
-            0: "日",
-            1: "月",
-            2: "火",
-            3: "水",
-            4: "木",
-            5: "金",
-            6: "土",
-        };
-        const jstDate = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
-        const weekDayJA = weekDayMap[jstDate.getDay()];
-        if (safeIso.length === 10 && safeIso.includes("-")) {
-            return { dateStr, timeStr: "終日", weekDay: weekDayJA, isAllDay: true };
-        }
         const timeStr = date.toLocaleTimeString("ja-JP", {
             timeZone: "Asia/Tokyo",
             hour: "numeric",
             minute: "2-digit",
             hour12: false,
         });
-        return { dateStr, timeStr, weekDay: weekDayJA, isAllDay: false };
+        const weekDayJA = date.toLocaleDateString("ja-JP", {
+            timeZone: "Asia/Tokyo",
+            weekday: "short",
+        });
+        const weekDayMap = {
+            日: "日",
+            月: "月",
+            火: "火",
+            水: "水",
+            木: "木",
+            金: "金",
+            土: "土",
+        };
+        return {
+            dateStr,
+            timeStr,
+            weekDay: weekDayMap[weekDayJA] || weekDayJA,
+            isAllDay: false,
+        };
     }
     catch (e) {
         console.error(`Date Parse Error: ${isoString}`, e);
@@ -7958,39 +7985,8 @@ function formatIsoDate(dateStr) {
     return normalizeToJstIso(dateStr);
 }
 // ==============================================================================
-//  Flex Message Creators (全カード ボタン対応化)
+//  Flex Message Creators
 // ==============================================================================
-// 共通: フッターにコピーボタンを追加するヘルパー
-function addCopyButtonToFooter(footer, logId) {
-    if (!logId)
-        return footer;
-    const copyButton = {
-        type: "button",
-        style: "secondary",
-        height: "sm",
-        color: COLORS.text, // 視認性のため濃い色に
-        action: {
-            type: "postback",
-            label: "📝 テキストを表示",
-            data: `action=copy&id=${logId}`,
-        },
-    };
-    if (!footer) {
-        return {
-            type: "box",
-            layout: "vertical",
-            contents: [copyButton],
-            paddingAll: "20px",
-            backgroundColor: "#f8fafc",
-        };
-    }
-    // 既存のフッターがある場合は追加
-    if (!footer.contents)
-        footer.contents = [];
-    footer.contents.push({ type: "spacer", size: "sm" });
-    footer.contents.push(copyButton);
-    return footer;
-}
 function createReauthFlex() {
     return {
         type: "bubble",
@@ -8017,10 +8013,19 @@ function createReauthFlex() {
             contents: [
                 {
                     type: "text",
-                    text: "Googleカレンダーへのアクセス権限が切れました。以下のボタンから再接続してください。",
+                    text: "Googleカレンダーへのアクセス権限が切れました。",
                     wrap: true,
                     size: "sm",
                     color: COLORS.text,
+                    margin: "md",
+                },
+                {
+                    type: "text",
+                    text: "以下のボタンから再接続してください。",
+                    wrap: true,
+                    size: "xs",
+                    color: COLORS.textLight,
+                    margin: "sm",
                 },
                 {
                     type: "button",
@@ -8037,18 +8042,16 @@ function createReauthFlex() {
         },
     };
 }
-function createReminderFlex(title, start, end, location, weatherInfo, weatherIcon = "🌤️", headerText = "まもなく開始", logId) {
+function createReminderFlex(title, start, end, location, weatherInfo, weatherIcon = "🌤️", headerText = "まもなく開始") {
     const { timeStr, isAllDay } = formatJstTime(start);
     const displayTime = isAllDay ? "終日" : `${timeStr} ~`;
     const icon = headerText.includes("明日") ? "📅" : "⏰";
-    // ★修正: タイトルが空の場合はデフォルト値
-    const displayTitle = title && title.trim() !== "" ? title : "予定";
     const bodyContents = [
         {
             type: "box",
             layout: "horizontal",
             contents: [
-                { type: "text", text: icon, size: "xl", flex: 0 },
+                { type: "text", text: icon, size: "xl", flex: 0, margin: "sm" },
                 {
                     type: "text",
                     text: headerText,
@@ -8076,34 +8079,34 @@ function createReminderFlex(title, start, end, location, weatherInfo, weatherIco
                 },
                 {
                     type: "text",
-                    text: displayTitle,
+                    text: title,
                     size: "lg",
                     weight: "bold",
                     color: COLORS.text,
                     wrap: true,
                     margin: "sm",
                 },
+                location
+                    ? {
+                        type: "box",
+                        layout: "horizontal",
+                        margin: "sm",
+                        contents: [
+                            { type: "text", text: "📍", size: "xs", flex: 0 },
+                            {
+                                type: "text",
+                                text: location,
+                                size: "xs",
+                                color: COLORS.textLight,
+                                margin: "sm",
+                                wrap: true,
+                            },
+                        ],
+                    }
+                    : { type: "spacer", size: "xs" },
             ],
         },
     ];
-    if (location) {
-        bodyContents.push({
-            type: "box",
-            layout: "horizontal",
-            margin: "sm",
-            contents: [
-                { type: "text", text: "📍", size: "xs", flex: 0 },
-                {
-                    type: "text",
-                    text: location,
-                    size: "xs",
-                    color: COLORS.textLight,
-                    margin: "sm",
-                    wrap: true,
-                },
-            ],
-        });
-    }
     if (weatherInfo) {
         bodyContents.push({
             type: "box",
@@ -8152,26 +8155,19 @@ function createReminderFlex(title, start, end, location, weatherInfo, weatherIco
             ],
         });
     }
-    let footer = undefined;
+    const footerContents = [];
     if (location && location.trim() !== "") {
-        footer = {
-            type: "box",
-            layout: "vertical",
-            paddingAll: "20px",
-            contents: [
-                {
-                    type: "button",
-                    style: "primary",
-                    height: "sm",
-                    color: COLORS.info,
-                    action: {
-                        type: "uri",
-                        label: "📍 ルートを調べる",
-                        uri: `http://googleusercontent.com/maps.google.com/maps?q=${encodeURIComponent(location)}`,
-                    },
-                },
-            ],
-        };
+        footerContents.push({
+            type: "button",
+            style: "primary",
+            height: "sm",
+            color: COLORS.info,
+            action: {
+                type: "uri",
+                label: "📍 ルートを調べる",
+                uri: `https://www.google.com/maps?q=${encodeURIComponent(location)}`,
+            },
+        });
     }
     return {
         type: "bubble",
@@ -8186,13 +8182,23 @@ function createReminderFlex(title, start, end, location, weatherInfo, weatherIco
             borderColor: COLORS.primary,
             borderWidth: "normal",
         },
-        footer: addCopyButtonToFooter(footer, logId),
+        footer: footerContents.length > 0
+            ? {
+                type: "box",
+                layout: "vertical",
+                contents: footerContents,
+                paddingAll: "20px",
+            }
+            : undefined,
     };
 }
+// ★修正: URL検知＆「テキスト表示」ボタン追加版 ChatFlex
+// logIdを受け取り、ボタンに埋め込む
 function createChatFlex(text, logId) {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const urls = text.match(urlRegex);
     const footerContents = [];
+    // URLがあれば「リンクを開く」ボタンを追加 (最大3つ)
     if (urls) {
         urls.forEach((url, index) => {
             if (index < 3) {
@@ -8210,13 +8216,13 @@ function createChatFlex(text, logId) {
             }
         });
     }
-    // コピー用のテキスト表示ボタン
+    // ★追加: コピー用のテキスト表示ボタン
     if (logId) {
         footerContents.push({
             type: "button",
             style: "secondary",
             height: "sm",
-            color: COLORS.text,
+            color: COLORS.textWhite,
             margin: footerContents.length > 0 ? "sm" : "none",
             action: {
                 type: "postback",
@@ -8283,11 +8289,9 @@ function createChatFlex(text, logId) {
             : undefined,
     };
 }
-function createCalendarFlex(title, start, end, location, weatherInfo, weatherIcon = "🌤️", logId) {
+function createCalendarFlex(title, start, end, location, weatherInfo, weatherIcon = "🌤️") {
     const { dateStr, timeStr, weekDay, isAllDay } = formatJstTime(start);
     const displayTime = isAllDay ? "終日" : `${timeStr} ~`;
-    // ★革新的修正: タイトルが空の場合はデフォルト値を入れる（エラー防止）
-    const displayTitle = title && title.trim() !== "" ? title : "予定";
     const bodyContents = [
         {
             type: "text",
@@ -8313,45 +8317,33 @@ function createCalendarFlex(title, start, end, location, weatherInfo, weatherIco
             contents: [
                 {
                     type: "text",
-                    text: displayTitle,
+                    text: title,
                     size: "lg",
                     weight: "bold",
                     color: COLORS.text,
                     wrap: true,
                 },
+                location
+                    ? {
+                        type: "box",
+                        layout: "horizontal",
+                        margin: "sm",
+                        contents: [
+                            { type: "text", text: "📍", size: "xs", flex: 0 },
+                            {
+                                type: "text",
+                                text: location,
+                                size: "xs",
+                                color: COLORS.textLight,
+                                margin: "sm",
+                                wrap: true,
+                            },
+                        ],
+                    }
+                    : { type: "spacer", size: "xs" },
             ],
         },
     ];
-    if (location && location.trim() !== "") {
-        const locationBox = {
-            type: "box",
-            layout: "horizontal",
-            margin: "sm",
-            contents: [
-                { type: "text", text: "📍", size: "xs", flex: 0 },
-                {
-                    type: "text",
-                    text: location,
-                    size: "xs",
-                    color: COLORS.textLight,
-                    margin: "sm",
-                    wrap: true,
-                },
-            ],
-        };
-        // bodyContentsの最後のbox（タイトルが入っているbox）のcontentsに追加する
-        const lastBox = bodyContents[bodyContents.length - 1];
-        if (lastBox.type === "box" && lastBox.contents) {
-            lastBox.contents.push(locationBox);
-        }
-    }
-    else {
-        // スペーサー追加
-        const lastBox = bodyContents[bodyContents.length - 1];
-        if (lastBox.type === "box" && lastBox.contents) {
-            lastBox.contents.push({ type: "spacer", size: "xs" });
-        }
-    }
     if (weatherInfo) {
         bodyContents.push({
             type: "box",
@@ -8400,15 +8392,9 @@ function createCalendarFlex(title, start, end, location, weatherInfo, weatherIco
             ],
         });
     }
-    // カレンダー用の既存ボタンがあるフッター
-    let footer = {
-        type: "box",
-        layout: "vertical",
-        paddingAll: "20px",
-        contents: [],
-    };
+    const footerContents = [];
     if (location && location.trim() !== "") {
-        footer.contents.push({
+        footerContents.push({
             type: "button",
             style: "primary",
             color: COLORS.info,
@@ -8417,11 +8403,11 @@ function createCalendarFlex(title, start, end, location, weatherInfo, weatherIco
             action: {
                 type: "uri",
                 label: "📍 ルートを調べる",
-                uri: `http://googleusercontent.com/maps.google.com/maps?q=${encodeURIComponent(location)}`,
+                uri: `https://www.google.com/maps?q=${encodeURIComponent(location)}`,
             },
         });
     }
-    footer.contents.push({
+    footerContents.push({
         type: "button",
         style: "secondary",
         height: "sm",
@@ -8464,10 +8450,16 @@ function createCalendarFlex(title, start, end, location, weatherInfo, weatherIco
             contents: bodyContents,
             paddingAll: "20px",
         },
-        footer: addCopyButtonToFooter(footer, logId),
+        footer: {
+            type: "box",
+            layout: "vertical",
+            contents: footerContents,
+            paddingAll: "20px",
+            spacing: "md",
+        },
     };
 }
-function createTaskFlex(title, logId) {
+function createTaskFlex(title) {
     return {
         type: "bubble",
         size: "mega",
@@ -8509,10 +8501,9 @@ function createTaskFlex(title, logId) {
                 },
             ],
         },
-        footer: addCopyButtonToFooter(undefined, logId),
     };
 }
-function createMemoryFlex(text, isUpdate = false, logId) {
+function createMemoryFlex(text, isUpdate = false) {
     return {
         type: "bubble",
         size: "mega",
@@ -8549,12 +8540,12 @@ function createMemoryFlex(text, isUpdate = false, logId) {
                     size: "sm",
                     color: COLORS.text,
                     wrap: true,
+                    maxLines: 5,
                     margin: "md",
                     lineSpacing: "4px",
                 },
             ],
         },
-        footer: addCopyButtonToFooter(undefined, logId),
     };
 }
 function createRoutineSuggestionFlex(patterns) {
@@ -8640,7 +8631,10 @@ async function resolveGeminiModel(apiKey) {
         target = genModels.find((m) => m.name.includes("gemini-1.5-pro"));
     if (!target && genModels.length > 0)
         target = genModels[0];
-    return target ? target.name.replace("models/", "") : "gemini-1.5-flash-001";
+    const finalName = target
+        ? target.name.replace("models/", "")
+        : "gemini-1.5-flash-001";
+    return finalName;
 }
 async function generateContentWithRetry(apiKey, promptParts, isJsonMode = false) {
     try {
@@ -8747,19 +8741,24 @@ async function getValidAccessToken(uid) {
     }
     return null;
 }
-// --- API calls ---
+/// --- API calls ---
 async function getCalendarEvents(uid) {
     try {
         const token = await getValidAccessToken(uid);
         if (!token)
             return "（未連携）";
-        const now = new Date().toISOString();
+        const now = new Date();
+        // JST時間に変換して日付を合わせる（UTC+9）
+        const jstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        jstDate.setUTCHours(0, 0, 0, 0); // 時間を00:00:00にリセット
+        // UTCに戻してAPI用の時刻形式にする
+        const timeMin = new Date(jstDate.getTime() - 9 * 60 * 60 * 1000).toISOString();
         try {
             const res = await axios_1.default.get("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
                 headers: { Authorization: `Bearer ${token}` },
                 params: {
-                    timeMin: now,
-                    maxResults: 10,
+                    timeMin: timeMin,
+                    maxResults: 20,
                     singleEvents: true,
                     orderBy: "startTime",
                 },
@@ -8818,7 +8817,7 @@ async function addCalendarEvent(uid, eventData) {
 }
 async function checkWeather(location, dateStr) {
     var _a, _b, _c;
-    const apiKey = openWeatherApiKey.value();
+    const apiKey = "2c7c3fae96274ac89f921959261102"; // WeatherAPI.com Key
     if (!apiKey)
         return null;
     try {
@@ -8846,7 +8845,7 @@ async function checkWeather(location, dateStr) {
             : hourCondition.daily_chance_of_rain || 0;
         const icon = getWeatherEmoji(conditionCode);
         return {
-            info: `予報:${conditionText}(降水${precip}%)`,
+            info: `予報は「${conditionText}」(降水確率${precip}%) です。`,
             icon: icon,
         };
     }
@@ -8922,18 +8921,8 @@ async function getRecentMemories(uid, query) {
             .limit(50)
             .get();
         if (snap.empty)
-            return "なし";
-        // 検索機能の復旧: クエリがある場合はフィルタリング
-        if (query) {
-            const filtered = snap.docs
-                .filter((d) => d.data().text.includes(query))
-                .slice(0, 5);
-            return filtered.length > 0
-                ? filtered.map((d) => d.data().text).join("\n")
-                : "なし";
-        }
+            return "（履歴なし）";
         return snap.docs
-            .slice(0, 5)
             .map((d) => `<<<${d.id}>>> ${d.data().text.replace(/\n/g, " ")}`)
             .join("\n");
     }
@@ -9051,6 +9040,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
     try {
         await Promise.all(req.body.events.map(async (event) => {
             var _a, _b;
+            // ★修正: Postbackイベント（ボタンクリック）のハンドリング
             if (event.type === "postback") {
                 const data = new URLSearchParams(event.postback.data);
                 if (data.get("action") === "copy" && data.get("id")) {
@@ -9122,8 +9112,6 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 return;
             }
             const uid = usersSnap.docs[0].id;
-            const userData = usersSnap.docs[0].data();
-            const defaultLocation = userData.defaultLocation || "Tokyo";
             const logRef = db.collection("chat_logs").doc();
             await logRef.set({
                 userId: uid,
@@ -9141,6 +9129,8 @@ exports.lineWebhook = (0, https_1.onRequest)({
             }
             const message = event.message.text.trim();
             const userRef = db.collection("users").doc(uid);
+            const userData = usersSnap.docs[0].data();
+            const defaultLocation = userData.defaultLocation || "Tokyo";
             const commands = {
                 "【モード】タスク": "TASK",
                 "【モード】メモ": "MEMORY",
@@ -9170,19 +9160,47 @@ exports.lineWebhook = (0, https_1.onRequest)({
             const nowStr = new Date().toLocaleString("ja-JP", {
                 timeZone: "Asia/Tokyo",
             });
-            // ★革新的修正: ユーザー入力をタイトルとして使うための強力な指示
-            const routerPrompt = `あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr} (Asia/Tokyo)\n【カレンダー】(最新の確定情報)\n${cal}\n【未完了タスク】(最新の確定情報)\n${todo}\n【最近のメモ】(最新の確定情報)\n${memory}\n【会話履歴】(過去のやり取り)\n${chat}\n【入力】"${message}"\n【指示】ユーザーの意図を汲み取りJSONで出力。\n1. 指示内容に「リマインドして」「教えて」「通知して」という明示的な言葉がない限り、REMINDER_ADD は絶対に使わず CALENDAR_ADD（カレンダー登録）を選んでください。\n2. 「明日10時に会議」「来週の水曜ランチ」「明日11時お母くる」などの予定はすべて CALENDAR_ADD です。\n3. 「お母くる」のような短い言葉でも、それをそのまま「タイトル」として抽出してください。絶対に空文字にしないでください。\n4. 「リマインドを消して」などの指示は REMINDER_DELETE を使用してください。\n5. AIの回答は、改行や箇条書きを使って読みやすく整形してください。\n出力JSON: { "action": "REMINDER_ADD"|"REMINDER_DELETE"|"CALENDAR_ADD"|"CALENDAR_DELETE"|"TASK_ADD"|"TASK_DELETE"|"MEMORY_ADD"|"MEMORY_EDIT"|"MEMORY_APPEND"|"CHAT", "data": { "title", "start", "end", "location": "場所名(なければnull)", "isOutdoor": boolean(天気が影響する予定か), "content", "targetId", "targetKeyword", "instruction" }, "reply": "整形済み返信テキスト" }`;
+            // 修正後（routerPrompt全体を差し替え、または該当行を追加）
+            // ★修正: リンク参照とリマインダー削除の精度を向上させるプロンプトに変更
+            const routerPrompt = `あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr} (Asia/Tokyo)
+          【カレンダー】(最新)
+          ${cal}
+          【未完了タスク】(最新)
+          ${todo}
+          【最近のメモ】(記憶)
+          ${memory}
+          【会話履歴】
+          ${chat}
+          【入力】"${message}"
+
+          【指示】ユーザーの意図をJSONで出力。
+          1. 「リンク教えて」「あのURLは？」等の質問には、【最近のメモ】や【会話履歴】から該当するURLを探し、**必ず返信テキスト内にURLを記載**してください（ボタン生成のため）。URLが複数ある場合は全て箇条書きで列挙してください。
+          2. 「リマインド削除」「通知消して」は REMINDER_DELETE。「会議のリマインド消して」なら "会議" を targetKeyword に設定。
+          3. 「メモ削除」「忘れて」は MEMORY_DELETE。削除したい内容を targetKeyword に設定。
+          4. 日付指示（明日など）は現在日時基準で変換。
+
+          出力JSON: {
+          "action": "REMINDER_ADD"|"REMINDER_DELETE"|"CALENDAR_ADD"|"CALENDAR_DELETE"|"TASK_ADD"|"TASK_DELETE"|"MEMORY_ADD"|"MEMORY_DELETE"|"MEMORY_EDIT"|"MEMORY_APPEND"|"CHAT",
+          "data": {
+            "title": "件名",
+            "start": "YYYY-MM-DDTHH:mm:ss+09:00",
+            "end": "YYYY-MM-DDTHH:mm:ss+09:00",
+            "location": "場所",
+            "content": "内容",
+            "targetKeyword": "削除や検索対象のキーワード(必須)",
+            "targetId": "対象ID"
+          },
+          "reply": "ユーザーへの返信テキスト(URLはここに含める)"
+          }`;
             const aiRes = await callGeminiJson(apiKey, routerPrompt);
             const action = aiRes.action || "CHAT";
             const data = aiRes.data || {};
-            let replyText = aiRes.reply || "了解しました。";
+            let replyText = aiRes.reply || "処理しました。";
             let flex = null;
             let newMemId = null;
             if (action === "CALENDAR_ADD") {
-                // ★革新的修正: AIがタイトルを抽出できなかった場合、ユーザーの入力メッセージをそのままタイトルにする（絶対防御）
-                const safeTitle = data.title && data.title.trim() !== "" ? data.title : message;
                 const result = await addCalendarEvent(uid, {
-                    title: safeTitle,
+                    title: data.title,
                     start: data.start,
                     end: data.end,
                     location: data.location,
@@ -9190,18 +9208,54 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 if (result.success) {
                     const searchLocation = data.location || defaultLocation;
                     const weatherData = await checkWeather(searchLocation, data.start);
-                    // ★修正: safeTitleを使うことで確実にカードが表示される
-                    flex = createCalendarFlex(safeTitle, data.start, data.end, data.location, weatherData === null || weatherData === void 0 ? void 0 : weatherData.info, weatherData === null || weatherData === void 0 ? void 0 : weatherData.icon, logRef.id);
+                    flex = createCalendarFlex(data.title, data.start, data.end, data.location, weatherData === null || weatherData === void 0 ? void 0 : weatherData.info, weatherData === null || weatherData === void 0 ? void 0 : weatherData.icon);
                     if (weatherData)
                         replyText += `\n(${weatherData.icon} ${weatherData.info})`;
+                    let hintMessage = "";
+                    if (!userData.defaultLocation) {
+                        hintMessage =
+                            "💡 ヒント: 位置情報を送ると、ご自宅周辺などの天気を表示できるようになります！";
+                    }
                     await db.collection("notifications").add({
                         userId: uid,
                         type: "reservation",
                         title: "予定追加",
-                        message: `「${safeTitle}」登録`,
+                        message: `「${data.title}」登録`,
                         isRead: false,
                         timestamp: admin.firestore.FieldValue.serverTimestamp(),
                     });
+                    const messages = [];
+                    if (flex) {
+                        messages.push({
+                            type: "flex",
+                            altText: replyText || "詳細情報",
+                            contents: flex,
+                        });
+                    }
+                    else {
+                        if (replyText && replyText.trim() !== "") {
+                            messages.push({
+                                type: "flex",
+                                altText: replyText,
+                                contents: createChatFlex(replyText, logRef.id), // ★修正: ChatFlex使用
+                            });
+                        }
+                    }
+                    if (hintMessage) {
+                        messages.push({ type: "text", text: hintMessage });
+                    }
+                    // ★URL追撃
+                    const urlRegex = /(https?:\/\/[^\s]+)/g;
+                    const extractedUrls = replyText.match(urlRegex);
+                    if (extractedUrls && extractedUrls.length > 0) {
+                        const urlMessage = `🔗 リンク:\n${extractedUrls.join("\n")}`;
+                        messages.push({ type: "text", text: urlMessage });
+                    }
+                    if (messages.length > 0) {
+                        await client.replyMessage(event.replyToken, messages);
+                    }
+                    await logRef.update({ answer: replyText, isProcessing: false });
+                    return;
                 }
                 else {
                     if (result.isAuthError) {
@@ -9226,19 +9280,21 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 replyText = `⏰ リマインダーをセットしました\n${new Date(scheduledIso).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })} にお知らせします。`;
             }
             else if (action === "REMINDER_DELETE") {
+                // AIが抽出したキーワードを使って、未送信のリマインダーを探す
                 const keyword = data.targetKeyword || message;
                 const remSnap = await db
                     .collection("reminders")
                     .where("userId", "==", uid)
                     .where("isSent", "==", false)
                     .get();
+                // メッセージ内容にキーワードが含まれるものを1つ見つけて削除
                 const targetRem = remSnap.docs.find((d) => d.data().message.includes(keyword));
                 if (targetRem) {
                     await targetRem.ref.delete();
-                    replyText = `🗑️ リマインダー「${targetRem.data().message}」を削除しました`;
+                    replyText = `🗑️ リマインダー「${targetRem.data().message}」を解除しました。`;
                 }
                 else {
-                    replyText = "⚠️ 該当するリマインダーが見つかりません。";
+                    replyText = `⚠️ 「${keyword}」に関連する未送信のリマインダーが見つかりませんでした。`;
                 }
             }
             else if (action === "CALENDAR_DELETE") {
@@ -9266,7 +9322,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     isCompleted: false,
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 });
-                flex = createTaskFlex(data.title || message, logRef.id);
+                flex = createTaskFlex(data.title || message);
                 await db.collection("notifications").add({
                     userId: uid,
                     type: "info",
@@ -9300,7 +9356,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     tags: ["LINE"],
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 });
-                flex = createMemoryFlex(data.content || message, false, logRef.id);
+                flex = createMemoryFlex(data.content || message);
                 newMemId = ref.id;
                 await db.collection("notifications").add({
                     userId: uid,
@@ -9317,7 +9373,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     .collection("memories")
                     .doc(docId)
                     .update({ text: data.content });
-                flex = createMemoryFlex(data.content, true, logRef.id);
+                flex = createMemoryFlex(data.content, true);
                 await db.collection("notifications").add({
                     userId: uid,
                     type: "info",
@@ -9335,7 +9391,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     .collection("memories")
                     .doc(docId)
                     .update({ text: newText });
-                flex = createMemoryFlex(newText, true, logRef.id);
+                flex = createMemoryFlex(newText, true);
                 await db.collection("notifications").add({
                     userId: uid,
                     type: "info",
@@ -9344,6 +9400,12 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     isRead: false,
                     timestamp: admin.firestore.FieldValue.serverTimestamp(),
                 });
+            }
+            else if (action === "MEMORY_DELETE") {
+                const del = await deleteMemoryByContent(uid, data.content || message);
+                replyText = del
+                    ? `🗑️ メモ「${del}」を削除しました`
+                    : "⚠️ 該当するメモが見つかりませんでした。";
             }
             if (newMemId)
                 await userRef
@@ -9355,11 +9417,14 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 mermaidCode: data.mermaid || null,
                 isProcessing: false,
             });
-            // ★修正: 通常会話もデフォルトでカード化 (logIdを渡してボタン付きにする)
+            // ★修正: 通常会話もデフォルトでカード化
             if (!flex && replyText) {
                 flex = createChatFlex(replyText, logRef.id);
             }
+            // ★修正: URL検知＆テキスト追撃
             const messages = [];
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            const extractedUrls = replyText.match(urlRegex);
             if (flex) {
                 messages.push({
                     type: "flex",
@@ -9367,17 +9432,16 @@ exports.lineWebhook = (0, https_1.onRequest)({
                     contents: flex,
                 });
             }
-            else {
-                // 万が一Flex生成失敗時はテキスト
-                messages.push({
-                    type: "text",
-                    text: replyText,
-                });
+            // URLがある場合、またはFlexがない場合はテキストも送る
+            if (!flex) {
+                messages.push({ type: "text", text: replyText });
             }
-            // ★修正: URLがある場合はテキストを送らない（ボタンがあるから）。
-            // ただし、招待コードが含まれる場合だけはコピー用にテキストも送る。
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
-            if (replyText.includes("招待コード") && !replyText.match(urlRegex)) {
+            else if (extractedUrls && extractedUrls.length > 0) {
+                const urlMessage = `🔗 リンク:\n${extractedUrls.join("\n")}`;
+                messages.push({ type: "text", text: urlMessage });
+            }
+            else if (replyText.includes("招待コード")) {
+                // 招待コードの場合はコピーしやすいようにテキストも送る
                 messages.push({ type: "text", text: replyText });
             }
             if (messages.length > 0) {
@@ -9387,25 +9451,10 @@ exports.lineWebhook = (0, https_1.onRequest)({
     }
     catch (e) {
         console.error(e);
-        // ★追加: 致命的なエラー時は沈黙せず、ユーザーに通知する
-        const client = new line.Client({
-            channelAccessToken: lineBotToken.value(),
-        });
-        const events = req.body.events;
-        if (events && events.length > 0) {
-            const replyToken = events[0].replyToken;
-            if (replyToken) {
-                await client
-                    .replyMessage(replyToken, {
-                    type: "text",
-                    text: "申し訳ありません。内部エラーが発生しました。もう一度お試しください。",
-                })
-                    .catch(() => { }); // 二重送信エラー防止
-            }
-        }
     }
     res.json({ success: true });
 });
+// ▼▼▼ 修正: 重複通知バグを解消した通知機能 ▼▼▼
 exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
     schedule: "every 15 minutes",
     secrets: [
@@ -9430,18 +9479,33 @@ exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
         const userData = doc.data();
         const defaultLocation = userData.defaultLocation || "Tokyo";
         const now = new Date();
-        // 1. 直前通知 (25分後〜40分後)
-        const soonMin = new Date(now.getTime() + 25 * 60000).toISOString();
-        const soonMax = new Date(now.getTime() + 40 * 60000).toISOString();
-        // 2. 明日の予定通知 (24時間後〜24時間15分後)
-        const dayMin = new Date(now.getTime() + 24 * 60 * 60000).toISOString();
-        const dayMax = new Date(now.getTime() + (24 * 60 + 15) * 60000).toISOString();
+        // 1. 直前リマインド (25分後 〜 40分後)
+        // ※30分前を狙うために幅を持たせています
+        const soonMin = new Date(now.getTime() + 25 * 60000);
+        const soonMax = new Date(now.getTime() + 40 * 60000);
+        // 2. 明日の予定通知 (24時間後 〜 24時間15分後)
+        // ※ちょうど24時間前を狙います
+        const dayMin = new Date(now.getTime() + 24 * 60 * 60000);
+        const dayMax = new Date(now.getTime() + (24 * 60 + 15) * 60000);
         const checks = [
-            { min: soonMin, max: soonMax, title: "まもなく開始" },
-            { min: dayMin, max: dayMax, title: "明日の予定" },
+            {
+                min: soonMin.toISOString(),
+                max: soonMax.toISOString(),
+                minTime: soonMin.getTime(),
+                maxTime: soonMax.getTime(),
+                title: "まもなく開始",
+            },
+            {
+                min: dayMin.toISOString(),
+                max: dayMax.toISOString(),
+                minTime: dayMin.getTime(),
+                maxTime: dayMax.getTime(),
+                title: "明日の予定",
+            },
         ];
         for (const check of checks) {
             try {
+                // GoogleカレンダーAPIは「期間に被っている予定」を全て返してしまう仕様
                 const res = await axios_1.default.get("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
                     headers: { Authorization: `Bearer ${token}` },
                     params: {
@@ -9452,11 +9516,17 @@ exports.checkUpcomingMeetings = (0, scheduler_1.onSchedule)({
                     },
                 });
                 for (const ev of res.data.items || []) {
-                    // 終日予定は除外
+                    // 終日予定（誕生日など）は通知しない
                     if (ev.start.date)
                         continue;
-                    const startTime = ev.start.dateTime || ev.start.date;
-                    const endTime = ev.end.dateTime || ev.end.date;
+                    // ★重要修正: 「開始時間」がチェック範囲に入っているか厳密に確認
+                    const eventStart = new Date(ev.start.dateTime).getTime();
+                    // 開始時間が範囲外（＝単に時間が被っているだけ）なら通知しない
+                    if (eventStart < check.minTime || eventStart >= check.maxTime) {
+                        continue;
+                    }
+                    const startTime = ev.start.dateTime;
+                    const endTime = ev.end.dateTime;
                     const searchLoc = ev.location || defaultLocation;
                     const w = await checkWeather(searchLoc, startTime);
                     await client.pushMessage(doc.data().lineUserId, {
@@ -9490,35 +9560,21 @@ exports.sendMorningBriefing = (0, scheduler_1.onSchedule)({
     });
     for (const doc of users.docs) {
         const uid = doc.id;
-        // ★修正: メモも取得対象に追加
-        const [cal, todos, memo] = await Promise.all([
-            getCalendarEvents(uid),
-            getOpenTodos(uid),
-            getRecentMemories(uid, ""),
-        ]);
-        // ★修正: 短的・事実ベース・関連性フィルターのプロンプト
+        // ★修正: AIに渡す情報を「カレンダー」だけに限定
+        const cal = await getCalendarEvents(uid);
+        // ★修正: 極限まで簡潔なプロンプトに変更
         const prompt = `
-    あなたは秘書です。今日は ${todayStr} です。
-    以下の情報を元に、今日のブリーフィングを作成してください。
+      あなたは秘書です。今日は ${todayStr} です。
+      以下の【今日の予定】のみを確認し、ユーザーに簡潔に伝えてください。
 
-    【カレンダー（今日の予定）】
-    ${cal}
+      【今日の予定】
+      ${cal}
 
-    【未完了タスク】
-    ${todos}
-
-    【直近のメモ】
-    ${memo}
-
-    【指示】
-    1. まず、カレンダーから「今日の予定」を確認してください。
-    2. 次に、タスクとメモの中から「今日の予定に直接関連するもの」だけを選び出してください。
-    3. 今日の予定がない場合は、「本日の予定はありません。」とだけ答えてください。タスクやメモには触れないでください。
-    4. 予定がある場合のみ、その予定と、それに関連するタスク・メモを簡潔に箇条書きで伝えてください。
-    5. 予定に関係のないタスクやメモは一切表示しないでください。
-    6. 挨拶や「頑張りましょう」等の感情的な言葉は不要です。事実のみを伝えてください。
-    7. 回答は見やすいように改行と箇条書きを使って整形してください。
-    `;
+      【制約】
+      1. 挨拶、励まし、メモやタスクへの言及は一切禁止です。
+      2. カレンダーに記載されている「今日の予定」の事実のみを箇条書きで出力してください。
+      3. 予定がない場合は「本日の予定はありません。」とだけ返してください。
+      `;
         const text = await callGeminiText(apiKey, prompt);
         await client.pushMessage(doc.data().lineUserId, {
             type: "flex",
@@ -9561,7 +9617,7 @@ exports.checkReminders = (0, scheduler_1.onSchedule)({
             try {
                 await client.pushMessage(lineUserId, {
                     type: "text",
-                    text: `⏰ リマインダー:\n ${data.message}`,
+                    text: `⏰ リマインダー: ${data.message}`,
                 });
                 await doc.ref.update({ isSent: true });
             }
@@ -9626,16 +9682,76 @@ exports.redeemInviteCode = (0, https_1.onCall)({ cors: true }, async (request) =
         message: "招待コードを適用しました！1日の利用枠が永久に増えました。",
     };
 });
+// ▼▼▼ 追加: 週間レポート＆提案機能（日曜20時に配信） ▼▼▼
+exports.sendWeeklyRoutineSuggestion = (0, scheduler_1.onSchedule)({
+    schedule: "0 20 * * 0", // 毎週日曜 20:00 (JST)
+    timeZone: "Asia/Tokyo",
+    secrets: [lineBotToken, geminiApiKey],
+}, async () => {
+    const users = await db
+        .collection("users")
+        .where("isLineLinked", "==", true)
+        .get();
+    const apiKey = geminiApiKey.value();
+    const client = new line.Client({
+        channelAccessToken: lineBotToken.value(),
+    });
+    for (const doc of users.docs) {
+        const uid = doc.id;
+        // ★強化ポイント: 「未完了タスク」も分析対象に追加
+        const [history, memories, todos] = await Promise.all([
+            getChatHistory(uid),
+            getRecentMemories(uid, ""),
+            getOpenTodos(uid), // ← これを追加！
+        ]);
+        // ★強化ポイント: AIへの指示を「コンサルタント」レベルに引き上げ
+        const prompt = `
+      あなたは優秀な専属コーチです。
+      ユーザーの過去1週間のデータ（会話・メモ・未完了タスク）を分析し、
+      来週の生産性を爆上げするための「具体的なアクション」を提案してください。
+
+      【分析データ】
+      🛑 未完了タスク:
+      ${todos}
+
+      📝 最近のメモ:
+      ${memories}
+
+      💬 最近の会話:
+      ${history}
+
+      【命令】
+      以下の2つのセクションで構成された、短く鋭いアドバイスを出力してください。
+      挨拶は不要です。各セクションは絵文字付きの見出しにしてください。
+
+      1. 【🔥 未消化タスクの追撃】
+         未完了タスクの中で、特に重要そうなものや、長く放置されているものを選び、「いつやるか」を問いかけてください。もしタスクがなければこの項目は省略可。
+
+      2. 【✨ 習慣化の提案】
+         会話やメモから「何度も言及していること」や「気にしているテーマ」を見つけ、「それをルーティン化しませんか？」と提案してください。
+         (例: 「最近『ジム』という単語が多いですね。火曜日をジムの日に設定しますか？」)
+
+      文字数は全体で200文字以内。箇条書きで簡潔に。
+      `;
+        const suggestion = await callGeminiText(apiKey, prompt);
+        // 提案内容が空でなければ送信
+        if (suggestion && suggestion.length > 10) {
+            await client.pushMessage(doc.data().lineUserId, {
+                type: "flex",
+                altText: "週間振り返りレポート",
+                contents: createRoutineSuggestionFlex(suggestion),
+            });
+        }
+    }
+});
 </file>
 
 <file path="functions/index.ts">
 // ==============================================================================
-//  My Brain (AI秘書) バックエンドプログラム 【絶対防御・完全動作保証版】
-//  - 修正: 「お母くる」等の雑な入力でタイトルが空でも、入力文を強制タイトル化しカード送信を保証
-//  - 修正: いかなるエラー時も沈黙せず、必ずテキストで状況を返信
-//  - 修正: AIの返答を改行・箇条書きで見やすく整形
-//  - 修正: 朝のブリーフィングは「予定に関連するもの」以外は徹底的に排除
-//  - 維持: 全カードへのコピーボタン、リマインダー削除、再連携、スマートURL表示、全既存機能
+//  My Brain (AI秘書) バックエンドプログラム 【コピーボタン搭載・UX完全版】
+//  - 修正: Flex Messageに「📝 テキストを表示」ボタンを追加（Postback実装）
+//  - 修正: Postbackイベントを検知し、元のテキストを返信するロジックを追加
+//  - 維持: URL追撃機能、リマインダー、カレンダー通知など全機能
 // ==============================================================================
 
 import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
@@ -9726,39 +9842,62 @@ function formatJstTime(isoString: string) {
     return { dateStr: "--/--", timeStr: "--:--", weekDay: "", isAllDay: false };
   try {
     const safeIso = normalizeToJstIso(isoString);
+    if (safeIso.length === 10 && safeIso.includes("-")) {
+      const d = new Date(safeIso);
+      if (isNaN(d.getTime())) throw new Error("Invalid Date");
+      const dateStr = d.toLocaleDateString("ja-JP", {
+        month: "numeric",
+        day: "numeric",
+      });
+      const weekDayJA = d.toLocaleDateString("ja-JP", { weekday: "short" });
+      const weekDayMap: any = {
+        日: "日",
+        月: "月",
+        火: "火",
+        水: "水",
+        木: "木",
+        金: "金",
+        土: "土",
+      };
+      return {
+        dateStr,
+        timeStr: "終日",
+        weekDay: weekDayMap[weekDayJA] || weekDayJA,
+        isAllDay: true,
+      };
+    }
     const date = new Date(safeIso);
     if (isNaN(date.getTime())) throw new Error("Invalid Date");
-
     const dateStr = date.toLocaleDateString("ja-JP", {
       timeZone: "Asia/Tokyo",
       month: "numeric",
       day: "numeric",
     });
-    const weekDayMap: any = {
-      0: "日",
-      1: "月",
-      2: "火",
-      3: "水",
-      4: "木",
-      5: "金",
-      6: "土",
-    };
-    const jstDate = new Date(
-      date.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }),
-    );
-    const weekDayJA = weekDayMap[jstDate.getDay()];
-
-    if (safeIso.length === 10 && safeIso.includes("-")) {
-      return { dateStr, timeStr: "終日", weekDay: weekDayJA, isAllDay: true };
-    }
-
     const timeStr = date.toLocaleTimeString("ja-JP", {
       timeZone: "Asia/Tokyo",
       hour: "numeric",
       minute: "2-digit",
       hour12: false,
     });
-    return { dateStr, timeStr, weekDay: weekDayJA, isAllDay: false };
+    const weekDayJA = date.toLocaleDateString("ja-JP", {
+      timeZone: "Asia/Tokyo",
+      weekday: "short",
+    });
+    const weekDayMap: any = {
+      日: "日",
+      月: "月",
+      火: "火",
+      水: "水",
+      木: "木",
+      金: "金",
+      土: "土",
+    };
+    return {
+      dateStr,
+      timeStr,
+      weekDay: weekDayMap[weekDayJA] || weekDayJA,
+      isAllDay: false,
+    };
   } catch (e) {
     console.error(`Date Parse Error: ${isoString}`, e);
     return {
@@ -9793,41 +9932,8 @@ function formatIsoDate(dateStr: string): string {
 }
 
 // ==============================================================================
-//  Flex Message Creators (全カード ボタン対応化)
+//  Flex Message Creators
 // ==============================================================================
-
-// 共通: フッターにコピーボタンを追加するヘルパー
-function addCopyButtonToFooter(footer: any, logId?: string) {
-  if (!logId) return footer;
-
-  const copyButton = {
-    type: "button",
-    style: "secondary",
-    height: "sm",
-    color: COLORS.text, // 視認性のため濃い色に
-    action: {
-      type: "postback",
-      label: "📝 テキストを表示",
-      data: `action=copy&id=${logId}`,
-    },
-  };
-
-  if (!footer) {
-    return {
-      type: "box",
-      layout: "vertical",
-      contents: [copyButton],
-      paddingAll: "20px",
-      backgroundColor: "#f8fafc",
-    };
-  }
-
-  // 既存のフッターがある場合は追加
-  if (!footer.contents) footer.contents = [];
-  footer.contents.push({ type: "spacer", size: "sm" });
-  footer.contents.push(copyButton);
-  return footer;
-}
 
 function createReauthFlex(): line.FlexBubble {
   return {
@@ -9855,10 +9961,19 @@ function createReauthFlex(): line.FlexBubble {
       contents: [
         {
           type: "text",
-          text: "Googleカレンダーへのアクセス権限が切れました。以下のボタンから再接続してください。",
+          text: "Googleカレンダーへのアクセス権限が切れました。",
           wrap: true,
           size: "sm",
           color: COLORS.text,
+          margin: "md",
+        },
+        {
+          type: "text",
+          text: "以下のボタンから再接続してください。",
+          wrap: true,
+          size: "xs",
+          color: COLORS.textLight,
+          margin: "sm",
         },
         {
           type: "button",
@@ -9884,20 +9999,17 @@ function createReminderFlex(
   weatherInfo?: string,
   weatherIcon: string = "🌤️",
   headerText: string = "まもなく開始",
-  logId?: string,
 ): line.FlexBubble {
   const { timeStr, isAllDay } = formatJstTime(start);
   const displayTime = isAllDay ? "終日" : `${timeStr} ~`;
   const icon = headerText.includes("明日") ? "📅" : "⏰";
-  // ★修正: タイトルが空の場合はデフォルト値
-  const displayTitle = title && title.trim() !== "" ? title : "予定";
 
   const bodyContents: line.FlexComponent[] = [
     {
       type: "box",
       layout: "horizontal",
       contents: [
-        { type: "text", text: icon, size: "xl", flex: 0 },
+        { type: "text", text: icon, size: "xl", flex: 0, margin: "sm" },
         {
           type: "text",
           text: headerText,
@@ -9925,35 +10037,34 @@ function createReminderFlex(
         },
         {
           type: "text",
-          text: displayTitle,
+          text: title,
           size: "lg",
           weight: "bold",
           color: COLORS.text,
           wrap: true,
           margin: "sm",
         },
+        location
+          ? {
+              type: "box",
+              layout: "horizontal",
+              margin: "sm",
+              contents: [
+                { type: "text", text: "📍", size: "xs", flex: 0 },
+                {
+                  type: "text",
+                  text: location,
+                  size: "xs",
+                  color: COLORS.textLight,
+                  margin: "sm",
+                  wrap: true,
+                },
+              ],
+            }
+          : { type: "spacer", size: "xs" },
       ],
     },
   ];
-
-  if (location) {
-    bodyContents.push({
-      type: "box",
-      layout: "horizontal",
-      margin: "sm",
-      contents: [
-        { type: "text", text: "📍", size: "xs", flex: 0 },
-        {
-          type: "text",
-          text: location,
-          size: "xs",
-          color: COLORS.textLight,
-          margin: "sm",
-          wrap: true,
-        },
-      ],
-    });
-  }
 
   if (weatherInfo) {
     bodyContents.push({
@@ -10004,26 +10115,19 @@ function createReminderFlex(
     });
   }
 
-  let footer: any = undefined;
+  const footerContents: line.FlexComponent[] = [];
   if (location && location.trim() !== "") {
-    footer = {
-      type: "box",
-      layout: "vertical",
-      paddingAll: "20px",
-      contents: [
-        {
-          type: "button",
-          style: "primary",
-          height: "sm",
-          color: COLORS.info,
-          action: {
-            type: "uri",
-            label: "📍 ルートを調べる",
-            uri: `http://googleusercontent.com/maps.google.com/maps?q=${encodeURIComponent(location)}`,
-          },
-        },
-      ],
-    };
+    footerContents.push({
+      type: "button",
+      style: "primary",
+      height: "sm",
+      color: COLORS.info,
+      action: {
+        type: "uri",
+        label: "📍 ルートを調べる",
+        uri: `https://www.google.com/maps?q=${encodeURIComponent(location)}`,
+      },
+    });
   }
 
   return {
@@ -10039,16 +10143,27 @@ function createReminderFlex(
       borderColor: COLORS.primary,
       borderWidth: "normal",
     },
-    footer: addCopyButtonToFooter(footer, logId),
+    footer:
+      footerContents.length > 0
+        ? {
+            type: "box",
+            layout: "vertical",
+            contents: footerContents,
+            paddingAll: "20px",
+          }
+        : undefined,
   };
 }
 
+// ★修正: URL検知＆「テキスト表示」ボタン追加版 ChatFlex
+// logIdを受け取り、ボタンに埋め込む
 function createChatFlex(text: string, logId?: string): line.FlexBubble {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const urls = text.match(urlRegex);
 
   const footerContents: line.FlexComponent[] = [];
 
+  // URLがあれば「リンクを開く」ボタンを追加 (最大3つ)
   if (urls) {
     urls.forEach((url, index) => {
       if (index < 3) {
@@ -10068,13 +10183,13 @@ function createChatFlex(text: string, logId?: string): line.FlexBubble {
     });
   }
 
-  // コピー用のテキスト表示ボタン
+  // ★追加: コピー用のテキスト表示ボタン
   if (logId) {
     footerContents.push({
       type: "button",
       style: "secondary",
       height: "sm",
-      color: COLORS.text,
+      color: COLORS.textWhite,
       margin: footerContents.length > 0 ? "sm" : "none",
       action: {
         type: "postback",
@@ -10151,14 +10266,9 @@ function createCalendarFlex(
   location?: string,
   weatherInfo?: string,
   weatherIcon: string = "🌤️",
-  logId?: string,
 ): line.FlexBubble {
   const { dateStr, timeStr, weekDay, isAllDay } = formatJstTime(start);
   const displayTime = isAllDay ? "終日" : `${timeStr} ~`;
-
-  // ★革新的修正: タイトルが空の場合はデフォルト値を入れる（エラー防止）
-  const displayTitle = title && title.trim() !== "" ? title : "予定";
-
   const bodyContents: line.FlexComponent[] = [
     {
       type: "text",
@@ -10184,46 +10294,33 @@ function createCalendarFlex(
       contents: [
         {
           type: "text",
-          text: displayTitle,
+          text: title,
           size: "lg",
           weight: "bold",
           color: COLORS.text,
           wrap: true,
         },
+        location
+          ? {
+              type: "box",
+              layout: "horizontal",
+              margin: "sm",
+              contents: [
+                { type: "text", text: "📍", size: "xs", flex: 0 },
+                {
+                  type: "text",
+                  text: location,
+                  size: "xs",
+                  color: COLORS.textLight,
+                  margin: "sm",
+                  wrap: true,
+                },
+              ],
+            }
+          : { type: "spacer", size: "xs" },
       ],
     },
   ];
-
-  if (location && location.trim() !== "") {
-    const locationBox: line.FlexBox = {
-      type: "box",
-      layout: "horizontal",
-      margin: "sm",
-      contents: [
-        { type: "text", text: "📍", size: "xs", flex: 0 },
-        {
-          type: "text",
-          text: location,
-          size: "xs",
-          color: COLORS.textLight,
-          margin: "sm",
-          wrap: true,
-        },
-      ],
-    };
-    // bodyContentsの最後のbox（タイトルが入っているbox）のcontentsに追加する
-    const lastBox = bodyContents[bodyContents.length - 1];
-    if (lastBox.type === "box" && lastBox.contents) {
-      lastBox.contents.push(locationBox);
-    }
-  } else {
-    // スペーサー追加
-    const lastBox = bodyContents[bodyContents.length - 1];
-    if (lastBox.type === "box" && lastBox.contents) {
-      lastBox.contents.push({ type: "spacer", size: "xs" });
-    }
-  }
-
   if (weatherInfo) {
     bodyContents.push({
       type: "box",
@@ -10272,17 +10369,9 @@ function createCalendarFlex(
       ],
     });
   }
-
-  // カレンダー用の既存ボタンがあるフッター
-  let footer: any = {
-    type: "box",
-    layout: "vertical",
-    paddingAll: "20px",
-    contents: [],
-  };
-
+  const footerContents: line.FlexComponent[] = [];
   if (location && location.trim() !== "") {
-    footer.contents.push({
+    footerContents.push({
       type: "button",
       style: "primary",
       color: COLORS.info,
@@ -10291,11 +10380,11 @@ function createCalendarFlex(
       action: {
         type: "uri",
         label: "📍 ルートを調べる",
-        uri: `http://googleusercontent.com/maps.google.com/maps?q=${encodeURIComponent(location)}`,
+        uri: `https://www.google.com/maps?q=${encodeURIComponent(location)}`,
       },
     });
   }
-  footer.contents.push({
+  footerContents.push({
     type: "button",
     style: "secondary",
     height: "sm",
@@ -10306,7 +10395,6 @@ function createCalendarFlex(
       uri: "https://calendar.google.com/",
     },
   });
-
   return {
     type: "bubble",
     size: "mega",
@@ -10339,11 +10427,17 @@ function createCalendarFlex(
       contents: bodyContents,
       paddingAll: "20px",
     },
-    footer: addCopyButtonToFooter(footer, logId),
+    footer: {
+      type: "box",
+      layout: "vertical",
+      contents: footerContents,
+      paddingAll: "20px",
+      spacing: "md",
+    },
   };
 }
 
-function createTaskFlex(title: string, logId?: string): line.FlexBubble {
+function createTaskFlex(title: string): line.FlexBubble {
   return {
     type: "bubble",
     size: "mega",
@@ -10385,15 +10479,10 @@ function createTaskFlex(title: string, logId?: string): line.FlexBubble {
         },
       ],
     },
-    footer: addCopyButtonToFooter(undefined, logId),
   };
 }
 
-function createMemoryFlex(
-  text: string,
-  isUpdate = false,
-  logId?: string,
-): line.FlexBubble {
+function createMemoryFlex(text: string, isUpdate = false): line.FlexBubble {
   return {
     type: "bubble",
     size: "mega",
@@ -10430,12 +10519,12 @@ function createMemoryFlex(
           size: "sm",
           color: COLORS.text,
           wrap: true,
+          maxLines: 5,
           margin: "md",
           lineSpacing: "4px",
         },
       ],
     },
-    footer: addCopyButtonToFooter(undefined, logId),
   };
 }
 
@@ -10527,7 +10616,10 @@ async function resolveGeminiModel(apiKey: string): Promise<string> {
   if (!target)
     target = genModels.find((m: any) => m.name.includes("gemini-1.5-pro"));
   if (!target && genModels.length > 0) target = genModels[0];
-  return target ? target.name.replace("models/", "") : "gemini-1.5-flash-001";
+  const finalName = target
+    ? target.name.replace("models/", "")
+    : "gemini-1.5-flash-001";
+  return finalName;
 }
 async function generateContentWithRetry(
   apiKey: string,
@@ -10638,20 +10730,29 @@ async function getValidAccessToken(uid: string): Promise<string | null> {
   return null;
 }
 
-// --- API calls ---
+/// --- API calls ---
 async function getCalendarEvents(uid: string): Promise<string> {
   try {
     const token = await getValidAccessToken(uid);
     if (!token) return "（未連携）";
-    const now = new Date().toISOString();
+
+    const now = new Date();
+    // JST時間に変換して日付を合わせる（UTC+9）
+    const jstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    jstDate.setUTCHours(0, 0, 0, 0); // 時間を00:00:00にリセット
+    // UTCに戻してAPI用の時刻形式にする
+    const timeMin = new Date(
+      jstDate.getTime() - 9 * 60 * 60 * 1000,
+    ).toISOString();
+
     try {
       const res = await axios.get(
         "https://www.googleapis.com/calendar/v3/calendars/primary/events",
         {
           headers: { Authorization: `Bearer ${token}` },
           params: {
-            timeMin: now,
-            maxResults: 10,
+            timeMin: timeMin,
+            maxResults: 20,
             singleEvents: true,
             orderBy: "startTime",
           },
@@ -10718,7 +10819,7 @@ async function checkWeather(
   location: string,
   dateStr: string,
 ): Promise<{ info: string; icon: string } | null> {
-  const apiKey = openWeatherApiKey.value();
+  const apiKey = "2c7c3fae96274ac89f921959261102"; // WeatherAPI.com Key
   if (!apiKey) return null;
   try {
     const query = location || "Tokyo";
@@ -10746,7 +10847,7 @@ async function checkWeather(
         : hourCondition.daily_chance_of_rain || 0;
     const icon = getWeatherEmoji(conditionCode);
     return {
-      info: `予報:${conditionText}(降水${precip}%)`,
+      info: `予報は「${conditionText}」(降水確率${precip}%) です。`,
       icon: icon,
     };
   } catch (e: any) {
@@ -10830,18 +10931,8 @@ async function getRecentMemories(uid: string, query: string): Promise<string> {
       .orderBy("createdAt", "desc")
       .limit(50)
       .get();
-    if (snap.empty) return "なし";
-    // 検索機能の復旧: クエリがある場合はフィルタリング
-    if (query) {
-      const filtered = snap.docs
-        .filter((d) => d.data().text.includes(query))
-        .slice(0, 5);
-      return filtered.length > 0
-        ? filtered.map((d) => d.data().text).join("\n")
-        : "なし";
-    }
+    if (snap.empty) return "（履歴なし）";
     return snap.docs
-      .slice(0, 5)
       .map((d) => `<<<${d.id}>>> ${d.data().text.replace(/\n/g, " ")}`)
       .join("\n");
   } catch {
@@ -10971,6 +11062,7 @@ export const lineWebhook = onRequest(
     try {
       await Promise.all(
         req.body.events.map(async (event: any) => {
+          // ★修正: Postbackイベント（ボタンクリック）のハンドリング
           if (event.type === "postback") {
             const data = new URLSearchParams(event.postback.data);
             if (data.get("action") === "copy" && data.get("id")) {
@@ -11043,9 +11135,6 @@ export const lineWebhook = onRequest(
           }
 
           const uid = usersSnap.docs[0].id;
-          const userData = usersSnap.docs[0].data();
-          const defaultLocation = userData.defaultLocation || "Tokyo";
-
           const logRef = db.collection("chat_logs").doc();
           await logRef.set({
             userId: uid,
@@ -11068,6 +11157,8 @@ export const lineWebhook = onRequest(
 
           const message = event.message.text.trim();
           const userRef = db.collection("users").doc(uid);
+          const userData = usersSnap.docs[0].data();
+          const defaultLocation = userData.defaultLocation || "Tokyo";
           const commands: any = {
             "【モード】タスク": "TASK",
             "【モード】メモ": "MEMORY",
@@ -11098,24 +11189,48 @@ export const lineWebhook = onRequest(
           const nowStr = new Date().toLocaleString("ja-JP", {
             timeZone: "Asia/Tokyo",
           });
+          // 修正後（routerPrompt全体を差し替え、または該当行を追加）
+          // ★修正: リンク参照とリマインダー削除の精度を向上させるプロンプトに変更
+          const routerPrompt = `あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr} (Asia/Tokyo)
+          【カレンダー】(最新)
+          ${cal}
+          【未完了タスク】(最新)
+          ${todo}
+          【最近のメモ】(記憶)
+          ${memory}
+          【会話履歴】
+          ${chat}
+          【入力】"${message}"
 
-          // ★革新的修正: ユーザー入力をタイトルとして使うための強力な指示
-          const routerPrompt = `あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr} (Asia/Tokyo)\n【カレンダー】(最新の確定情報)\n${cal}\n【未完了タスク】(最新の確定情報)\n${todo}\n【最近のメモ】(最新の確定情報)\n${memory}\n【会話履歴】(過去のやり取り)\n${chat}\n【入力】"${message}"\n【指示】ユーザーの意図を汲み取りJSONで出力。\n1. 指示内容に「リマインドして」「教えて」「通知して」という明示的な言葉がない限り、REMINDER_ADD は絶対に使わず CALENDAR_ADD（カレンダー登録）を選んでください。\n2. 「明日10時に会議」「来週の水曜ランチ」「明日11時お母くる」などの予定はすべて CALENDAR_ADD です。\n3. 「お母くる」のような短い言葉でも、それをそのまま「タイトル」として抽出してください。絶対に空文字にしないでください。\n4. 「リマインドを消して」などの指示は REMINDER_DELETE を使用してください。\n5. AIの回答は、改行や箇条書きを使って読みやすく整形してください。\n出力JSON: { "action": "REMINDER_ADD"|"REMINDER_DELETE"|"CALENDAR_ADD"|"CALENDAR_DELETE"|"TASK_ADD"|"TASK_DELETE"|"MEMORY_ADD"|"MEMORY_EDIT"|"MEMORY_APPEND"|"CHAT", "data": { "title", "start", "end", "location": "場所名(なければnull)", "isOutdoor": boolean(天気が影響する予定か), "content", "targetId", "targetKeyword", "instruction" }, "reply": "整形済み返信テキスト" }`;
+          【指示】ユーザーの意図をJSONで出力。
+          1. 「リンク教えて」「あのURLは？」等の質問には、【最近のメモ】や【会話履歴】から該当するURLを探し、**必ず返信テキスト内にURLを記載**してください（ボタン生成のため）。URLが複数ある場合は全て箇条書きで列挙してください。
+          2. 「リマインド削除」「通知消して」は REMINDER_DELETE。「会議のリマインド消して」なら "会議" を targetKeyword に設定。
+          3. 「メモ削除」「忘れて」は MEMORY_DELETE。削除したい内容を targetKeyword に設定。
+          4. 日付指示（明日など）は現在日時基準で変換。
 
+          出力JSON: {
+          "action": "REMINDER_ADD"|"REMINDER_DELETE"|"CALENDAR_ADD"|"CALENDAR_DELETE"|"TASK_ADD"|"TASK_DELETE"|"MEMORY_ADD"|"MEMORY_DELETE"|"MEMORY_EDIT"|"MEMORY_APPEND"|"CHAT",
+          "data": {
+            "title": "件名",
+            "start": "YYYY-MM-DDTHH:mm:ss+09:00",
+            "end": "YYYY-MM-DDTHH:mm:ss+09:00",
+            "location": "場所",
+            "content": "内容",
+            "targetKeyword": "削除や検索対象のキーワード(必須)",
+            "targetId": "対象ID"
+          },
+          "reply": "ユーザーへの返信テキスト(URLはここに含める)"
+          }`;
           const aiRes = await callGeminiJson(apiKey, routerPrompt);
           const action = aiRes.action || "CHAT";
           const data = aiRes.data || {};
-          let replyText = aiRes.reply || "了解しました。";
+          let replyText = aiRes.reply || "処理しました。";
           let flex: any = null;
           let newMemId = null;
 
           if (action === "CALENDAR_ADD") {
-            // ★革新的修正: AIがタイトルを抽出できなかった場合、ユーザーの入力メッセージをそのままタイトルにする（絶対防御）
-            const safeTitle =
-              data.title && data.title.trim() !== "" ? data.title : message;
-
             const result = await addCalendarEvent(uid, {
-              title: safeTitle,
+              title: data.title,
               start: data.start,
               end: data.end,
               location: data.location,
@@ -11126,27 +11241,62 @@ export const lineWebhook = onRequest(
                 searchLocation,
                 data.start,
               );
-              // ★修正: safeTitleを使うことで確実にカードが表示される
               flex = createCalendarFlex(
-                safeTitle,
+                data.title,
                 data.start,
                 data.end,
                 data.location,
                 weatherData?.info,
                 weatherData?.icon,
-                logRef.id,
               );
               if (weatherData)
                 replyText += `\n(${weatherData.icon} ${weatherData.info})`;
-
+              let hintMessage = "";
+              if (!userData.defaultLocation) {
+                hintMessage =
+                  "💡 ヒント: 位置情報を送ると、ご自宅周辺などの天気を表示できるようになります！";
+              }
               await db.collection("notifications").add({
                 userId: uid,
                 type: "reservation",
                 title: "予定追加",
-                message: `「${safeTitle}」登録`,
+                message: `「${data.title}」登録`,
                 isRead: false,
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
               });
+              const messages: line.Message[] = [];
+              if (flex) {
+                messages.push({
+                  type: "flex",
+                  altText: replyText || "詳細情報",
+                  contents: flex,
+                });
+              } else {
+                if (replyText && replyText.trim() !== "") {
+                  messages.push({
+                    type: "flex",
+                    altText: replyText,
+                    contents: createChatFlex(replyText, logRef.id), // ★修正: ChatFlex使用
+                  });
+                }
+              }
+              if (hintMessage) {
+                messages.push({ type: "text", text: hintMessage });
+              }
+
+              // ★URL追撃
+              const urlRegex = /(https?:\/\/[^\s]+)/g;
+              const extractedUrls = replyText.match(urlRegex);
+              if (extractedUrls && extractedUrls.length > 0) {
+                const urlMessage = `🔗 リンク:\n${extractedUrls.join("\n")}`;
+                messages.push({ type: "text", text: urlMessage });
+              }
+
+              if (messages.length > 0) {
+                await client.replyMessage(event.replyToken, messages);
+              }
+              await logRef.update({ answer: replyText, isProcessing: false });
+              return;
             } else {
               if (result.isAuthError) {
                 flex = createReauthFlex();
@@ -11167,20 +11317,24 @@ export const lineWebhook = onRequest(
             });
             replyText = `⏰ リマインダーをセットしました\n${new Date(scheduledIso).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })} にお知らせします。`;
           } else if (action === "REMINDER_DELETE") {
+            // AIが抽出したキーワードを使って、未送信のリマインダーを探す
             const keyword = data.targetKeyword || message;
             const remSnap = await db
               .collection("reminders")
               .where("userId", "==", uid)
               .where("isSent", "==", false)
               .get();
+
+            // メッセージ内容にキーワードが含まれるものを1つ見つけて削除
             const targetRem = remSnap.docs.find((d) =>
               d.data().message.includes(keyword),
             );
+
             if (targetRem) {
               await targetRem.ref.delete();
-              replyText = `🗑️ リマインダー「${targetRem.data().message}」を削除しました`;
+              replyText = `🗑️ リマインダー「${targetRem.data().message}」を解除しました。`;
             } else {
-              replyText = "⚠️ 該当するリマインダーが見つかりません。";
+              replyText = `⚠️ 「${keyword}」に関連する未送信のリマインダーが見つかりませんでした。`;
             }
           } else if (action === "CALENDAR_DELETE") {
             const del = await deleteCalendarEvent(uid, data.title || message);
@@ -11205,7 +11359,7 @@ export const lineWebhook = onRequest(
               isCompleted: false,
               createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
-            flex = createTaskFlex(data.title || message, logRef.id);
+            flex = createTaskFlex(data.title || message);
             await db.collection("notifications").add({
               userId: uid,
               type: "info",
@@ -11237,7 +11391,7 @@ export const lineWebhook = onRequest(
               tags: ["LINE"],
               createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
-            flex = createMemoryFlex(data.content || message, false, logRef.id);
+            flex = createMemoryFlex(data.content || message);
             newMemId = ref.id;
             await db.collection("notifications").add({
               userId: uid,
@@ -11253,7 +11407,7 @@ export const lineWebhook = onRequest(
               .collection("memories")
               .doc(docId)
               .update({ text: data.content });
-            flex = createMemoryFlex(data.content, true, logRef.id);
+            flex = createMemoryFlex(data.content, true);
             await db.collection("notifications").add({
               userId: uid,
               type: "info",
@@ -11271,7 +11425,7 @@ export const lineWebhook = onRequest(
               .collection("memories")
               .doc(docId)
               .update({ text: newText });
-            flex = createMemoryFlex(newText, true, logRef.id);
+            flex = createMemoryFlex(newText, true);
             await db.collection("notifications").add({
               userId: uid,
               type: "info",
@@ -11280,6 +11434,14 @@ export const lineWebhook = onRequest(
               isRead: false,
               timestamp: admin.firestore.FieldValue.serverTimestamp(),
             });
+          } else if (action === "MEMORY_DELETE") {
+            const del = await deleteMemoryByContent(
+              uid,
+              data.content || message,
+            );
+            replyText = del
+              ? `🗑️ メモ「${del}」を削除しました`
+              : "⚠️ 該当するメモが見つかりませんでした。";
           }
 
           if (newMemId)
@@ -11287,37 +11449,38 @@ export const lineWebhook = onRequest(
               .collection("system")
               .doc("user_context")
               .set({ lastMemoryId: newMemId }, { merge: true });
-
           await logRef.update({
             answer: replyText,
             mermaidCode: data.mermaid || null,
             isProcessing: false,
           });
 
-          // ★修正: 通常会話もデフォルトでカード化 (logIdを渡してボタン付きにする)
+          // ★修正: 通常会話もデフォルトでカード化
           if (!flex && replyText) {
             flex = createChatFlex(replyText, logRef.id);
           }
 
+          // ★修正: URL検知＆テキスト追撃
           const messages: line.Message[] = [];
+          const urlRegex = /(https?:\/\/[^\s]+)/g;
+          const extractedUrls = replyText.match(urlRegex);
+
           if (flex) {
             messages.push({
               type: "flex",
               altText: replyText || "詳細情報",
               contents: flex,
             });
-          } else {
-            // 万が一Flex生成失敗時はテキスト
-            messages.push({
-              type: "text",
-              text: replyText,
-            });
           }
 
-          // ★修正: URLがある場合はテキストを送らない（ボタンがあるから）。
-          // ただし、招待コードが含まれる場合だけはコピー用にテキストも送る。
-          const urlRegex = /(https?:\/\/[^\s]+)/g;
-          if (replyText.includes("招待コード") && !replyText.match(urlRegex)) {
+          // URLがある場合、またはFlexがない場合はテキストも送る
+          if (!flex) {
+            messages.push({ type: "text", text: replyText });
+          } else if (extractedUrls && extractedUrls.length > 0) {
+            const urlMessage = `🔗 リンク:\n${extractedUrls.join("\n")}`;
+            messages.push({ type: "text", text: urlMessage });
+          } else if (replyText.includes("招待コード")) {
+            // 招待コードの場合はコピーしやすいようにテキストも送る
             messages.push({ type: "text", text: replyText });
           }
 
@@ -11328,27 +11491,12 @@ export const lineWebhook = onRequest(
       );
     } catch (e) {
       console.error(e);
-      // ★追加: 致命的なエラー時は沈黙せず、ユーザーに通知する
-      const client = new line.Client({
-        channelAccessToken: lineBotToken.value(),
-      });
-      const events = req.body.events;
-      if (events && events.length > 0) {
-        const replyToken = events[0].replyToken;
-        if (replyToken) {
-          await client
-            .replyMessage(replyToken, {
-              type: "text",
-              text: "申し訳ありません。内部エラーが発生しました。もう一度お試しください。",
-            })
-            .catch(() => {}); // 二重送信エラー防止
-        }
-      }
     }
     res.json({ success: true });
   },
 );
 
+// ▼▼▼ 修正: 重複通知バグを解消した通知機能 ▼▼▼
 export const checkUpcomingMeetings = onSchedule(
   {
     schedule: "every 15 minutes",
@@ -11377,23 +11525,36 @@ export const checkUpcomingMeetings = onSchedule(
 
       const now = new Date();
 
-      // 1. 直前通知 (25分後〜40分後)
-      const soonMin = new Date(now.getTime() + 25 * 60000).toISOString();
-      const soonMax = new Date(now.getTime() + 40 * 60000).toISOString();
+      // 1. 直前リマインド (25分後 〜 40分後)
+      // ※30分前を狙うために幅を持たせています
+      const soonMin = new Date(now.getTime() + 25 * 60000);
+      const soonMax = new Date(now.getTime() + 40 * 60000);
 
-      // 2. 明日の予定通知 (24時間後〜24時間15分後)
-      const dayMin = new Date(now.getTime() + 24 * 60 * 60000).toISOString();
-      const dayMax = new Date(
-        now.getTime() + (24 * 60 + 15) * 60000,
-      ).toISOString();
+      // 2. 明日の予定通知 (24時間後 〜 24時間15分後)
+      // ※ちょうど24時間前を狙います
+      const dayMin = new Date(now.getTime() + 24 * 60 * 60000);
+      const dayMax = new Date(now.getTime() + (24 * 60 + 15) * 60000);
 
       const checks = [
-        { min: soonMin, max: soonMax, title: "まもなく開始" },
-        { min: dayMin, max: dayMax, title: "明日の予定" },
+        {
+          min: soonMin.toISOString(),
+          max: soonMax.toISOString(),
+          minTime: soonMin.getTime(),
+          maxTime: soonMax.getTime(),
+          title: "まもなく開始",
+        },
+        {
+          min: dayMin.toISOString(),
+          max: dayMax.toISOString(),
+          minTime: dayMin.getTime(),
+          maxTime: dayMax.getTime(),
+          title: "明日の予定",
+        },
       ];
 
       for (const check of checks) {
         try {
+          // GoogleカレンダーAPIは「期間に被っている予定」を全て返してしまう仕様
           const res = await axios.get(
             "https://www.googleapis.com/calendar/v3/calendars/primary/events",
             {
@@ -11408,11 +11569,19 @@ export const checkUpcomingMeetings = onSchedule(
           );
 
           for (const ev of res.data.items || []) {
-            // 終日予定は除外
+            // 終日予定（誕生日など）は通知しない
             if (ev.start.date) continue;
 
-            const startTime = ev.start.dateTime || ev.start.date;
-            const endTime = ev.end.dateTime || ev.end.date;
+            // ★重要修正: 「開始時間」がチェック範囲に入っているか厳密に確認
+            const eventStart = new Date(ev.start.dateTime).getTime();
+
+            // 開始時間が範囲外（＝単に時間が被っているだけ）なら通知しない
+            if (eventStart < check.minTime || eventStart >= check.maxTime) {
+              continue;
+            }
+
+            const startTime = ev.start.dateTime;
+            const endTime = ev.end.dateTime;
             const searchLoc = ev.location || defaultLocation;
             const w = await checkWeather(searchLoc, startTime);
 
@@ -11459,36 +11628,22 @@ export const sendMorningBriefing = onSchedule(
 
     for (const doc of users.docs) {
       const uid = doc.id;
-      // ★修正: メモも取得対象に追加
-      const [cal, todos, memo] = await Promise.all([
-        getCalendarEvents(uid),
-        getOpenTodos(uid),
-        getRecentMemories(uid, ""),
-      ]);
+      // ★修正: AIに渡す情報を「カレンダー」だけに限定
+      const cal = await getCalendarEvents(uid);
 
-      // ★修正: 短的・事実ベース・関連性フィルターのプロンプト
+      // ★修正: 極限まで簡潔なプロンプトに変更
       const prompt = `
-    あなたは秘書です。今日は ${todayStr} です。
-    以下の情報を元に、今日のブリーフィングを作成してください。
+      あなたは秘書です。今日は ${todayStr} です。
+      以下の【今日の予定】のみを確認し、ユーザーに簡潔に伝えてください。
 
-    【カレンダー（今日の予定）】
-    ${cal}
+      【今日の予定】
+      ${cal}
 
-    【未完了タスク】
-    ${todos}
-
-    【直近のメモ】
-    ${memo}
-
-    【指示】
-    1. まず、カレンダーから「今日の予定」を確認してください。
-    2. 次に、タスクとメモの中から「今日の予定に直接関連するもの」だけを選び出してください。
-    3. 今日の予定がない場合は、「本日の予定はありません。」とだけ答えてください。タスクやメモには触れないでください。
-    4. 予定がある場合のみ、その予定と、それに関連するタスク・メモを簡潔に箇条書きで伝えてください。
-    5. 予定に関係のないタスクやメモは一切表示しないでください。
-    6. 挨拶や「頑張りましょう」等の感情的な言葉は不要です。事実のみを伝えてください。
-    7. 回答は見やすいように改行と箇条書きを使って整形してください。
-    `;
+      【制約】
+      1. 挨拶、励まし、メモやタスクへの言及は一切禁止です。
+      2. カレンダーに記載されている「今日の予定」の事実のみを箇条書きで出力してください。
+      3. 予定がない場合は「本日の予定はありません。」とだけ返してください。
+      `;
 
       const text = await callGeminiText(apiKey!, prompt);
 
@@ -11539,7 +11694,7 @@ export const checkReminders = onSchedule(
         try {
           await client.pushMessage(lineUserId, {
             type: "text",
-            text: `⏰ リマインダー:\n ${data.message}`,
+            text: `⏰ リマインダー: ${data.message}`,
           });
           await doc.ref.update({ isSent: true });
         } catch (err) {
@@ -11610,71 +11765,141 @@ export const redeemInviteCode = onCall({ cors: true }, async (request) => {
     message: "招待コードを適用しました！1日の利用枠が永久に増えました。",
   };
 });
+// ▼▼▼ 追加: 週間レポート＆提案機能（日曜20時に配信） ▼▼▼
+export const sendWeeklyRoutineSuggestion = onSchedule(
+  {
+    schedule: "0 20 * * 0", // 毎週日曜 20:00 (JST)
+    timeZone: "Asia/Tokyo",
+    secrets: [lineBotToken, geminiApiKey],
+  },
+  async () => {
+    const users = await db
+      .collection("users")
+      .where("isLineLinked", "==", true)
+      .get();
+    const apiKey = geminiApiKey.value();
+    const client = new line.Client({
+      channelAccessToken: lineBotToken.value(),
+    });
+
+    for (const doc of users.docs) {
+      const uid = doc.id;
+
+      // ★強化ポイント: 「未完了タスク」も分析対象に追加
+      const [history, memories, todos] = await Promise.all([
+        getChatHistory(uid),
+        getRecentMemories(uid, ""),
+        getOpenTodos(uid), // ← これを追加！
+      ]);
+
+      // ★強化ポイント: AIへの指示を「コンサルタント」レベルに引き上げ
+      const prompt = `
+      あなたは優秀な専属コーチです。
+      ユーザーの過去1週間のデータ（会話・メモ・未完了タスク）を分析し、
+      来週の生産性を爆上げするための「具体的なアクション」を提案してください。
+
+      【分析データ】
+      🛑 未完了タスク:
+      ${todos}
+
+      📝 最近のメモ:
+      ${memories}
+
+      💬 最近の会話:
+      ${history}
+
+      【命令】
+      以下の2つのセクションで構成された、短く鋭いアドバイスを出力してください。
+      挨拶は不要です。各セクションは絵文字付きの見出しにしてください。
+
+      1. 【🔥 未消化タスクの追撃】
+         未完了タスクの中で、特に重要そうなものや、長く放置されているものを選び、「いつやるか」を問いかけてください。もしタスクがなければこの項目は省略可。
+
+      2. 【✨ 習慣化の提案】
+         会話やメモから「何度も言及していること」や「気にしているテーマ」を見つけ、「それをルーティン化しませんか？」と提案してください。
+         (例: 「最近『ジム』という単語が多いですね。火曜日をジムの日に設定しますか？」)
+
+      文字数は全体で200文字以内。箇条書きで簡潔に。
+      `;
+
+      const suggestion = await callGeminiText(apiKey!, prompt);
+
+      // 提案内容が空でなければ送信
+      if (suggestion && suggestion.length > 10) {
+        await client.pushMessage(doc.data().lineUserId, {
+          type: "flex",
+          altText: "週間振り返りレポート",
+          contents: createRoutineSuggestionFlex(suggestion),
+        });
+      }
+    }
+  },
+);
 </file>
 
 <file path=".firebase/hosting.ZGlzdA.cache">
-registerSW.js,1770988469539,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-manifest.webmanifest,1770988469539,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-sw.js,1770988470318,3e3c66fb4a6bdee897db6d4da994adc076f87db17a404db7c13b32973e746001
-index.html,1770988469540,eb7b1f947498a7a54e42a4ccb9275efe77511bd64f8b13ba8c7cf06e17323172
-workbox-8c29f6e4.js,1770988470319,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-firebase-messaging-sw.js,1770988469090,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-lp.html,1770988469091,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-assets/stateDiagram-v2-4FDKWEC3-jIIC62Ka.js,1770988469539,b7bfceff88c90aa70bf702759cd08ca3e57b080e3525bd602968bdc0a23be2bb
-assets/stateDiagram-FKZM4ZOC-Dwbwn0QN.js,1770988469539,b5d7058b3b7b58a2ec1617cdec93528ff600d48cab3277beb4c2110131b09dba
-assets/timeline-definition-IT6M3QCI-BNIkVAAg.js,1770988469539,ebe4e047da5cf68aa846572dc6318a5eca17bc4bf976c9a8570edbc467311c71
-assets/pieDiagram-ADFJNKIX-Bfsw9OjL.js,1770988469539,7aa5158b993ba348aa5790114e986c3ee49eeb50fc1c89c6d7807a39838aba5f
-assets/xychartDiagram-PRI3JC2R-DoITNqRG.js,1770988469539,4c339d1e141de8c95739a38b5798e428adc4585280a5c31053cd233215b72309
-assets/ordinal-Cboi1Yqb.js,1770988469539,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/min-Bj8Uu2TN.js,1770988469539,8cc71a7f24ff8e411cc6a8a1eb246e8c4755e91e4372d8f67dd829cfca3b7a25
-assets/sankeyDiagram-TZEHDZUN-LYmxn7Gk.js,1770988469539,2d8c604461b902ac46bb94cc4d414c855c8b8a1994a7068fcbb161da51e8e0bc
-assets/requirementDiagram-UZGBJVZJ-B5MRfYt_.js,1770988469539,497b8e7d5be3761211323ca648729baf3abaa5dd7bf862a5b8b2eff255d84d95
-assets/mindmap-definition-VGOIOE7T-Dxc6HKLV.js,1770988469539,c7b7a39104d114da004f5a7895804ac6082bd69a86ef01a7ce06b4a20ba2b31c
-assets/linear-B4x1V1pR.js,1770988469539,bb28b317b32d93ceb7926f1ef4aab27995239e9e31a8741c7695eb77d6e8a60b
-assets/init-Gi6I4Gst.js,1770988469539,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/quadrantDiagram-AYHSOK5B-Dbr2Sczz.js,1770988469539,3bb028003118595e7e88137b2f415293e89e622cccdcef584ee1357a8d1a1c75
-assets/infoDiagram-WHAUD3N6-Doq3lmEe.js,1770988469539,d879d4f052ea41df4719c5d3098b17b0ea1da4a208ad386d53be95ac68f58235
-assets/kanban-definition-3W4ZIXB7-Db8psW9M.js,1770988469539,ffc6ef68b5087f77c5b839842f0160b7ec1e156882e9c54f264f5704e0c91a29
-assets/journeyDiagram-XKPGCS4Q-BfaoW3cb.js,1770988469539,5198cd721cae80ca14c9332dd5d51be7bf5c23aee329f6552e6247104c3ac87a
-assets/layout-8RLcuW98.js,1770988469539,38500b352375e50c74786a3dbdf93526851e6718d1a48ddace5ba04f552c3a7c
-assets/index-BdI6Lg1O.css,1770988469539,edd94b2fe6f7246057d987db8ac607811b0f516d7140bdfaab0ba9f661d21d57
-assets/gitGraphDiagram-NY62KEGX-biBSRfnB.js,1770988469539,6ad7acd701a0226248bb3c0e31ae2cc9c462d8e658fb9b756e37bc7c03e4ffee
-assets/graph-Dlgq85SY.js,1770988469539,2f3fc7b3fd1dbc4341f9b1a26dede7bf4d9bb5494dba38b354a9c2daf5f7042d
-assets/diagram-S2PKOQOG-eBKw_h4o.js,1770988469539,95767ac467158757901366badba8ef0d0d624bf578ebcdc3fbf47d16470155aa
-assets/defaultLocale-DX6XiGOO.js,1770988469539,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/diagram-QEK2KX5R-G21joAxO.js,1770988469539,cc2aaf744bbc8b402ed7a20e6f645f6fe6d1845ca45950dcbeb94141ec406c6e
-assets/classDiagram-2ON5EDUG-BEgH9455.js,1770988469539,b2d1ec54c068ce5f4e0ac8ac649d7aabfd0f727bc20c112dcdb9a0825b7aabd1
-assets/chunk-QZHKN3VN-D_wuSJPq.js,1770988469539,4110e30f32e15b3d5435cd21ec75eedb47d6ba91eca58e624e98f9dd6ab050a8
-assets/chunk-TZMSLE5B-ZwnDEOMW.js,1770988469539,87573f8b4b5015d4aa58fd220260478fafd2ae72d84bd216a45796c07ab2a61a
-assets/erDiagram-Q2GNP2WA-Dq3YTYdu.js,1770988469539,cdfe1f5f7e1dcd9307c5aea8de6ee585fa25d50d89ea396c31c258c385c2aecb
-assets/dagre-6UL2VRFP-H30ZsDU-.js,1770988469539,99972f88ccd864e44a80f6af23263e83307239a9f608c7b4a2fab5b268cd1c97
-assets/diagram-PSM6KHXK-Dovr6PAJ.js,1770988469539,53a223e9f8b850602455fb595a00f7bd937745fc44ed3f3e8ca67ab62757f274
-assets/classDiagram-v2-WZHVMYZB-BEgH9455.js,1770988469539,b2d1ec54c068ce5f4e0ac8ac649d7aabfd0f727bc20c112dcdb9a0825b7aabd1
-assets/clone-BPflpF5p.js,1770988469539,d7b40530459facf0755228ccac3fb8a4b31ede07db892a5da60fac934d9da09e
-assets/flowDiagram-NV44I4VS-Bz2s7iGH.js,1770988469539,d5d9200fa9dc0966682d4f90d072b4971ff172df08d35f586b8014f2707e9e71
-assets/ganttDiagram-JELNMOA3-Hpa_05r6.js,1770988469539,7d6bbcb72f8b0b82526626f1b8c0118438fe446af9afc9bf22e2c682d450da11
-assets/sequenceDiagram-WL72ISMW-CUfLT2za.js,1770988469539,1703c43f537023891727e7b91c56df15642051c138c766e746be855273077be3
-assets/cose-bilkent-S5V4N54A-DAkp41ZA.js,1770988469539,a12e9b3acb269e88ab25dc854cbed99be63796362fd53a7478ac55d0b6f5230a
-assets/chunk-QN33PNHL-2ON-H0c9.js,1770988469539,274a3d69b325c59b3ad644726ae0c8fad8d7b7b9365e0e4c70b26f09044b8ece
-assets/chunk-FMBD7UC4-BXHHgMNX.js,1770988469539,efcb164f4a7f0a5f974ef17ed334b997b3c0e0f9edc5147cb111066f8fb874d1
-assets/chunk-4BX2VUAB-EGqJRU5g.js,1770988469539,edf2805462b8aa667f9212247d4ac11215f6b4dca99b688120b97558831cfb9f
-assets/chunk-55IACEB6-CYwm5vPU.js,1770988469539,3a9dbcb2ee2c249007156a888eeef0b7bdd40e2b67ed1812732d15857ba0c86a
-assets/chunk-DI55MBZ5-Ds5mA4zT.js,1770988469539,af5136edddfe18cc250237d2d7419b0f27f95206c61a5383d5d78e34bb415837
-assets/channel-D6NpA2vM.js,1770988469539,63529f908deca1da9aa10bb71fd1e987f75f798cfc998ec73b9e10551be09f0d
-assets/chunk-B4BG7PRW-DCv0PKT4.js,1770988469539,e425f81783ddf1feb94d49d9a7914bd084287ee4e7d9bf77706b46ae1364a960
-assets/arc-CnCDFbYK.js,1770988469539,5e3fcd1e99a9afdb778f836f8fb06bd69a2d7bd6e5b585f8113d31b5fc160962
-assets/_baseUniq-deWUPulY.js,1770988469539,6b630373a9d2ef7dbfa53850d07df6dac7a44bda235dafdbddd5fd3696802149
-assets/c4Diagram-YG6GDRKO-CqypbHK8.js,1770988469539,cca3a388999b00b5ad3f0693fcd9ff333c485c64b0a4dcdf7657da2bdd21d348
-assets/blockDiagram-VD42YOAC-D_qq941J.js,1770988469539,d443e460c7cca659f3926560bbdac209e298ebd274270a3e8be46fd2369fac7c
-assets/architectureDiagram-VXUJARFQ-CeK7g8TF.js,1770988469539,495eadff39b83d9e89edb26b90211c27a040fa67d562c117f9008fcedbac8d2d
-assets/katex-Cu_Erd72.js,1770988469539,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-DhqelHri.js,1770988469539,bb9ce64ffabcc581fe15838964272b20f70acf205dd90441a5bebf86cb34a4cd
-assets/cytoscape.esm-CyJtwmzi.js,1770988469539,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-C3Y43Miv.js,1770988469540,1aa1bc03dcf2521f48624a39ba04bac485eda8b1bf06b164415cb0b29a40042f
-apple-touch-icon.png,1770988469089,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1770988469111,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-192x192.png,1770988469100,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-logo.png,1770988469091,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+registerSW.js,1770997275686,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+sw.js,1770997276725,3e3c66fb4a6bdee897db6d4da994adc076f87db17a404db7c13b32973e746001
+manifest.webmanifest,1770997275686,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+index.html,1770997275686,eb7b1f947498a7a54e42a4ccb9275efe77511bd64f8b13ba8c7cf06e17323172
+workbox-8c29f6e4.js,1770997276726,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+lp.html,1770997274915,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+firebase-messaging-sw.js,1770997274912,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+assets/stateDiagram-v2-4FDKWEC3-jIIC62Ka.js,1770997275685,b7bfceff88c90aa70bf702759cd08ca3e57b080e3525bd602968bdc0a23be2bb
+assets/stateDiagram-FKZM4ZOC-Dwbwn0QN.js,1770997275685,b5d7058b3b7b58a2ec1617cdec93528ff600d48cab3277beb4c2110131b09dba
+assets/xychartDiagram-PRI3JC2R-DoITNqRG.js,1770997275685,4c339d1e141de8c95739a38b5798e428adc4585280a5c31053cd233215b72309
+assets/sankeyDiagram-TZEHDZUN-LYmxn7Gk.js,1770997275686,2d8c604461b902ac46bb94cc4d414c855c8b8a1994a7068fcbb161da51e8e0bc
+assets/pieDiagram-ADFJNKIX-Bfsw9OjL.js,1770997275686,7aa5158b993ba348aa5790114e986c3ee49eeb50fc1c89c6d7807a39838aba5f
+assets/timeline-definition-IT6M3QCI-BNIkVAAg.js,1770997275685,ebe4e047da5cf68aa846572dc6318a5eca17bc4bf976c9a8570edbc467311c71
+assets/requirementDiagram-UZGBJVZJ-B5MRfYt_.js,1770997275685,497b8e7d5be3761211323ca648729baf3abaa5dd7bf862a5b8b2eff255d84d95
+assets/min-Bj8Uu2TN.js,1770997275686,8cc71a7f24ff8e411cc6a8a1eb246e8c4755e91e4372d8f67dd829cfca3b7a25
+assets/ordinal-Cboi1Yqb.js,1770997275685,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/quadrantDiagram-AYHSOK5B-Dbr2Sczz.js,1770997275685,3bb028003118595e7e88137b2f415293e89e622cccdcef584ee1357a8d1a1c75
+assets/linear-B4x1V1pR.js,1770997275686,bb28b317b32d93ceb7926f1ef4aab27995239e9e31a8741c7695eb77d6e8a60b
+assets/mindmap-definition-VGOIOE7T-Dxc6HKLV.js,1770997275686,c7b7a39104d114da004f5a7895804ac6082bd69a86ef01a7ce06b4a20ba2b31c
+assets/infoDiagram-WHAUD3N6-Doq3lmEe.js,1770997275685,d879d4f052ea41df4719c5d3098b17b0ea1da4a208ad386d53be95ac68f58235
+assets/init-Gi6I4Gst.js,1770997275685,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/kanban-definition-3W4ZIXB7-Db8psW9M.js,1770997275685,ffc6ef68b5087f77c5b839842f0160b7ec1e156882e9c54f264f5704e0c91a29
+assets/graph-Dlgq85SY.js,1770997275686,2f3fc7b3fd1dbc4341f9b1a26dede7bf4d9bb5494dba38b354a9c2daf5f7042d
+assets/journeyDiagram-XKPGCS4Q-BfaoW3cb.js,1770997275685,5198cd721cae80ca14c9332dd5d51be7bf5c23aee329f6552e6247104c3ac87a
+assets/layout-8RLcuW98.js,1770997275686,38500b352375e50c74786a3dbdf93526851e6718d1a48ddace5ba04f552c3a7c
+assets/gitGraphDiagram-NY62KEGX-biBSRfnB.js,1770997275685,6ad7acd701a0226248bb3c0e31ae2cc9c462d8e658fb9b756e37bc7c03e4ffee
+assets/index-BdI6Lg1O.css,1770997275685,edd94b2fe6f7246057d987db8ac607811b0f516d7140bdfaab0ba9f661d21d57
+assets/diagram-S2PKOQOG-eBKw_h4o.js,1770997275685,95767ac467158757901366badba8ef0d0d624bf578ebcdc3fbf47d16470155aa
+assets/diagram-QEK2KX5R-G21joAxO.js,1770997275685,cc2aaf744bbc8b402ed7a20e6f645f6fe6d1845ca45950dcbeb94141ec406c6e
+assets/defaultLocale-DX6XiGOO.js,1770997275686,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/diagram-PSM6KHXK-Dovr6PAJ.js,1770997275686,53a223e9f8b850602455fb595a00f7bd937745fc44ed3f3e8ca67ab62757f274
+assets/classDiagram-v2-WZHVMYZB-BEgH9455.js,1770997275685,b2d1ec54c068ce5f4e0ac8ac649d7aabfd0f727bc20c112dcdb9a0825b7aabd1
+assets/clone-BPflpF5p.js,1770997275685,d7b40530459facf0755228ccac3fb8a4b31ede07db892a5da60fac934d9da09e
+assets/chunk-TZMSLE5B-ZwnDEOMW.js,1770997275685,87573f8b4b5015d4aa58fd220260478fafd2ae72d84bd216a45796c07ab2a61a
+assets/classDiagram-2ON5EDUG-BEgH9455.js,1770997275685,b2d1ec54c068ce5f4e0ac8ac649d7aabfd0f727bc20c112dcdb9a0825b7aabd1
+assets/dagre-6UL2VRFP-H30ZsDU-.js,1770997275685,99972f88ccd864e44a80f6af23263e83307239a9f608c7b4a2fab5b268cd1c97
+assets/chunk-QZHKN3VN-D_wuSJPq.js,1770997275685,4110e30f32e15b3d5435cd21ec75eedb47d6ba91eca58e624e98f9dd6ab050a8
+assets/erDiagram-Q2GNP2WA-Dq3YTYdu.js,1770997275685,cdfe1f5f7e1dcd9307c5aea8de6ee585fa25d50d89ea396c31c258c385c2aecb
+assets/flowDiagram-NV44I4VS-Bz2s7iGH.js,1770997275685,d5d9200fa9dc0966682d4f90d072b4971ff172df08d35f586b8014f2707e9e71
+assets/ganttDiagram-JELNMOA3-Hpa_05r6.js,1770997275686,7d6bbcb72f8b0b82526626f1b8c0118438fe446af9afc9bf22e2c682d450da11
+assets/sequenceDiagram-WL72ISMW-CUfLT2za.js,1770997275685,1703c43f537023891727e7b91c56df15642051c138c766e746be855273077be3
+assets/cose-bilkent-S5V4N54A-DAkp41ZA.js,1770997275686,a12e9b3acb269e88ab25dc854cbed99be63796362fd53a7478ac55d0b6f5230a
+assets/chunk-QN33PNHL-2ON-H0c9.js,1770997275685,274a3d69b325c59b3ad644726ae0c8fad8d7b7b9365e0e4c70b26f09044b8ece
+assets/chunk-FMBD7UC4-BXHHgMNX.js,1770997275685,efcb164f4a7f0a5f974ef17ed334b997b3c0e0f9edc5147cb111066f8fb874d1
+assets/chunk-55IACEB6-CYwm5vPU.js,1770997275685,3a9dbcb2ee2c249007156a888eeef0b7bdd40e2b67ed1812732d15857ba0c86a
+assets/chunk-DI55MBZ5-Ds5mA4zT.js,1770997275685,af5136edddfe18cc250237d2d7419b0f27f95206c61a5383d5d78e34bb415837
+assets/chunk-4BX2VUAB-EGqJRU5g.js,1770997275685,edf2805462b8aa667f9212247d4ac11215f6b4dca99b688120b97558831cfb9f
+assets/channel-D6NpA2vM.js,1770997275685,63529f908deca1da9aa10bb71fd1e987f75f798cfc998ec73b9e10551be09f0d
+assets/chunk-B4BG7PRW-DCv0PKT4.js,1770997275685,e425f81783ddf1feb94d49d9a7914bd084287ee4e7d9bf77706b46ae1364a960
+assets/arc-CnCDFbYK.js,1770997275685,5e3fcd1e99a9afdb778f836f8fb06bd69a2d7bd6e5b585f8113d31b5fc160962
+assets/_baseUniq-deWUPulY.js,1770997275686,6b630373a9d2ef7dbfa53850d07df6dac7a44bda235dafdbddd5fd3696802149
+assets/c4Diagram-YG6GDRKO-CqypbHK8.js,1770997275685,cca3a388999b00b5ad3f0693fcd9ff333c485c64b0a4dcdf7657da2bdd21d348
+assets/blockDiagram-VD42YOAC-D_qq941J.js,1770997275685,d443e460c7cca659f3926560bbdac209e298ebd274270a3e8be46fd2369fac7c
+assets/architectureDiagram-VXUJARFQ-CeK7g8TF.js,1770997275686,495eadff39b83d9e89edb26b90211c27a040fa67d562c117f9008fcedbac8d2d
+assets/katex-Cu_Erd72.js,1770997275686,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-DhqelHri.js,1770997275686,bb9ce64ffabcc581fe15838964272b20f70acf205dd90441a5bebf86cb34a4cd
+assets/cytoscape.esm-CyJtwmzi.js,1770997275685,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-C3Y43Miv.js,1770997275687,1aa1bc03dcf2521f48624a39ba04bac485eda8b1bf06b164415cb0b29a40042f
+pwa-192x192.png,1770997274963,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1770997274972,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1770997274911,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+logo.png,1770997274914,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>

@@ -3,18 +3,25 @@ import { ref } from "vue";
 import { useAppHeader } from "./useAppHeader";
 import { useMyBrain } from "@/composables/useMyBrain";
 import NotificationBell from "@/components/NotificationBell/NotificationBell.vue";
-import InviteModal from "@/components/InviteModal/InviteModal.vue"; // 追加
+import InviteModal from "@/components/InviteModal/InviteModal.vue";
 
 const { logout } = useAppHeader();
 const {
   currentUser,
+  // isAdmin, // ← これはもう使いません
   startLineAuth,
   unlinkLine,
   startSubscription,
   manageSubscription,
 } = useMyBrain();
 
-const isInviteModalOpen = ref(false); // モーダル開閉用
+const isInviteModalOpen = ref(false);
+
+const openAdminDashboard = () => {
+  const DASHBOARD_URL =
+    "https://asia-northeast1-my-brain-145b1.cloudfunctions.net/adminDashboard";
+  window.open(DASHBOARD_URL, "_blank");
+};
 </script>
 
 <template>
@@ -33,6 +40,15 @@ const isInviteModalOpen = ref(false); // モーダル開閉用
     </div>
 
     <div class="flex items-center gap-2 md:gap-4">
+      <button
+        v-if="currentUser?.email === 'gongedonghuam@gmail.com'"
+        @click="openAdminDashboard"
+        class="text-xs font-bold bg-slate-800 text-indigo-400 border border-indigo-500/30 px-3 py-1.5 rounded-lg hover:bg-slate-700 transition flex items-center gap-1 mr-1"
+        title="管理者ダッシュボード"
+      >
+        <span>📊</span>
+        <span class="hidden md:inline">管理</span>
+      </button>
       <button
         @click="isInviteModalOpen = true"
         class="text-lg p-2 rounded-full hover:bg-[#18181b] transition"
