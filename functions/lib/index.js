@@ -972,38 +972,77 @@ async function getValidAccessToken(uid) {
     }
     return null;
 }
-/// --- API calls ---
+// 全カレンダー取得 & 今日限定フィルター
 async function getCalendarEvents(uid) {
     try {
         const token = await getValidAccessToken(uid);
         if (!token)
             return "（未連携）";
+        // 1. 今日の範囲 (JST) を計算
         const now = new Date();
-        // JST時間に変換して日付を合わせる（UTC+9）
-        const jstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-        jstDate.setUTCHours(0, 0, 0, 0); // 時間を00:00:00にリセット
-        // UTCに戻してAPI用の時刻形式にする
-        const timeMin = new Date(jstDate.getTime() - 9 * 60 * 60 * 1000).toISOString();
-        try {
-            const res = await axios_1.default.get("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
-                headers: { Authorization: `Bearer ${token}` },
-                params: {
-                    timeMin: timeMin,
-                    maxResults: 20,
-                    singleEvents: true,
-                    orderBy: "startTime",
-                },
-            });
-            return (res.data.items || [])
-                .map((e) => `${e.start.dateTime || e.start.date}: ${e.summary}`)
-                .join("\n");
+        // UTC時間をJSTに変換した「つもり」のDateオブジェクトを作成
+        const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        // 今日の 00:00:00 (JST)
+        const jstStart = new Date(jstNow);
+        jstStart.setUTCHours(0, 0, 0, 0);
+        // 今日の 23:59:59 (JST)
+        const jstEnd = new Date(jstNow);
+        jstEnd.setUTCHours(23, 59, 59, 999);
+        // APIに渡すためのISO文字列 (UTCに戻す計算)
+        const timeMin = new Date(jstStart.getTime() - 9 * 60 * 60 * 1000).toISOString();
+        const timeMax = new Date(jstEnd.getTime() - 9 * 60 * 60 * 1000).toISOString();
+        // 2. カレンダーリストを取得 (Primary以外も全部取る)
+        const calendarListRes = await axios_1.default.get("https://www.googleapis.com/calendar/v3/users/me/calendarList", { headers: { Authorization: `Bearer ${token}` } });
+        const calendars = calendarListRes.data.items || [];
+        // 3. 各カレンダーから「今日の予定」を取得して結合
+        const allEvents = [];
+        // 並列処理で全カレンダーをチェック
+        await Promise.all(calendars.map(async (cal) => {
+            try {
+                const res = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    params: {
+                        timeMin: timeMin,
+                        timeMax: timeMax, // 今日いっぱいまで
+                        singleEvents: true,
+                        orderBy: "startTime",
+                        maxResults: 20, // 1カレンダーあたり20件あれば十分
+                    },
+                });
+                if (res.data.items) {
+                    allEvents.push(...res.data.items);
+                }
+            }
+            catch (e) {
+                // 読み取れないカレンダーがあっても無視して次へ
+                console.warn(`Failed to fetch calendar: ${cal.id}`);
+            }
+        }));
+        if (allEvents.length === 0) {
+            return "（予定なし）";
         }
-        catch (_a) {
-            return "（取得失敗）";
-        }
+        // 4. 開始時間順に並べ替え & 整形
+        allEvents.sort((a, b) => {
+            const timeA = new Date(a.start.dateTime || a.start.date).getTime();
+            const timeB = new Date(b.start.dateTime || b.start.date).getTime();
+            return timeA - timeB;
+        });
+        return allEvents
+            .map((e) => {
+            const start = e.start.dateTime
+                ? new Date(e.start.dateTime).toLocaleTimeString("ja-JP", {
+                    timeZone: "Asia/Tokyo",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                })
+                : "終日";
+            return `・${start}: ${e.summary}`;
+        })
+            .join("\n");
     }
-    catch (_b) {
-        return "（エラー）";
+    catch (e) {
+        console.error("Calendar Fetch Error:", e);
+        return "（エラー: 予定が取得できませんでした）";
     }
 }
 async function addCalendarEvent(uid, eventData) {
