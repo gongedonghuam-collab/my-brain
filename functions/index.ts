@@ -1413,7 +1413,7 @@ export const lineWebhook = onRequest(
           if (event.type === "follow") {
             await client.replyMessage(event.replyToken, {
               type: "text",
-              text: "友だち登録ありがとうございます！🎉\n\nこのアカウントはあなたの「第2の脳」です。\nアプリと連携して、AI秘書機能を活用してください✨\n\n📍 便利な機能:\nトーク画面の「＋」メニューから位置情報を送ると、あなたの街の天気を優先的に表示できるようになります！\n\n👇 アプリ画面に戻って連携を完了させてね！",
+              text: "連携完了！今日から私があなたの「第2の脳」です🧠✨\n面倒なアプリの使い分けはもう終わり。\n\n🎁 【最初のテスト】\n試しに、今すぐこのLINEにこう送ってみてください👇\n\n「3分後にカップ麺って教えて」\n\nそのまま3分待つと...LINEが最強のリマインダーになります🍜\n\n他にも：\n📅「明日19時 渋谷で飲み会」➔ カレンダー自動登録\n✅「洗剤買う」➔ タスク追加\n\nさあ、何でも私に丸投げしてください！",
             });
             return;
           }
@@ -1989,55 +1989,6 @@ export const checkUpcomingMeetings = onSchedule(
   },
 );
 
-export const sendMorningBriefing = onSchedule(
-  {
-    schedule: "0 7 * * *",
-    timeZone: "Asia/Tokyo",
-    secrets: [lineBotToken, geminiApiKey, googleClientId, googleClientSecret],
-  },
-  async () => {
-    const users = await db
-      .collection("users")
-      .where("isLineLinked", "==", true)
-      .get();
-    const apiKey = geminiApiKey.value();
-    const client = new line.Client({
-      channelAccessToken: lineBotToken.value(),
-    });
-    const todayStr = new Date().toLocaleDateString("ja-JP", {
-      timeZone: "Asia/Tokyo",
-    });
-
-    for (const doc of users.docs) {
-      const uid = doc.id;
-      // ★修正: AIに渡す情報を「カレンダー」だけに限定
-      const cal = await getCalendarEvents(uid);
-
-      // ★修正: 極限まで簡潔なプロンプトに変更
-      const prompt = `
-      あなたは秘書です。今日は ${todayStr} です。
-      以下の【今日の予定】のみを確認し、ユーザーに簡潔に伝えてください。
-
-      【今日の予定】
-      ${cal}
-
-      【制約】
-      1. 挨拶、励まし、メモやタスクへの言及は一切禁止です。
-      2. カレンダーに記載されている「今日の予定」の事実のみを箇条書きで出力してください。
-      3. 予定がない場合は「本日の予定はありません。」とだけ返してください。
-      `;
-
-      const text = await callGeminiText(apiKey!, prompt);
-
-      await client.pushMessage(doc.data().lineUserId, {
-        type: "flex",
-        altText: "今日の予定",
-        contents: createChatFlex(`📅 ${todayStr} の予定\n\n${text}`),
-      });
-    }
-  },
-);
-
 // ★1分ごとにリマインダーをチェックする関数（修正版）
 export const checkReminders = onSchedule(
   {
@@ -2147,76 +2098,7 @@ export const redeemInviteCode = onCall({ cors: true }, async (request) => {
     message: "招待コードを適用しました！1日の利用枠が永久に増えました。",
   };
 });
-// ▼▼▼ 追加: 週間レポート＆提案機能（日曜20時に配信） ▼▼▼
-export const sendWeeklyRoutineSuggestion = onSchedule(
-  {
-    schedule: "0 20 * * 0", // 毎週日曜 20:00 (JST)
-    timeZone: "Asia/Tokyo",
-    secrets: [lineBotToken, geminiApiKey],
-  },
-  async () => {
-    const users = await db
-      .collection("users")
-      .where("isLineLinked", "==", true)
-      .get();
-    const apiKey = geminiApiKey.value();
-    const client = new line.Client({
-      channelAccessToken: lineBotToken.value(),
-    });
 
-    for (const doc of users.docs) {
-      const uid = doc.id;
-
-      // ★強化ポイント: 「未完了タスク」も分析対象に追加
-      const [history, memories, todos] = await Promise.all([
-        getChatHistory(uid),
-        getRecentMemories(uid, ""),
-        getOpenTodos(uid), // ← これを追加！
-      ]);
-
-      // ★強化ポイント: AIへの指示を「コンサルタント」レベルに引き上げ
-      const prompt = `
-      あなたは優秀な専属コーチです。
-      ユーザーの過去1週間のデータ（会話・メモ・未完了タスク）を分析し、
-      来週の生産性を爆上げするための「具体的なアクション」を提案してください。
-
-      【分析データ】
-      🛑 未完了タスク:
-      ${todos}
-
-      📝 最近のメモ:
-      ${memories}
-
-      💬 最近の会話:
-      ${history}
-
-      【命令】
-      以下の2つのセクションで構成された、短く鋭いアドバイスを出力してください。
-      挨拶は不要です。各セクションは絵文字付きの見出しにしてください。
-
-      1. 【🔥 未消化タスクの追撃】
-         未完了タスクの中で、特に重要そうなものや、長く放置されているものを選び、「いつやるか」を問いかけてください。もしタスクがなければこの項目は省略可。
-
-      2. 【✨ 習慣化の提案】
-         会話やメモから「何度も言及していること」や「気にしているテーマ」を見つけ、「それをルーティン化しませんか？」と提案してください。
-         (例: 「最近『ジム』という単語が多いですね。火曜日をジムの日に設定しますか？」)
-
-      文字数は全体で200文字以内。箇条書きで簡潔に。
-      `;
-
-      const suggestion = await callGeminiText(apiKey!, prompt);
-
-      // 提案内容が空でなければ送信
-      if (suggestion && suggestion.length > 10) {
-        await client.pushMessage(doc.data().lineUserId, {
-          type: "flex",
-          altText: "週間振り返りレポート",
-          contents: createRoutineSuggestionFlex(suggestion),
-        });
-      }
-    }
-  },
-);
 export const adminDashboard = onRequest(async (req, res) => {
   // 1. Basic認証 (ユーザー名: admin / パスワード: password1234)
   // ※必要に応じて変更してください

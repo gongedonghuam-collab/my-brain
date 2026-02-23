@@ -14,13 +14,14 @@ const db = getFirestore(); // Firestore Database
 const isInAppBrowser = ref(false);
 
 onMounted(() => {
-  // ★重要: LINE, Instagram, TikTok, Facebook を検知
+  // ★修正: 判定ロジックを index.html と合わせて厳密化 (誤検知防止)
   const ua = navigator.userAgent.toLowerCase();
   if (
-    ua.includes("line") ||
-    ua.includes("instagram") ||
-    ua.includes("tiktok") ||
-    ua.includes("fbav") // Facebook
+    ua.indexOf("line/") > -1 || // LINE (line/バージョンの形式を検知)
+    ua.indexOf("instagram") > -1 || // Instagram
+    ua.indexOf("tiktok") > -1 || // TikTok
+    ua.indexOf("fbav") > -1 || // Facebook App
+    ua.indexOf("fban") > -1 // Facebook App (別パターン)
   ) {
     isInAppBrowser.value = true;
   }

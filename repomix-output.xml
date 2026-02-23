@@ -3135,70 +3135,6 @@ declare module "*.vue" {
 }
 </file>
 
-<file path="src/firebase.ts">
-/**
- * Firebase（バックエンドサービス）の初期化設定ファイル
- * アプリ全体で使う「認証」「データベース」「ストレージ」などの機能をここで準備します。
- */
-
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import {
-  getFirestore,
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
-} from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-import { getMessaging } from "firebase/messaging";
-
-// 環境変数 (.envファイル) から設定値を読み込み
-// これにより、本番環境と開発環境で接続先を切り替えられます
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
-};
-
-// --- アプリの初期化 (Singletonパターン) ---
-// 既に初期化済みなら既存のアプリを取得し、まだなら新規に初期化します。
-// これにより、二重初期化によるエラーを防ぎます。
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-
-/** 認証機能 (ログイン/ログアウト) */
-export const auth = getAuth(app);
-
-// --- Firestore (データベース) の初期化 ---
-let dbInstance;
-try {
-  // すでに初期化済みなら取得するだけ
-  dbInstance = getFirestore(app);
-} catch (e) {
-  // まだなら設定付きで初期化
-  // オフラインでも動くように「永続化キャッシュ」を有効にしています
-  dbInstance = initializeFirestore(app, {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager(),
-    }),
-  });
-}
-/** データベース本体 */
-export const db = dbInstance;
-
-/** ファイルストレージ (画像の保存先) */
-export const storage = getStorage(app);
-
-/** プッシュ通知機能 */
-export const messaging = getMessaging(app);
-
-/** Googleログイン用のプロバイダ設定 */
-export const googleProvider = new GoogleAuthProvider();
-</file>
-
 <file path="src/main.ts">
 /**
  * アプリケーションのエントリーポイント
@@ -3442,6 +3378,77 @@ watch(currentUser, (newUser) => {
 <template>
   <router-view />
 </template>
+</file>
+
+<file path="src/firebase.ts">
+/**
+ * Firebase（バックエンドサービス）の初期化設定ファイル
+ * アプリ全体で使う「認証」「データベース」「ストレージ」などの機能をここで準備します。
+ */
+
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  memoryLocalCache,
+} from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+import { getMessaging } from "firebase/messaging";
+
+// 環境変数 (.envファイル) から設定値を読み込み
+// これにより、本番環境と開発環境で接続先を切り替えられます
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+};
+
+// --- アプリの初期化 (Singletonパターン) ---
+// 既に初期化済みなら既存のアプリを取得し、まだなら新規に初期化します。
+// これにより、二重初期化によるエラーを防ぎます。
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+/** 認証機能 (ログイン/ログアウト) */
+export const auth = getAuth(app);
+
+// --- Firestore初期化 (極限まで安全なインアプリブラウザ対策) ---
+let dbInstance;
+
+try {
+  // 既に初期化されていないかチェック
+  dbInstance = getFirestore(app);
+} catch (e) {
+  // 初期化に失敗（IndexedDBエラーなど）した場合
+  console.error("Firestore init failed, using fallback:", e);
+
+  try {
+    // 【対策1】IndexedDBを一切使わず、メモリ(RAM)だけ使うモードで初期化
+    dbInstance = initializeFirestore(app, {
+      localCache: memoryLocalCache(),
+    });
+  } catch (err) {
+    // 【対策2】それすら失敗した場合は、最小構成のインスタンスを生成
+    console.error("Critical Firestore Error:", err);
+    dbInstance = getFirestore(app);
+  }
+}
+export const db = dbInstance;
+
+/** ファイルストレージ (画像の保存先) */
+export const storage = getStorage(app);
+
+/** プッシュ通知機能 */
+export const messaging = getMessaging(app);
+
+/** Googleログイン用のプロバイダ設定 */
+export const googleProvider = new GoogleAuthProvider();
 </file>
 
 <file path="src/style.css">
@@ -3692,76 +3699,6 @@ body {
     transform: translateY(0);
   }
 }
-</file>
-
-<file path="index.html">
-<!doctype html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="google-site-verification"
-      content="qpuJVeg2XkDd1ieycUl-LOQkD3MDEH7wVKmlPE3NdEI"
-    />
-    <link rel="icon" href="/logo.png?v=3" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
-    <title>My Brain</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        background-color: #0f172a;
-        height: 100vh;
-        width: 100vw;
-        overflow: hidden;
-      }
-      #loading-screen {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background-color: #0f172a;
-        color: white;
-        z-index: 9999;
-        transition: opacity 0.5s ease;
-      }
-      .loader {
-        margin-top: 32px;
-        width: 32px;
-        height: 32px;
-        border: 3px solid rgba(255, 255, 255, 0.1);
-        border-radius: 50%;
-        border-top-color: #3b82f6;
-        animation: spin 1s linear infinite;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app"></div>
-
-    <div id="loading-screen">
-      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
-      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
-      <div class="loader"></div>
-    </div>
-
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
 </file>
 
 <file path="src/components/InputFooter/useInputFooter.ts">
@@ -4105,6 +4042,123 @@ service cloud.firestore {
     }
   }
 }
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+
+    <meta
+      http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
+    <meta
+      name="google-site-verification"
+      content="qpuJVeg2XkDd1ieycUl-LOQkD3MDEH7wVKmlPE3NdEI"
+    />
+    <link rel="icon" href="/logo.png?v=3" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>My Brain</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0f172a;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+      }
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #0f172a;
+        color: white;
+        z-index: 9999;
+        transition: opacity 0.5s ease;
+      }
+      .loader {
+        margin-top: 32px;
+        width: 32px;
+        height: 32px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        border-top-color: #3b82f6;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="loading-screen">
+      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
+      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
+      <div class="loader"></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+
+    <script>
+      // 3秒後にチェックを実行
+      setTimeout(function () {
+        var loader = document.getElementById("loading-screen");
+
+        // ブラウザの種類を判定
+        var ua = navigator.userAgent.toLowerCase();
+        var isInApp =
+          ua.indexOf("line/") > -1 || // LINE
+          ua.indexOf("instagram") > -1 || // Instagram
+          ua.indexOf("tiktok") > -1 || // TikTok
+          ua.indexOf("fbav") > -1 || // Facebook
+          ua.indexOf("fban") > -1;
+
+        // 条件: ローディングが表示されたまま、かつ「アプリ内ブラウザ」の場合のみ警告を出す
+        // (SafariやChromeの場合は、遅くてもそのまま待ち続ける)
+        if (
+          loader &&
+          window.getComputedStyle(loader).opacity !== "0" &&
+          isInApp
+        ) {
+          loader.innerHTML = `
+            <div style="text-align:center; padding:20px; color:white; max-width: 80%;">
+              <div style="font-size: 50px; margin-bottom: 20px;">⚠️</div>
+              <h1 style="font-size: 20px; margin-bottom: 10px;">ブラウザで開き直してください</h1>
+              <p style="font-size: 14px; line-height: 1.6; opacity: 0.8;">
+                TikTokやインスタのブラウザでは<br>
+                アプリを起動できません。
+              </p>
+              <div style="margin-top: 30px; background: #3b82f6; padding: 15px; border-radius: 12px; font-weight: bold; box-shadow: 0 4px 15px rgba(59,130,246,0.4);">
+                右上の「・・・」から<br>
+                「ブラウザで開く」を選択！
+              </div>
+            </div>
+          `;
+        }
+      }, 3000); // 3秒待機
+    </script>
+  </body>
+</html>
 </file>
 
 <file path="src/types/index.ts">
@@ -5811,18 +5865,25 @@ import { ref } from "vue";
 import { useAppHeader } from "./useAppHeader";
 import { useMyBrain } from "@/composables/useMyBrain";
 import NotificationBell from "@/components/NotificationBell/NotificationBell.vue";
-import InviteModal from "@/components/InviteModal/InviteModal.vue"; // 追加
+import InviteModal from "@/components/InviteModal/InviteModal.vue";
 
 const { logout } = useAppHeader();
 const {
   currentUser,
+  // isAdmin, // ← これはもう使いません
   startLineAuth,
   unlinkLine,
   startSubscription,
   manageSubscription,
 } = useMyBrain();
 
-const isInviteModalOpen = ref(false); // モーダル開閉用
+const isInviteModalOpen = ref(false);
+
+const openAdminDashboard = () => {
+  const DASHBOARD_URL =
+    "https://asia-northeast1-my-brain-145b1.cloudfunctions.net/adminDashboard";
+  window.open(DASHBOARD_URL, "_blank");
+};
 </script>
 
 <template>
@@ -5841,6 +5902,15 @@ const isInviteModalOpen = ref(false); // モーダル開閉用
     </div>
 
     <div class="flex items-center gap-2 md:gap-4">
+      <button
+        v-if="currentUser?.email === 'gongedonghuam@gmail.com'"
+        @click="openAdminDashboard"
+        class="text-xs font-bold bg-slate-800 text-indigo-400 border border-indigo-500/30 px-3 py-1.5 rounded-lg hover:bg-slate-700 transition flex items-center gap-1 mr-1"
+        title="管理者ダッシュボード"
+      >
+        <span>📊</span>
+        <span class="hidden md:inline">管理</span>
+      </button>
       <button
         @click="isInviteModalOpen = true"
         class="text-lg p-2 rounded-full hover:bg-[#18181b] transition"
@@ -5939,236 +6009,6 @@ const isInviteModalOpen = ref(false); // モーダル開閉用
   }
 }
 </style>
-</file>
-
-<file path="src/views/LoginView/LoginView.vue">
-<script setup lang="ts">
-import { ref, onMounted } from "vue";
-import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore, doc, setDoc } from "firebase/firestore";
-import { useRouter } from "vue-router";
-
-// ルーター（画面遷移）と認証機能の準備
-const router = useRouter();
-const loading = ref(false); // ローディング中かどうか
-const auth = getAuth(); // Firebase Auth
-const db = getFirestore(); // Firestore Database
-
-// LINEブラウザ判定フラグ
-const isLineBrowser = ref(false);
-
-onMounted(() => {
-  // ユーザーエージェントに "Line" が含まれているかチェック
-  const ua = navigator.userAgent.toLowerCase();
-  if (ua.indexOf("line") !== -1) {
-    isLineBrowser.value = true;
-  }
-});
-
-/**
- * Googleログイン処理
- * ユーザーにGoogleアカウントでのログインを求め、以下の処理を行います。
- * 1. カレンダーへのアクセス権限を取得
- * 2. 取得したトークン（合鍵）をFirestoreとlocalStorageに保存
- * 3. ユーザー情報を保存してアプリ画面へ遷移
- */
-const handleGoogleLogin = async () => {
-  if (isLineBrowser.value) {
-    alert(
-      "LINEブラウザではGoogle認証がブロックされることがあります。\n右上のメニューなどから「ブラウザで開く（Safari/Chrome）」を選択して再試行してください。",
-    );
-  }
-
-  loading.value = true;
-  try {
-    const provider = new GoogleAuthProvider();
-
-    // ★重要: カレンダーへの読み書き権限を要求します
-    provider.addScope("https://www.googleapis.com/auth/calendar.events");
-    provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
-
-    // ★修正ポイント: リフレッシュトークン（永続的な合鍵）を強制的に取得する設定
-    // 'select_account' を追加することで、Googleの自動ログインを回避し、
-    // アカウント選択画面を出すことで確実にリフレッシュトークンを発行させます。
-    provider.setCustomParameters({
-      prompt: "select_account consent",
-      access_type: "offline", // 裏側（Cloud Functions）で接続するために必須
-    });
-
-    // ポップアップでログイン画面を表示
-    const result = await signInWithPopup(auth, provider);
-    const user = result.user;
-
-    // トークン情報の取得
-    // ※ _tokenResponse は型定義に含まれていないため any でキャストして無理やり取得します
-    const tokenResponse = (result as any)._tokenResponse;
-    const refreshToken =
-      tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const accessToken = credential?.accessToken;
-    // ★追加: トークンの有効期限（秒）
-    const expiresIn = tokenResponse?.expiresIn || 3600;
-
-    // ★トークンを保存するためのデータ準備
-    const tokenData: any = { updatedAt: new Date() };
-
-    if (accessToken) {
-      tokenData.accessToken = accessToken; // 今すぐ使える鍵
-
-      // ★修正: ブラウザのlocalStorageにも即座に保存
-      // これにより、ログイン直後の画面遷移でもカレンダーが即座に表示されます
-      localStorage.setItem("google_calendar_token", accessToken);
-
-      // ★追加: 有効期限を計算して保存 (現在時刻 + 有効秒数 - マージン300秒)
-      const expiryTime =
-        new Date().getTime() + (Number(expiresIn) - 300) * 1000;
-      localStorage.setItem(
-        "google_calendar_token_expiry",
-        expiryTime.toString(),
-      );
-    }
-
-    if (refreshToken) {
-      tokenData.refreshToken = refreshToken; // 期限が切れた時のための合鍵
-    }
-
-    // Firestore（サーバー側）への保存処理
-    // 裏側のCloud Functionsがカレンダーを操作するために必要です
-    if (refreshToken || accessToken) {
-      try {
-        await setDoc(
-          doc(db, "users", user.uid, "system", "tokens"),
-          tokenData,
-          { merge: true }, // 既存のデータを消さないようにマージ保存
-        );
-        console.log("Tokens saved successfully.");
-      } catch (saveError: any) {
-        console.error("Token save error:", saveError);
-      }
-    } else {
-      console.warn("No tokens retrieved from Google.");
-    }
-
-    // ユーザー基本情報の保存
-    await setDoc(
-      doc(db, "users", user.uid),
-      {
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        lastLogin: new Date(),
-      },
-      { merge: true },
-    );
-
-    // ログイン成功したらアプリ画面へ
-    router.push("/app");
-  } catch (e: any) {
-    console.error(e);
-    alert("Googleログインに失敗しました: " + e.message);
-  } finally {
-    loading.value = false;
-  }
-};
-</script>
-
-<template>
-  <div
-    class="min-h-[100dvh] w-full bg-slate-900 flex items-center justify-center p-6 relative overflow-hidden"
-  >
-    <div
-      class="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[100px] pointer-events-none"
-    ></div>
-    <div
-      class="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none"
-    ></div>
-
-    <div
-      class="w-full max-w-sm bg-white/5 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/10 flex flex-col items-center"
-    >
-      <div class="mb-10 text-center">
-        <div class="text-6xl mb-4">🧠</div>
-        <h1 class="text-3xl font-black text-white mb-2 tracking-tight">
-          My Brain
-        </h1>
-        <p class="text-slate-400 text-xs font-bold tracking-widest uppercase">
-          ズボラ専用 AI秘書
-        </p>
-      </div>
-
-      <div
-        v-if="isLineBrowser"
-        class="w-full mb-6 bg-amber-500/10 border border-amber-500/50 rounded-xl p-4 text-amber-200 text-xs leading-relaxed"
-      >
-        <p class="font-bold mb-1">⚠️ 動作環境のご注意</p>
-        <p>
-          現在LINEアプリ内で開いています。Google連携がエラーになる場合があります。
-        </p>
-        <p class="mt-2 text-white font-bold underline">
-          右上のメニュー(︙)
-          または「共有」アイコンから「デフォルトのブラウザで開く」を選択してください。
-        </p>
-      </div>
-
-      <div class="w-full space-y-6">
-        <p class="text-slate-300 text-sm text-center leading-relaxed mb-4">
-          LINEで全てを完結させるために、<br />
-          <span class="text-indigo-400 font-bold">Google連携</span>
-          が必要です。<br />
-          <span class="text-xs text-slate-500"
-            >※一度連携すれば、あとはログイン不要です。</span
-          >
-        </p>
-
-        <button
-          @click="handleGoogleLogin"
-          :disabled="loading"
-          class="w-full bg-white text-slate-900 font-bold py-4 rounded-xl shadow-lg hover:bg-slate-50 transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 group"
-        >
-          <svg
-            class="w-5 h-5 group-hover:scale-110 transition-transform"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              fill="#4285F4"
-            />
-            <path
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              fill="#34A853"
-            />
-            <path
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-              fill="#FBBC05"
-            />
-            <path
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-              fill="#EA4335"
-            />
-          </svg>
-          Googleで連携する
-        </button>
-
-        <div class="mt-6 flex justify-center gap-4 text-[10px] text-slate-500">
-          <router-link
-            to="/privacy"
-            class="hover:text-slate-300 transition underline"
-          >
-            プライバシーポリシー
-          </router-link>
-          <span class="text-slate-700">|</span>
-          <router-link
-            to="/legal"
-            class="hover:text-slate-300 transition underline"
-          >
-            利用規約
-          </router-link>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
 </file>
 
 <file path="src/views/HomeView/HomeView.vue">
@@ -6544,6 +6384,216 @@ const shareSchedule = async () => {
           <p class="text-xs text-slate-500 animate-pulse">
             関連情報を検索中...
           </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+</file>
+
+<file path="src/views/LoginView/LoginView.vue">
+<script setup lang="ts">
+import { ref, onMounted } from "vue";
+import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { getFirestore, doc, setDoc } from "firebase/firestore";
+import { useRouter } from "vue-router";
+
+// ルーター（画面遷移）と認証機能の準備
+const router = useRouter();
+const loading = ref(false); // ローディング中かどうか
+const auth = getAuth(); // Firebase Auth
+const db = getFirestore(); // Firestore Database
+
+// アプリ内ブラウザ判定フラグ
+const isInAppBrowser = ref(false);
+
+onMounted(() => {
+  // ★修正: 判定ロジックを index.html と合わせて厳密化 (誤検知防止)
+  const ua = navigator.userAgent.toLowerCase();
+  if (
+    ua.indexOf("line/") > -1 || // LINE (line/バージョンの形式を検知)
+    ua.indexOf("instagram") > -1 || // Instagram
+    ua.indexOf("tiktok") > -1 || // TikTok
+    ua.indexOf("fbav") > -1 || // Facebook App
+    ua.indexOf("fban") > -1 // Facebook App (別パターン)
+  ) {
+    isInAppBrowser.value = true;
+  }
+});
+
+const handleGoogleLogin = async () => {
+  // アプリ内ブラウザならアラートを出して中断
+  if (isInAppBrowser.value) {
+    alert("右上のメニューから「ブラウザで開く」を選択してください🙇‍♂️");
+    return;
+  }
+
+  loading.value = true;
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.addScope("https://www.googleapis.com/auth/calendar.events");
+    provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
+
+    provider.setCustomParameters({
+      prompt: "select_account consent",
+      access_type: "offline",
+    });
+
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+
+    const tokenResponse = (result as any)._tokenResponse;
+    const refreshToken =
+      tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const accessToken = credential?.accessToken;
+    const expiresIn = tokenResponse?.expiresIn || 3600;
+
+    const tokenData: any = { updatedAt: new Date() };
+
+    if (accessToken) {
+      tokenData.accessToken = accessToken;
+      localStorage.setItem("google_calendar_token", accessToken);
+      const expiryTime =
+        new Date().getTime() + (Number(expiresIn) - 300) * 1000;
+      localStorage.setItem(
+        "google_calendar_token_expiry",
+        expiryTime.toString(),
+      );
+    }
+
+    if (refreshToken) {
+      tokenData.refreshToken = refreshToken;
+    }
+
+    if (refreshToken || accessToken) {
+      try {
+        await setDoc(
+          doc(db, "users", user.uid, "system", "tokens"),
+          tokenData,
+          { merge: true },
+        );
+        console.log("Tokens saved successfully.");
+      } catch (saveError: any) {
+        console.error("Token save error:", saveError);
+      }
+    }
+
+    await setDoc(
+      doc(db, "users", user.uid),
+      {
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        lastLogin: new Date(),
+      },
+      { merge: true },
+    );
+
+    router.push("/app");
+  } catch (e: any) {
+    console.error(e);
+    alert("Googleログインに失敗しました: " + e.message);
+  } finally {
+    loading.value = false;
+  }
+};
+</script>
+
+<template>
+  <div
+    class="min-h-[100dvh] w-full bg-slate-900 flex items-center justify-center p-6 relative overflow-hidden"
+  >
+    <div
+      class="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[100px] pointer-events-none"
+    ></div>
+    <div
+      class="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none"
+    ></div>
+
+    <div
+      class="w-full max-w-sm bg-white/5 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/10 flex flex-col items-center relative z-10"
+    >
+      <div class="mb-10 text-center">
+        <div class="text-6xl mb-4">🧠</div>
+        <h1 class="text-3xl font-black text-white mb-2 tracking-tight">
+          My Brain
+        </h1>
+        <p class="text-slate-400 text-xs font-bold tracking-widest uppercase">
+          ズボラ専用 AI秘書
+        </p>
+      </div>
+
+      <div
+        v-if="isInAppBrowser"
+        class="w-full bg-amber-600 rounded-xl p-6 text-white text-center shadow-lg animate-pulse mb-6 border-2 border-white"
+      >
+        <div class="text-4xl mb-2">⚠️</div>
+        <h2 class="font-bold text-lg mb-2">ブラウザで開いてください</h2>
+        <p class="text-sm leading-relaxed opacity-90 font-bold">
+          TikTokやインスタのままでは<br />
+          Googleログインができません💦
+        </p>
+        <div
+          class="mt-4 p-3 bg-black/30 rounded-lg text-xs font-bold text-left"
+        >
+          ① 右上の「・・・」や「矢印」を押す<br />
+          ②「ブラウザで開く」を選択<br />
+          ③ SafariやChromeで開けばOK！
+        </div>
+      </div>
+      <div v-else class="w-full space-y-6">
+        <p class="text-slate-300 text-sm text-center leading-relaxed mb-4">
+          LINEで全てを完結させるために、<br />
+          <span class="text-indigo-400 font-bold">Google連携</span>
+          が必要です。<br />
+          <span class="text-xs text-slate-500"
+            >※一度連携すれば、あとはログイン不要です。</span
+          >
+        </p>
+
+        <button
+          @click="handleGoogleLogin"
+          :disabled="loading"
+          class="w-full bg-white text-slate-900 font-bold py-4 rounded-xl shadow-lg hover:bg-slate-50 transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 group"
+        >
+          <svg
+            class="w-5 h-5 group-hover:scale-110 transition-transform"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              fill="#4285F4"
+            />
+            <path
+              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              fill="#34A853"
+            />
+            <path
+              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+              fill="#FBBC05"
+            />
+            <path
+              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+              fill="#EA4335"
+            />
+          </svg>
+          Googleで連携する
+        </button>
+
+        <div class="mt-6 flex justify-center gap-4 text-[10px] text-slate-500">
+          <router-link
+            to="/privacy"
+            class="hover:text-slate-300 transition underline"
+            >プライバシーポリシー</router-link
+          >
+          <span class="text-slate-700">|</span>
+          <router-link
+            to="/legal"
+            class="hover:text-slate-300 transition underline"
+            >利用規約</router-link
+          >
         </div>
       </div>
     </div>
@@ -7007,6 +7057,13 @@ const speakText = (text: string) => {
 
 // --- Main Composable ---
 export function useMyBrain() {
+  const isAdmin = computed(() => {
+    return (
+      currentUser.value &&
+      currentUser.value.email &&
+      ADMIN_EMAILS.includes(currentUser.value.email)
+    );
+  });
   const checkAndIncrementUsage = async (): Promise<boolean> => {
     if (!currentUser.value) return false;
     if (currentUser.value.isPro) return true;
@@ -7729,6 +7786,7 @@ export function useMyBrain() {
   };
 
   return {
+    isAdmin,
     currentUser,
     memories,
     filteredMemories,
@@ -7812,7 +7870,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendWeeklyRoutineSuggestion = exports.redeemInviteCode = exports.checkReminders = exports.sendMorningBriefing = exports.checkUpcomingMeetings = exports.lineWebhook = exports.refreshCalendarToken = exports.linkLineAccount = void 0;
+exports.adminDashboard = exports.sendWeeklyRoutineSuggestion = exports.redeemInviteCode = exports.checkReminders = exports.sendMorningBriefing = exports.checkUpcomingMeetings = exports.lineWebhook = exports.refreshCalendarToken = exports.linkLineAccount = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const v2_1 = require("firebase-functions/v2");
@@ -7851,6 +7909,7 @@ const COLORS = {
     textWhite: "#f8fafc",
     textLight: "#94a3b8",
 };
+const ADMIN_USER_ID = "U830dd4267a9be4b0ee4786a5662e212f"; // ←ここに管理者のLINE User IDを設定
 /**
  * WeatherAPI Emoji Helper
  */
@@ -8741,38 +8800,77 @@ async function getValidAccessToken(uid) {
     }
     return null;
 }
-/// --- API calls ---
+// 全カレンダー取得 & 今日限定フィルター
 async function getCalendarEvents(uid) {
     try {
         const token = await getValidAccessToken(uid);
         if (!token)
             return "（未連携）";
+        // 1. 今日の範囲 (JST) を計算
         const now = new Date();
-        // JST時間に変換して日付を合わせる（UTC+9）
-        const jstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-        jstDate.setUTCHours(0, 0, 0, 0); // 時間を00:00:00にリセット
-        // UTCに戻してAPI用の時刻形式にする
-        const timeMin = new Date(jstDate.getTime() - 9 * 60 * 60 * 1000).toISOString();
-        try {
-            const res = await axios_1.default.get("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
-                headers: { Authorization: `Bearer ${token}` },
-                params: {
-                    timeMin: timeMin,
-                    maxResults: 20,
-                    singleEvents: true,
-                    orderBy: "startTime",
-                },
-            });
-            return (res.data.items || [])
-                .map((e) => `${e.start.dateTime || e.start.date}: ${e.summary}`)
-                .join("\n");
+        // UTC時間をJSTに変換した「つもり」のDateオブジェクトを作成
+        const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        // 今日の 00:00:00 (JST)
+        const jstStart = new Date(jstNow);
+        jstStart.setUTCHours(0, 0, 0, 0);
+        // 今日の 23:59:59 (JST)
+        const jstEnd = new Date(jstNow);
+        jstEnd.setUTCHours(23, 59, 59, 999);
+        // APIに渡すためのISO文字列 (UTCに戻す計算)
+        const timeMin = new Date(jstStart.getTime() - 9 * 60 * 60 * 1000).toISOString();
+        const timeMax = new Date(jstEnd.getTime() - 9 * 60 * 60 * 1000).toISOString();
+        // 2. カレンダーリストを取得 (Primary以外も全部取る)
+        const calendarListRes = await axios_1.default.get("https://www.googleapis.com/calendar/v3/users/me/calendarList", { headers: { Authorization: `Bearer ${token}` } });
+        const calendars = calendarListRes.data.items || [];
+        // 3. 各カレンダーから「今日の予定」を取得して結合
+        const allEvents = [];
+        // 並列処理で全カレンダーをチェック
+        await Promise.all(calendars.map(async (cal) => {
+            try {
+                const res = await axios_1.default.get(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    params: {
+                        timeMin: timeMin,
+                        timeMax: timeMax, // 今日いっぱいまで
+                        singleEvents: true,
+                        orderBy: "startTime",
+                        maxResults: 20, // 1カレンダーあたり20件あれば十分
+                    },
+                });
+                if (res.data.items) {
+                    allEvents.push(...res.data.items);
+                }
+            }
+            catch (e) {
+                // 読み取れないカレンダーがあっても無視して次へ
+                console.warn(`Failed to fetch calendar: ${cal.id}`);
+            }
+        }));
+        if (allEvents.length === 0) {
+            return "（予定なし）";
         }
-        catch (_a) {
-            return "（取得失敗）";
-        }
+        // 4. 開始時間順に並べ替え & 整形
+        allEvents.sort((a, b) => {
+            const timeA = new Date(a.start.dateTime || a.start.date).getTime();
+            const timeB = new Date(b.start.dateTime || b.start.date).getTime();
+            return timeA - timeB;
+        });
+        return allEvents
+            .map((e) => {
+            const start = e.start.dateTime
+                ? new Date(e.start.dateTime).toLocaleTimeString("ja-JP", {
+                    timeZone: "Asia/Tokyo",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                })
+                : "終日";
+            return `・${start}: ${e.summary}`;
+        })
+            .join("\n");
     }
-    catch (_b) {
-        return "（エラー）";
+    catch (e) {
+        console.error("Calendar Fetch Error:", e);
+        return "（エラー: 予定が取得できませんでした）";
     }
 }
 async function addCalendarEvent(uid, eventData) {
@@ -9128,6 +9226,68 @@ exports.lineWebhook = (0, https_1.onRequest)({
                 console.error("Loading animation error:", loadingError);
             }
             const message = event.message.text.trim();
+            if (message === "admin") {
+                // 管理者チェック
+                if (lineUserId === ADMIN_USER_ID) {
+                    try {
+                        // 1. ユーザー総数
+                        const totalSnap = await db.collection("users").count().get();
+                        const totalUsers = totalSnap.data().count;
+                        // 2. プロ会員数 & 収益計算 (PROプラン 980円で計算)
+                        const proSnap = await db
+                            .collection("users")
+                            .where("isPro", "==", true)
+                            .count()
+                            .get();
+                        const proUsers = proSnap.data().count;
+                        const monthlyRevenue = proUsers * 980;
+                        const annualRevenue = monthlyRevenue * 12;
+                        // 3. 本日のAI利用回数
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const logsSnap = await db
+                            .collection("chat_logs")
+                            .where("createdAt", ">=", admin.firestore.Timestamp.fromDate(today))
+                            .count()
+                            .get();
+                        const todayCalls = logsSnap.data().count;
+                        const dashboardUrl = "https://asia-northeast1-my-brain-145b1.cloudfunctions.net/adminDashboard";
+                        const report = `
+📊 My Brain 経営レポート
+━━━━━━━━━━
+👥 ユーザー数: ${totalUsers}人
+👑 Pro会員: ${proUsers}人
+━━━━━━━━━━
+💰 月次収益: ¥${monthlyRevenue.toLocaleString()}
+💰 年次見込: ¥${annualRevenue.toLocaleString()}
+━━━━━━━━━━
+🤖 本日AI利用: ${todayCalls}回
+
+👇 詳細ダッシュボード(グラフ)
+${dashboardUrl}
+                `.trim();
+                        await client.replyMessage(event.replyToken, {
+                            type: "text",
+                            text: report,
+                        });
+                        return; // ここで終了（AI処理に行かせない）
+                    }
+                    catch (e) {
+                        console.error("Admin Report Error:", e);
+                        await client.replyMessage(event.replyToken, {
+                            type: "text",
+                            text: "⚠️ エラー: " + e.message,
+                        });
+                        return;
+                    }
+                }
+                else {
+                    // 管理者じゃない人が「admin」と打った場合
+                    console.log(`⚠️ Unauthorized admin access attempt by: ${lineUserId}`);
+                    // 何も返さないか、AIに会話させるなら return しない
+                    // ここでは無視してAIに「adminって何？」と答えさせるために処理を続行します
+                }
+            }
             const userRef = db.collection("users").doc(uid);
             const userData = usersSnap.docs[0].data();
             const defaultLocation = userData.defaultLocation || "Tokyo";
@@ -9162,6 +9322,7 @@ exports.lineWebhook = (0, https_1.onRequest)({
             });
             // 修正後（routerPrompt全体を差し替え、または該当行を追加）
             // ★修正: リンク参照とリマインダー削除の精度を向上させるプロンプトに変更
+            // 修正後（routerPrompt全体を差し替え）
             const routerPrompt = `あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr} (Asia/Tokyo)
           【カレンダー】(最新)
           ${cal}
@@ -9178,17 +9339,18 @@ exports.lineWebhook = (0, https_1.onRequest)({
           2. 「リマインド削除」「通知消して」は REMINDER_DELETE。「会議のリマインド消して」なら "会議" を targetKeyword に設定。
           3. 「メモ削除」「忘れて」は MEMORY_DELETE。削除したい内容を targetKeyword に設定。
           4. 日付指示（明日など）は現在日時基準で変換。
+          5. 「予定削除」「キャンセル」「リスケしたい」は CALENDAR_DELETE。削除したい予定のタイトル（またはキーワード）を title に設定。
 
           出力JSON: {
           "action": "REMINDER_ADD"|"REMINDER_DELETE"|"CALENDAR_ADD"|"CALENDAR_DELETE"|"TASK_ADD"|"TASK_DELETE"|"MEMORY_ADD"|"MEMORY_DELETE"|"MEMORY_EDIT"|"MEMORY_APPEND"|"CHAT",
           "data": {
-            "title": "件名",
-            "start": "YYYY-MM-DDTHH:mm:ss+09:00",
-            "end": "YYYY-MM-DDTHH:mm:ss+09:00",
-            "location": "場所",
-            "content": "内容",
-            "targetKeyword": "削除や検索対象のキーワード(必須)",
-            "targetId": "対象ID"
+          "title": "件名",
+          "start": "YYYY-MM-DDTHH:mm:ss+09:00",
+          "end": "YYYY-MM-DDTHH:mm:ss+09:00",
+          "location": "場所",
+          "content": "内容",
+          "targetKeyword": "削除や検索対象のキーワード(必須)",
+          "targetId": "対象ID"
           },
           "reply": "ユーザーへの返信テキスト(URLはここに含める)"
           }`;
@@ -9744,6 +9906,157 @@ exports.sendWeeklyRoutineSuggestion = (0, scheduler_1.onSchedule)({
         }
     }
 });
+exports.adminDashboard = (0, https_1.onRequest)(async (req, res) => {
+    // 1. Basic認証 (ユーザー名: admin / パスワード: password1234)
+    // ※必要に応じて変更してください
+    const auth = req.headers.authorization;
+    if (!auth || auth.indexOf("Basic ") === -1) {
+        res.setHeader("WWW-Authenticate", 'Basic realm="Admin Area"');
+        res.status(401).send("Auth Required");
+        return;
+    }
+    const [user, pass] = Buffer.from(auth.split(" ")[1], "base64")
+        .toString()
+        .split(":");
+    if (user !== "gongedonghuam@gmail.com" || pass !== "T0330c0209") {
+        res.status(401).send("Invalid Credentials");
+        return;
+    }
+    // 2. データ取得
+    const totalSnap = await db.collection("users").count().get();
+    const proSnap = await db
+        .collection("users")
+        .where("isPro", "==", true)
+        .count()
+        .get();
+    // 収益計算 (PROプラン 980円)
+    const monthly = proSnap.data().count * 980;
+    const annual = monthly * 12;
+    // 今日のAI利用回数
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const logsSnap = await db
+        .collection("chat_logs")
+        .where("createdAt", ">=", admin.firestore.Timestamp.fromDate(today))
+        .count()
+        .get();
+    // 直近の登録ユーザー5件
+    const recentUsersSnap = await db
+        .collection("users")
+        .orderBy("createdAt", "desc")
+        .limit(5)
+        .get();
+    let userListHtml = "";
+    recentUsersSnap.forEach((doc) => {
+        const d = doc.data();
+        const dateStr = d.createdAt
+            ? new Date(d.createdAt.toDate()).toLocaleDateString("ja-JP")
+            : "-";
+        userListHtml += `
+      <div class="flex justify-between items-center p-3 border-b border-gray-700">
+        <div>
+          <div class="font-bold text-sm text-gray-200">${d.lineDisplayName || "ゲスト"}</div>
+          <div class="text-xs text-gray-500">${dateStr}</div>
+        </div>
+        <div class="text-xs font-bold ${d.isPro ? "text-green-400" : "text-gray-500"}">
+          ${d.isPro ? "PRO" : "FREE"}
+        </div>
+      </div>`;
+    });
+    // 3. HTML生成 (スマホ対応レスポンシブデザイン)
+    const html = `
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+  <title>My Brain Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>body { background-color: #0f172a; color: #f8fafc; font-family: sans-serif; }</style>
+</head>
+<body class="p-4 pb-20"> 
+  <div class="max-w-md mx-auto">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-xl font-bold text-indigo-400 flex items-center gap-2">
+        <span>🧠</span> 経営ダッシュボード
+      </h1>
+      <span class="text-xs text-gray-500 bg-slate-800 px-2 py-1 rounded">Live</span>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3 mb-4">
+      <div class="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700">
+        <div class="text-gray-400 text-xs mb-1">月次収益 (MRR)</div>
+        <div class="text-xl font-bold text-white">¥${monthly.toLocaleString()}</div>
+      </div>
+      <div class="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700">
+        <div class="text-gray-400 text-xs mb-1">年次見込 (ARR)</div>
+        <div class="text-xl font-bold text-yellow-400">¥${annual.toLocaleString()}</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 mb-6">
+      <div class="bg-slate-800 p-3 rounded-lg text-center border border-slate-700">
+        <div class="text-gray-500 text-[10px]">総ユーザー</div>
+        <div class="text-lg font-bold">${totalSnap.data().count}</div>
+      </div>
+      <div class="bg-slate-800 p-3 rounded-lg text-center border border-slate-700">
+        <div class="text-gray-500 text-[10px]">Pro会員</div>
+        <div class="text-lg font-bold text-green-400">${proSnap.data().count}</div>
+      </div>
+      <div class="bg-slate-800 p-3 rounded-lg text-center border border-slate-700">
+        <div class="text-gray-500 text-[10px]">本日AI</div>
+        <div class="text-lg font-bold text-blue-400">${logsSnap.data().count}</div>
+      </div>
+    </div>
+
+    <div class="bg-slate-800 p-4 rounded-xl shadow mb-6 border border-slate-700">
+      <h2 class="text-sm font-bold mb-4 text-gray-300">利用推移 (直近7日)</h2>
+      <canvas id="myChart" height="200"></canvas>
+    </div>
+
+    <div class="bg-slate-800 rounded-xl shadow overflow-hidden border border-slate-700">
+      <div class="bg-slate-900 p-3 text-xs text-gray-400 font-bold uppercase tracking-wider border-b border-slate-700">
+        New Users
+      </div>
+      ${userListHtml}
+    </div>
+
+    <div class="mt-8 text-center text-xs text-gray-600">
+      My Brain Internal System
+    </div>
+  </div>
+
+  <script>
+    // ダミーデータではなく、本来はここもDBから取得して埋め込む
+    // 今回は「本日のAI利用数」だけリアルタイム反映しています
+    const ctx = document.getElementById('myChart');
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['6日前', '5日前', '4日前', '3日前', '一昨日', '昨日', '今日'],
+        datasets: [{
+          label: 'AI Calls',
+          data: [12, 19, 15, 20, 22, 18, ${logsSnap.data().count}],
+          backgroundColor: '#6366f1',
+          borderRadius: 4
+        }]
+      },
+      options: { 
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { 
+          x: { grid: { display: false }, ticks: { color: '#64748b', font: {size: 10} } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } }
+        } 
+      }
+    });
+  </script>
+</body>
+</html>
+  `;
+    res.send(html);
+});
 </file>
 
 <file path="functions/index.ts">
@@ -9796,6 +10109,8 @@ const COLORS = {
   textWhite: "#f8fafc",
   textLight: "#94a3b8",
 };
+
+const ADMIN_USER_ID = "U830dd4267a9be4b0ee4786a5662e212f"; // ←ここに管理者のLINE User IDを設定
 
 /**
  * WeatherAPI Emoji Helper
@@ -10730,42 +11045,96 @@ async function getValidAccessToken(uid: string): Promise<string | null> {
   return null;
 }
 
-/// --- API calls ---
+// 全カレンダー取得 & 今日限定フィルター
 async function getCalendarEvents(uid: string): Promise<string> {
   try {
     const token = await getValidAccessToken(uid);
     if (!token) return "（未連携）";
 
+    // 1. 今日の範囲 (JST) を計算
     const now = new Date();
-    // JST時間に変換して日付を合わせる（UTC+9）
-    const jstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-    jstDate.setUTCHours(0, 0, 0, 0); // 時間を00:00:00にリセット
-    // UTCに戻してAPI用の時刻形式にする
+    // UTC時間をJSTに変換した「つもり」のDateオブジェクトを作成
+    const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+
+    // 今日の 00:00:00 (JST)
+    const jstStart = new Date(jstNow);
+    jstStart.setUTCHours(0, 0, 0, 0);
+
+    // 今日の 23:59:59 (JST)
+    const jstEnd = new Date(jstNow);
+    jstEnd.setUTCHours(23, 59, 59, 999);
+
+    // APIに渡すためのISO文字列 (UTCに戻す計算)
     const timeMin = new Date(
-      jstDate.getTime() - 9 * 60 * 60 * 1000,
+      jstStart.getTime() - 9 * 60 * 60 * 1000,
+    ).toISOString();
+    const timeMax = new Date(
+      jstEnd.getTime() - 9 * 60 * 60 * 1000,
     ).toISOString();
 
-    try {
-      const res = await axios.get(
-        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          params: {
-            timeMin: timeMin,
-            maxResults: 20,
-            singleEvents: true,
-            orderBy: "startTime",
-          },
-        },
-      );
-      return (res.data.items || [])
-        .map((e: any) => `${e.start.dateTime || e.start.date}: ${e.summary}`)
-        .join("\n");
-    } catch {
-      return "（取得失敗）";
+    // 2. カレンダーリストを取得 (Primary以外も全部取る)
+    const calendarListRes = await axios.get(
+      "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const calendars = calendarListRes.data.items || [];
+
+    // 3. 各カレンダーから「今日の予定」を取得して結合
+    const allEvents: any[] = [];
+
+    // 並列処理で全カレンダーをチェック
+    await Promise.all(
+      calendars.map(async (cal: any) => {
+        try {
+          const res = await axios.get(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+              params: {
+                timeMin: timeMin,
+                timeMax: timeMax, // 今日いっぱいまで
+                singleEvents: true,
+                orderBy: "startTime",
+                maxResults: 20, // 1カレンダーあたり20件あれば十分
+              },
+            },
+          );
+          if (res.data.items) {
+            allEvents.push(...res.data.items);
+          }
+        } catch (e) {
+          // 読み取れないカレンダーがあっても無視して次へ
+          console.warn(`Failed to fetch calendar: ${cal.id}`);
+        }
+      }),
+    );
+
+    if (allEvents.length === 0) {
+      return "（予定なし）";
     }
-  } catch {
-    return "（エラー）";
+
+    // 4. 開始時間順に並べ替え & 整形
+    allEvents.sort((a, b) => {
+      const timeA = new Date(a.start.dateTime || a.start.date).getTime();
+      const timeB = new Date(b.start.dateTime || b.start.date).getTime();
+      return timeA - timeB;
+    });
+
+    return allEvents
+      .map((e: any) => {
+        const start = e.start.dateTime
+          ? new Date(e.start.dateTime).toLocaleTimeString("ja-JP", {
+              timeZone: "Asia/Tokyo",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "終日";
+        return `・${start}: ${e.summary}`;
+      })
+      .join("\n");
+  } catch (e) {
+    console.error("Calendar Fetch Error:", e);
+    return "（エラー: 予定が取得できませんでした）";
   }
 }
 interface CalendarAddResult {
@@ -11050,6 +11419,7 @@ export const lineWebhook = onRequest(
     ],
     cors: true,
   },
+
   async (req, res) => {
     const token = lineBotToken.value();
     const apiKey = geminiApiKey.value();
@@ -11156,6 +11526,78 @@ export const lineWebhook = onRequest(
           }
 
           const message = event.message.text.trim();
+          if (message === "admin") {
+            // 管理者チェック
+            if (lineUserId === ADMIN_USER_ID) {
+              try {
+                // 1. ユーザー総数
+                const totalSnap = await db.collection("users").count().get();
+                const totalUsers = totalSnap.data().count;
+
+                // 2. プロ会員数 & 収益計算 (PROプラン 980円で計算)
+                const proSnap = await db
+                  .collection("users")
+                  .where("isPro", "==", true)
+                  .count()
+                  .get();
+                const proUsers = proSnap.data().count;
+                const monthlyRevenue = proUsers * 980;
+                const annualRevenue = monthlyRevenue * 12;
+
+                // 3. 本日のAI利用回数
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const logsSnap = await db
+                  .collection("chat_logs")
+                  .where(
+                    "createdAt",
+                    ">=",
+                    admin.firestore.Timestamp.fromDate(today),
+                  )
+                  .count()
+                  .get();
+                const todayCalls = logsSnap.data().count;
+
+                const dashboardUrl =
+                  "https://asia-northeast1-my-brain-145b1.cloudfunctions.net/adminDashboard";
+
+                const report = `
+📊 My Brain 経営レポート
+━━━━━━━━━━
+👥 ユーザー数: ${totalUsers}人
+👑 Pro会員: ${proUsers}人
+━━━━━━━━━━
+💰 月次収益: ¥${monthlyRevenue.toLocaleString()}
+💰 年次見込: ¥${annualRevenue.toLocaleString()}
+━━━━━━━━━━
+🤖 本日AI利用: ${todayCalls}回
+
+👇 詳細ダッシュボード(グラフ)
+${dashboardUrl}
+                `.trim();
+
+                await client.replyMessage(event.replyToken, {
+                  type: "text",
+                  text: report,
+                });
+                return; // ここで終了（AI処理に行かせない）
+              } catch (e: any) {
+                console.error("Admin Report Error:", e);
+                await client.replyMessage(event.replyToken, {
+                  type: "text",
+                  text: "⚠️ エラー: " + e.message,
+                });
+                return;
+              }
+            } else {
+              // 管理者じゃない人が「admin」と打った場合
+              console.log(
+                `⚠️ Unauthorized admin access attempt by: ${lineUserId}`,
+              );
+              // 何も返さないか、AIに会話させるなら return しない
+              // ここでは無視してAIに「adminって何？」と答えさせるために処理を続行します
+            }
+          }
           const userRef = db.collection("users").doc(uid);
           const userData = usersSnap.docs[0].data();
           const defaultLocation = userData.defaultLocation || "Tokyo";
@@ -11191,6 +11633,7 @@ export const lineWebhook = onRequest(
           });
           // 修正後（routerPrompt全体を差し替え、または該当行を追加）
           // ★修正: リンク参照とリマインダー削除の精度を向上させるプロンプトに変更
+          // 修正後（routerPrompt全体を差し替え）
           const routerPrompt = `あなたはユーザーの「専属パートナーAI」です。現在日時: ${nowStr} (Asia/Tokyo)
           【カレンダー】(最新)
           ${cal}
@@ -11207,17 +11650,18 @@ export const lineWebhook = onRequest(
           2. 「リマインド削除」「通知消して」は REMINDER_DELETE。「会議のリマインド消して」なら "会議" を targetKeyword に設定。
           3. 「メモ削除」「忘れて」は MEMORY_DELETE。削除したい内容を targetKeyword に設定。
           4. 日付指示（明日など）は現在日時基準で変換。
+          5. 「予定削除」「キャンセル」「リスケしたい」は CALENDAR_DELETE。削除したい予定のタイトル（またはキーワード）を title に設定。
 
           出力JSON: {
           "action": "REMINDER_ADD"|"REMINDER_DELETE"|"CALENDAR_ADD"|"CALENDAR_DELETE"|"TASK_ADD"|"TASK_DELETE"|"MEMORY_ADD"|"MEMORY_DELETE"|"MEMORY_EDIT"|"MEMORY_APPEND"|"CHAT",
           "data": {
-            "title": "件名",
-            "start": "YYYY-MM-DDTHH:mm:ss+09:00",
-            "end": "YYYY-MM-DDTHH:mm:ss+09:00",
-            "location": "場所",
-            "content": "内容",
-            "targetKeyword": "削除や検索対象のキーワード(必須)",
-            "targetId": "対象ID"
+          "title": "件名",
+          "start": "YYYY-MM-DDTHH:mm:ss+09:00",
+          "end": "YYYY-MM-DDTHH:mm:ss+09:00",
+          "location": "場所",
+          "content": "内容",
+          "targetKeyword": "削除や検索対象のキーワード(必須)",
+          "targetId": "対象ID"
           },
           "reply": "ユーザーへの返信テキスト(URLはここに含める)"
           }`;
@@ -11607,55 +12051,6 @@ export const checkUpcomingMeetings = onSchedule(
   },
 );
 
-export const sendMorningBriefing = onSchedule(
-  {
-    schedule: "0 7 * * *",
-    timeZone: "Asia/Tokyo",
-    secrets: [lineBotToken, geminiApiKey, googleClientId, googleClientSecret],
-  },
-  async () => {
-    const users = await db
-      .collection("users")
-      .where("isLineLinked", "==", true)
-      .get();
-    const apiKey = geminiApiKey.value();
-    const client = new line.Client({
-      channelAccessToken: lineBotToken.value(),
-    });
-    const todayStr = new Date().toLocaleDateString("ja-JP", {
-      timeZone: "Asia/Tokyo",
-    });
-
-    for (const doc of users.docs) {
-      const uid = doc.id;
-      // ★修正: AIに渡す情報を「カレンダー」だけに限定
-      const cal = await getCalendarEvents(uid);
-
-      // ★修正: 極限まで簡潔なプロンプトに変更
-      const prompt = `
-      あなたは秘書です。今日は ${todayStr} です。
-      以下の【今日の予定】のみを確認し、ユーザーに簡潔に伝えてください。
-
-      【今日の予定】
-      ${cal}
-
-      【制約】
-      1. 挨拶、励まし、メモやタスクへの言及は一切禁止です。
-      2. カレンダーに記載されている「今日の予定」の事実のみを箇条書きで出力してください。
-      3. 予定がない場合は「本日の予定はありません。」とだけ返してください。
-      `;
-
-      const text = await callGeminiText(apiKey!, prompt);
-
-      await client.pushMessage(doc.data().lineUserId, {
-        type: "flex",
-        altText: "今日の予定",
-        contents: createChatFlex(`📅 ${todayStr} の予定\n\n${text}`),
-      });
-    }
-  },
-);
-
 // ★1分ごとにリマインダーをチェックする関数（修正版）
 export const checkReminders = onSchedule(
   {
@@ -11765,141 +12160,229 @@ export const redeemInviteCode = onCall({ cors: true }, async (request) => {
     message: "招待コードを適用しました！1日の利用枠が永久に増えました。",
   };
 });
-// ▼▼▼ 追加: 週間レポート＆提案機能（日曜20時に配信） ▼▼▼
-export const sendWeeklyRoutineSuggestion = onSchedule(
-  {
-    schedule: "0 20 * * 0", // 毎週日曜 20:00 (JST)
-    timeZone: "Asia/Tokyo",
-    secrets: [lineBotToken, geminiApiKey],
-  },
-  async () => {
-    const users = await db
-      .collection("users")
-      .where("isLineLinked", "==", true)
-      .get();
-    const apiKey = geminiApiKey.value();
-    const client = new line.Client({
-      channelAccessToken: lineBotToken.value(),
-    });
 
-    for (const doc of users.docs) {
-      const uid = doc.id;
+export const adminDashboard = onRequest(async (req, res) => {
+  // 1. Basic認証 (ユーザー名: admin / パスワード: password1234)
+  // ※必要に応じて変更してください
+  const auth = req.headers.authorization;
+  if (!auth || auth.indexOf("Basic ") === -1) {
+    res.setHeader("WWW-Authenticate", 'Basic realm="Admin Area"');
+    res.status(401).send("Auth Required");
+    return;
+  }
+  const [user, pass] = Buffer.from(auth.split(" ")[1], "base64")
+    .toString()
+    .split(":");
+  if (user !== "gongedonghuam@gmail.com" || pass !== "T0330c0209") {
+    res.status(401).send("Invalid Credentials");
+    return;
+  }
 
-      // ★強化ポイント: 「未完了タスク」も分析対象に追加
-      const [history, memories, todos] = await Promise.all([
-        getChatHistory(uid),
-        getRecentMemories(uid, ""),
-        getOpenTodos(uid), // ← これを追加！
-      ]);
+  // 2. データ取得
+  const totalSnap = await db.collection("users").count().get();
+  const proSnap = await db
+    .collection("users")
+    .where("isPro", "==", true)
+    .count()
+    .get();
 
-      // ★強化ポイント: AIへの指示を「コンサルタント」レベルに引き上げ
-      const prompt = `
-      あなたは優秀な専属コーチです。
-      ユーザーの過去1週間のデータ（会話・メモ・未完了タスク）を分析し、
-      来週の生産性を爆上げするための「具体的なアクション」を提案してください。
+  // 収益計算 (PROプラン 980円)
+  const monthly = proSnap.data().count * 980;
+  const annual = monthly * 12;
 
-      【分析データ】
-      🛑 未完了タスク:
-      ${todos}
+  // 今日のAI利用回数
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const logsSnap = await db
+    .collection("chat_logs")
+    .where("createdAt", ">=", admin.firestore.Timestamp.fromDate(today))
+    .count()
+    .get();
 
-      📝 最近のメモ:
-      ${memories}
+  // 直近の登録ユーザー5件
+  const recentUsersSnap = await db
+    .collection("users")
+    .orderBy("createdAt", "desc")
+    .limit(5)
+    .get();
 
-      💬 最近の会話:
-      ${history}
+  let userListHtml = "";
+  recentUsersSnap.forEach((doc) => {
+    const d = doc.data();
+    const dateStr = d.createdAt
+      ? new Date(d.createdAt.toDate()).toLocaleDateString("ja-JP")
+      : "-";
+    userListHtml += `
+      <div class="flex justify-between items-center p-3 border-b border-gray-700">
+        <div>
+          <div class="font-bold text-sm text-gray-200">${d.lineDisplayName || "ゲスト"}</div>
+          <div class="text-xs text-gray-500">${dateStr}</div>
+        </div>
+        <div class="text-xs font-bold ${d.isPro ? "text-green-400" : "text-gray-500"}">
+          ${d.isPro ? "PRO" : "FREE"}
+        </div>
+      </div>`;
+  });
 
-      【命令】
-      以下の2つのセクションで構成された、短く鋭いアドバイスを出力してください。
-      挨拶は不要です。各セクションは絵文字付きの見出しにしてください。
+  // 3. HTML生成 (スマホ対応レスポンシブデザイン)
+  const html = `
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+  <title>My Brain Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>body { background-color: #0f172a; color: #f8fafc; font-family: sans-serif; }</style>
+</head>
+<body class="p-4 pb-20"> 
+  <div class="max-w-md mx-auto">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-xl font-bold text-indigo-400 flex items-center gap-2">
+        <span>🧠</span> 経営ダッシュボード
+      </h1>
+      <span class="text-xs text-gray-500 bg-slate-800 px-2 py-1 rounded">Live</span>
+    </div>
 
-      1. 【🔥 未消化タスクの追撃】
-         未完了タスクの中で、特に重要そうなものや、長く放置されているものを選び、「いつやるか」を問いかけてください。もしタスクがなければこの項目は省略可。
+    <div class="grid grid-cols-2 gap-3 mb-4">
+      <div class="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700">
+        <div class="text-gray-400 text-xs mb-1">月次収益 (MRR)</div>
+        <div class="text-xl font-bold text-white">¥${monthly.toLocaleString()}</div>
+      </div>
+      <div class="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700">
+        <div class="text-gray-400 text-xs mb-1">年次見込 (ARR)</div>
+        <div class="text-xl font-bold text-yellow-400">¥${annual.toLocaleString()}</div>
+      </div>
+    </div>
 
-      2. 【✨ 習慣化の提案】
-         会話やメモから「何度も言及していること」や「気にしているテーマ」を見つけ、「それをルーティン化しませんか？」と提案してください。
-         (例: 「最近『ジム』という単語が多いですね。火曜日をジムの日に設定しますか？」)
+    <div class="grid grid-cols-3 gap-3 mb-6">
+      <div class="bg-slate-800 p-3 rounded-lg text-center border border-slate-700">
+        <div class="text-gray-500 text-[10px]">総ユーザー</div>
+        <div class="text-lg font-bold">${totalSnap.data().count}</div>
+      </div>
+      <div class="bg-slate-800 p-3 rounded-lg text-center border border-slate-700">
+        <div class="text-gray-500 text-[10px]">Pro会員</div>
+        <div class="text-lg font-bold text-green-400">${proSnap.data().count}</div>
+      </div>
+      <div class="bg-slate-800 p-3 rounded-lg text-center border border-slate-700">
+        <div class="text-gray-500 text-[10px]">本日AI</div>
+        <div class="text-lg font-bold text-blue-400">${logsSnap.data().count}</div>
+      </div>
+    </div>
 
-      文字数は全体で200文字以内。箇条書きで簡潔に。
-      `;
+    <div class="bg-slate-800 p-4 rounded-xl shadow mb-6 border border-slate-700">
+      <h2 class="text-sm font-bold mb-4 text-gray-300">利用推移 (直近7日)</h2>
+      <canvas id="myChart" height="200"></canvas>
+    </div>
 
-      const suggestion = await callGeminiText(apiKey!, prompt);
+    <div class="bg-slate-800 rounded-xl shadow overflow-hidden border border-slate-700">
+      <div class="bg-slate-900 p-3 text-xs text-gray-400 font-bold uppercase tracking-wider border-b border-slate-700">
+        New Users
+      </div>
+      ${userListHtml}
+    </div>
 
-      // 提案内容が空でなければ送信
-      if (suggestion && suggestion.length > 10) {
-        await client.pushMessage(doc.data().lineUserId, {
-          type: "flex",
-          altText: "週間振り返りレポート",
-          contents: createRoutineSuggestionFlex(suggestion),
-        });
+    <div class="mt-8 text-center text-xs text-gray-600">
+      My Brain Internal System
+    </div>
+  </div>
+
+  <script>
+    // ダミーデータではなく、本来はここもDBから取得して埋め込む
+    // 今回は「本日のAI利用数」だけリアルタイム反映しています
+    const ctx = document.getElementById('myChart');
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['6日前', '5日前', '4日前', '3日前', '一昨日', '昨日', '今日'],
+        datasets: [{
+          label: 'AI Calls',
+          data: [12, 19, 15, 20, 22, 18, ${logsSnap.data().count}],
+          backgroundColor: '#6366f1',
+          borderRadius: 4
+        }]
+      },
+      options: { 
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { 
+          x: { grid: { display: false }, ticks: { color: '#64748b', font: {size: 10} } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } }
+        } 
       }
-    }
-  },
-);
+    });
+  </script>
+</body>
+</html>
+  `;
+  res.send(html);
+});
 </file>
 
 <file path=".firebase/hosting.ZGlzdA.cache">
-registerSW.js,1770997275686,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-sw.js,1770997276725,3e3c66fb4a6bdee897db6d4da994adc076f87db17a404db7c13b32973e746001
-manifest.webmanifest,1770997275686,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-index.html,1770997275686,eb7b1f947498a7a54e42a4ccb9275efe77511bd64f8b13ba8c7cf06e17323172
-workbox-8c29f6e4.js,1770997276726,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-lp.html,1770997274915,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-firebase-messaging-sw.js,1770997274912,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-assets/stateDiagram-v2-4FDKWEC3-jIIC62Ka.js,1770997275685,b7bfceff88c90aa70bf702759cd08ca3e57b080e3525bd602968bdc0a23be2bb
-assets/stateDiagram-FKZM4ZOC-Dwbwn0QN.js,1770997275685,b5d7058b3b7b58a2ec1617cdec93528ff600d48cab3277beb4c2110131b09dba
-assets/xychartDiagram-PRI3JC2R-DoITNqRG.js,1770997275685,4c339d1e141de8c95739a38b5798e428adc4585280a5c31053cd233215b72309
-assets/sankeyDiagram-TZEHDZUN-LYmxn7Gk.js,1770997275686,2d8c604461b902ac46bb94cc4d414c855c8b8a1994a7068fcbb161da51e8e0bc
-assets/pieDiagram-ADFJNKIX-Bfsw9OjL.js,1770997275686,7aa5158b993ba348aa5790114e986c3ee49eeb50fc1c89c6d7807a39838aba5f
-assets/timeline-definition-IT6M3QCI-BNIkVAAg.js,1770997275685,ebe4e047da5cf68aa846572dc6318a5eca17bc4bf976c9a8570edbc467311c71
-assets/requirementDiagram-UZGBJVZJ-B5MRfYt_.js,1770997275685,497b8e7d5be3761211323ca648729baf3abaa5dd7bf862a5b8b2eff255d84d95
-assets/min-Bj8Uu2TN.js,1770997275686,8cc71a7f24ff8e411cc6a8a1eb246e8c4755e91e4372d8f67dd829cfca3b7a25
-assets/ordinal-Cboi1Yqb.js,1770997275685,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/quadrantDiagram-AYHSOK5B-Dbr2Sczz.js,1770997275685,3bb028003118595e7e88137b2f415293e89e622cccdcef584ee1357a8d1a1c75
-assets/linear-B4x1V1pR.js,1770997275686,bb28b317b32d93ceb7926f1ef4aab27995239e9e31a8741c7695eb77d6e8a60b
-assets/mindmap-definition-VGOIOE7T-Dxc6HKLV.js,1770997275686,c7b7a39104d114da004f5a7895804ac6082bd69a86ef01a7ce06b4a20ba2b31c
-assets/infoDiagram-WHAUD3N6-Doq3lmEe.js,1770997275685,d879d4f052ea41df4719c5d3098b17b0ea1da4a208ad386d53be95ac68f58235
-assets/init-Gi6I4Gst.js,1770997275685,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/kanban-definition-3W4ZIXB7-Db8psW9M.js,1770997275685,ffc6ef68b5087f77c5b839842f0160b7ec1e156882e9c54f264f5704e0c91a29
-assets/graph-Dlgq85SY.js,1770997275686,2f3fc7b3fd1dbc4341f9b1a26dede7bf4d9bb5494dba38b354a9c2daf5f7042d
-assets/journeyDiagram-XKPGCS4Q-BfaoW3cb.js,1770997275685,5198cd721cae80ca14c9332dd5d51be7bf5c23aee329f6552e6247104c3ac87a
-assets/layout-8RLcuW98.js,1770997275686,38500b352375e50c74786a3dbdf93526851e6718d1a48ddace5ba04f552c3a7c
-assets/gitGraphDiagram-NY62KEGX-biBSRfnB.js,1770997275685,6ad7acd701a0226248bb3c0e31ae2cc9c462d8e658fb9b756e37bc7c03e4ffee
-assets/index-BdI6Lg1O.css,1770997275685,edd94b2fe6f7246057d987db8ac607811b0f516d7140bdfaab0ba9f661d21d57
-assets/diagram-S2PKOQOG-eBKw_h4o.js,1770997275685,95767ac467158757901366badba8ef0d0d624bf578ebcdc3fbf47d16470155aa
-assets/diagram-QEK2KX5R-G21joAxO.js,1770997275685,cc2aaf744bbc8b402ed7a20e6f645f6fe6d1845ca45950dcbeb94141ec406c6e
-assets/defaultLocale-DX6XiGOO.js,1770997275686,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/diagram-PSM6KHXK-Dovr6PAJ.js,1770997275686,53a223e9f8b850602455fb595a00f7bd937745fc44ed3f3e8ca67ab62757f274
-assets/classDiagram-v2-WZHVMYZB-BEgH9455.js,1770997275685,b2d1ec54c068ce5f4e0ac8ac649d7aabfd0f727bc20c112dcdb9a0825b7aabd1
-assets/clone-BPflpF5p.js,1770997275685,d7b40530459facf0755228ccac3fb8a4b31ede07db892a5da60fac934d9da09e
-assets/chunk-TZMSLE5B-ZwnDEOMW.js,1770997275685,87573f8b4b5015d4aa58fd220260478fafd2ae72d84bd216a45796c07ab2a61a
-assets/classDiagram-2ON5EDUG-BEgH9455.js,1770997275685,b2d1ec54c068ce5f4e0ac8ac649d7aabfd0f727bc20c112dcdb9a0825b7aabd1
-assets/dagre-6UL2VRFP-H30ZsDU-.js,1770997275685,99972f88ccd864e44a80f6af23263e83307239a9f608c7b4a2fab5b268cd1c97
-assets/chunk-QZHKN3VN-D_wuSJPq.js,1770997275685,4110e30f32e15b3d5435cd21ec75eedb47d6ba91eca58e624e98f9dd6ab050a8
-assets/erDiagram-Q2GNP2WA-Dq3YTYdu.js,1770997275685,cdfe1f5f7e1dcd9307c5aea8de6ee585fa25d50d89ea396c31c258c385c2aecb
-assets/flowDiagram-NV44I4VS-Bz2s7iGH.js,1770997275685,d5d9200fa9dc0966682d4f90d072b4971ff172df08d35f586b8014f2707e9e71
-assets/ganttDiagram-JELNMOA3-Hpa_05r6.js,1770997275686,7d6bbcb72f8b0b82526626f1b8c0118438fe446af9afc9bf22e2c682d450da11
-assets/sequenceDiagram-WL72ISMW-CUfLT2za.js,1770997275685,1703c43f537023891727e7b91c56df15642051c138c766e746be855273077be3
-assets/cose-bilkent-S5V4N54A-DAkp41ZA.js,1770997275686,a12e9b3acb269e88ab25dc854cbed99be63796362fd53a7478ac55d0b6f5230a
-assets/chunk-QN33PNHL-2ON-H0c9.js,1770997275685,274a3d69b325c59b3ad644726ae0c8fad8d7b7b9365e0e4c70b26f09044b8ece
-assets/chunk-FMBD7UC4-BXHHgMNX.js,1770997275685,efcb164f4a7f0a5f974ef17ed334b997b3c0e0f9edc5147cb111066f8fb874d1
-assets/chunk-55IACEB6-CYwm5vPU.js,1770997275685,3a9dbcb2ee2c249007156a888eeef0b7bdd40e2b67ed1812732d15857ba0c86a
-assets/chunk-DI55MBZ5-Ds5mA4zT.js,1770997275685,af5136edddfe18cc250237d2d7419b0f27f95206c61a5383d5d78e34bb415837
-assets/chunk-4BX2VUAB-EGqJRU5g.js,1770997275685,edf2805462b8aa667f9212247d4ac11215f6b4dca99b688120b97558831cfb9f
-assets/channel-D6NpA2vM.js,1770997275685,63529f908deca1da9aa10bb71fd1e987f75f798cfc998ec73b9e10551be09f0d
-assets/chunk-B4BG7PRW-DCv0PKT4.js,1770997275685,e425f81783ddf1feb94d49d9a7914bd084287ee4e7d9bf77706b46ae1364a960
-assets/arc-CnCDFbYK.js,1770997275685,5e3fcd1e99a9afdb778f836f8fb06bd69a2d7bd6e5b585f8113d31b5fc160962
-assets/_baseUniq-deWUPulY.js,1770997275686,6b630373a9d2ef7dbfa53850d07df6dac7a44bda235dafdbddd5fd3696802149
-assets/c4Diagram-YG6GDRKO-CqypbHK8.js,1770997275685,cca3a388999b00b5ad3f0693fcd9ff333c485c64b0a4dcdf7657da2bdd21d348
-assets/blockDiagram-VD42YOAC-D_qq941J.js,1770997275685,d443e460c7cca659f3926560bbdac209e298ebd274270a3e8be46fd2369fac7c
-assets/architectureDiagram-VXUJARFQ-CeK7g8TF.js,1770997275686,495eadff39b83d9e89edb26b90211c27a040fa67d562c117f9008fcedbac8d2d
-assets/katex-Cu_Erd72.js,1770997275686,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-DhqelHri.js,1770997275686,bb9ce64ffabcc581fe15838964272b20f70acf205dd90441a5bebf86cb34a4cd
-assets/cytoscape.esm-CyJtwmzi.js,1770997275685,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-C3Y43Miv.js,1770997275687,1aa1bc03dcf2521f48624a39ba04bac485eda8b1bf06b164415cb0b29a40042f
-pwa-192x192.png,1770997274963,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1770997274972,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-apple-touch-icon.png,1770997274911,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-logo.png,1770997274914,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+registerSW.js,1771328161900,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+manifest.webmanifest,1771328161900,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+sw.js,1771328162615,bcc0b996e7f9a041b9185766f75e0190023ba789090165ce29263a309d8b3a1e
+firebase-messaging-sw.js,1771328161489,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+index.html,1771328161900,5a57d128ef98d76950dc867a3ea2eb0b8f8848c829d3a998c6de45e6773884b4
+workbox-8c29f6e4.js,1771328162615,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+assets/stateDiagram-v2-4FDKWEC3-qhFsPum4.js,1771328161899,af3c2f031eed2cad41f8a808d47841bcc48fed23c678b56b2dbde39c05401f9e
+lp.html,1771328161491,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/timeline-definition-IT6M3QCI-DWUcqCRH.js,1771328161899,d37fbc2f6489c185c56db0c27339a01c7cea778676f71d079deda07398def068
+assets/stateDiagram-FKZM4ZOC-tnwQqSxY.js,1771328161899,0f487c884c045e494f66232f49b81bd82013737ae70c98a4adc9dccceb62d463
+assets/pieDiagram-ADFJNKIX-y1Cj3YIp.js,1771328161899,8c3bbc27b582ccf3955c61e5ae8d78f28c31ff32bf4acb2789caf37159fd76af
+assets/ordinal-Cboi1Yqb.js,1771328161899,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/xychartDiagram-PRI3JC2R-CltVMRL0.js,1771328161899,70ecdd230d23cf3f8ccd5edbd54bbfd267c0e941c4898650c0c271bc3b63e06c
+assets/min-BPJmB_O9.js,1771328161899,18a3bc9297f9b728cc266a37d31a2cc7a31af4d4bcf5a599c0fb2c33484d523c
+assets/sankeyDiagram-TZEHDZUN-kTTlCjkY.js,1771328161899,dc98c22bf33dde2673abff4e9b0fb4ef243865bfc262e6d04b8f8f6d2e48c638
+assets/requirementDiagram-UZGBJVZJ-CVOl1-o_.js,1771328161899,8359f926babaae4a6a86294e1d1419ded1c9324a3bb087f1a47247fddcd50ae5
+assets/mindmap-definition-VGOIOE7T-C4Op4xgs.js,1771328161899,3e381a3dd256150da09039b5d98fb43791cacdc597260d6d04538882f0004e31
+assets/linear-BujD6ad1.js,1771328161900,e1cc0a99ec636f7f6bde63cacb5610f7555386057f22c1528c0ebb4fc121f089
+assets/init-Gi6I4Gst.js,1771328161899,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/quadrantDiagram-AYHSOK5B-TRLCVF27.js,1771328161899,0e22f815d5db2353247424874f32ab1a196207e92c2ec7fd82c1751ac1cccdee
+assets/kanban-definition-3W4ZIXB7-CD3xG9BN.js,1771328161899,f97f34511730ee480af23492ec05d71acf47adfa56e107be0d670fdf956c2637
+assets/layout-CIjoOLMp.js,1771328161900,e776d60d853940c214aa3fb454d9ab86863e8a92d1ebe945eda3ac07499c3136
+assets/infoDiagram-WHAUD3N6-Cz6MUbn1.js,1771328161899,4b4707346de0614e189060270244f4ebb20de602277119b3ac958440fc63a8eb
+assets/graph-BQHLGJ_k.js,1771328161900,7ed4c75d6d7d3b6e40180f0af126cdf8b8e34a38bd4d8cf2e18958aad516ff4c
+assets/journeyDiagram-XKPGCS4Q-So0rgJ11.js,1771328161899,578a9799917cc07581af3a07238163b0942c1015b8c034d04cbdebfd484f232a
+assets/gitGraphDiagram-NY62KEGX-CvbIjz8q.js,1771328161899,0ffa1f20afa43479f2f1acf06b0cff861439337769f167a4c1459d3cc6157baa
+assets/diagram-S2PKOQOG-9s1KkOom.js,1771328161899,bf2be84bcf6f26df4263721c13769947805efa3dc0a4b50d1ac751fbff4a904c
+assets/defaultLocale-DX6XiGOO.js,1771328161899,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/index-CGMRkDea.css,1771328161899,bd04a1ea96c7011ea4a316e4b8a684338f901ec020a73e243338817b7f9384db
+assets/erDiagram-Q2GNP2WA-LwhMzSdY.js,1771328161900,8e7199ca7b0cea4fa933d105140ba743b3b399e53f0ded6bcfdbe4638ab9c20b
+assets/clone-DvJrUhcS.js,1771328161899,b38977bb61cfc2ff725ce6e2cbe5d2b87d7a985d116e8444f77a0786aa77a803
+assets/diagram-QEK2KX5R-CTvgUX09.js,1771328161899,b8c0815917605c34a823853ea3d03ba162805ea47d840e9d32fd14f110547792
+assets/diagram-PSM6KHXK-BWj2LcW2.js,1771328161900,516e606a0c86ed20c3077fa8ca064cbb5c3a3b73031773047a02e53066b82054
+assets/classDiagram-v2-WZHVMYZB-OdqzHClU.js,1771328161899,3b61de73ba94eabf93eaa9ec285bac2ca6e1c3a9b35bda0d44c47ff40b831f7f
+assets/chunk-TZMSLE5B-CliaK6EQ.js,1771328161899,3bcc0f11183ba4a7ede3a20eaf9e4b3d97215cc777f22082ffff075ff4c60b46
+assets/classDiagram-2ON5EDUG-OdqzHClU.js,1771328161899,3b61de73ba94eabf93eaa9ec285bac2ca6e1c3a9b35bda0d44c47ff40b831f7f
+assets/dagre-6UL2VRFP-DJcf5UHa.js,1771328161899,1f60a93c5ac29aa5c3ebeb0873e6294bb555b8e56ac123fca5fd13decd96b5e0
+assets/chunk-QZHKN3VN-DRdK-21W.js,1771328161899,b8e47ec659782589808a06686dc4e060fec4a5ac9ce560b73cbca53fd3a7cbae
+assets/flowDiagram-NV44I4VS-BkOuawgq.js,1771328161899,faaf7ed1446a0d8cffef202c1d3c5eee36b472f30bd8c4fa414a47569b8ee910
+assets/sequenceDiagram-WL72ISMW-D4Nh1Cye.js,1771328161899,e026dd60b4395c301dd5d727b1e79ec311dc4d83edf66030eb1b66dd1ec0ac9f
+assets/ganttDiagram-JELNMOA3-BUCIDdCT.js,1771328161900,605dd77a7dfa40adb139b5d32ec8d23f0a2beda080e2ed6b75ce1619e8f76536
+assets/cose-bilkent-S5V4N54A-Bvu3BbfM.js,1771328161899,626aab0102b0070fa5b345fcb610429d5e0b8651897015410014981ed38dbade
+assets/chunk-QN33PNHL-CPr5AXHs.js,1771328161899,7d07be599a1aa02a2dbf1b1826c7a69b690a53911bf80c62dc859024c41a77d3
+assets/chunk-FMBD7UC4-D0vLVOo8.js,1771328161899,b5fc3be88d529d3702a77aeabe96bdcb53338bf97ab3ae9c49d55d4f409855fb
+assets/chunk-55IACEB6-DqADMN8l.js,1771328161899,815f5d75e262ac63b08a48c6b8ce94dffa0e7082b3ef885d8d1f88224c11c745
+assets/chunk-DI55MBZ5-wOPdS8H2.js,1771328161899,aa2c2a4aefc1c0b6987f449b4357952b234a40c04b9791aac2c9b2f38a678d1f
+assets/channel-CA5MLe1E.js,1771328161899,59287d4c6e1123ae7ad2a3471ed7fa09f3438a135c817aa0b1865793b46078c8
+assets/chunk-4BX2VUAB-CPIcvCgw.js,1771328161899,ed6da301703c2cbdf8e9bb88cfb11c5585e35e638a6ac7559046d4e7cb707c30
+assets/chunk-B4BG7PRW-BPI0kALy.js,1771328161899,51377ea9c0fe6aa982c4eb106209ef982089c80f7b4de95946cc9464c2d92be9
+assets/arc-B0fkuDyt.js,1771328161899,28d3534b86a23e96ff5f5acee6b0644e60aa1dbc5aa35f0510e2691ca5471284
+assets/_baseUniq-CVIueqxh.js,1771328161900,92f90b2e81c258f7a98bdee9de494d880c858a1be2b36e59323a63bf5b1e8d18
+assets/c4Diagram-YG6GDRKO-CszmxBoj.js,1771328161899,fa9348204d375e68bd6eef1da174da9ab02d6ba0d007b27abd252b02f3b15319
+assets/blockDiagram-VD42YOAC-DtbqjZ0e.js,1771328161899,7636b292ec719fe840a8aedf842447252df7b70df25810ccf2fcf4cf660b4491
+assets/architectureDiagram-VXUJARFQ-B1GdlcNe.js,1771328161899,a738cb363e478e11b4f255c21ce60caec1fcce593c29d8b369d8949ab998d211
+assets/katex-Cu_Erd72.js,1771328161899,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-BY9J8Rwz.js,1771328161900,81fe92735bab5e222231a97a3b27b7a756a6771dc6fb45eb1d8167af51d71db5
+assets/cytoscape.esm-CyJtwmzi.js,1771328161899,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-CFrEKYyL.js,1771328161900,92e48aee6d70b0059f1fd3d490c0dd738926f20edcb8c9093705d4e67b4fea1f
+logo.png,1771328161490,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-192x192.png,1771328161497,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1771328161488,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1771328161503,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>
