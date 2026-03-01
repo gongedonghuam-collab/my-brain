@@ -2,18 +2,12 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-
     <meta
       http-equiv="Cache-Control"
       content="no-cache, no-store, must-revalidate"
     />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-
-    <meta
-      name="google-site-verification"
-      content="qpuJVeg2XkDd1ieycUl-LOQkD3MDEH7wVKmlPE3NdEI"
-    />
     <link rel="icon" href="/logo.png?v=3" />
     <meta
       name="viewport"
@@ -28,7 +22,8 @@
         background-color: #0f172a;
         height: 100vh;
         width: 100vw;
-        overflow: hidden;
+        overflow-x: hidden;
+        font-family: sans-serif;
       }
       #loading-screen {
         position: fixed;
@@ -59,56 +54,66 @@
           transform: rotate(360deg);
         }
       }
+      @keyframes bounce {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-15px);
+        }
+      }
     </style>
   </head>
   <body>
     <div id="app"></div>
-
     <div id="loading-screen">
       <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
       <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
       <div class="loader"></div>
     </div>
 
-    <script type="module" src="/src/main.ts"></script>
-
     <script>
-      // 3秒後にチェックを実行
-      setTimeout(function () {
-        var loader = document.getElementById("loading-screen");
+      // 1. TikTok等のアプリ内ブラウザを強力に判定する
+      var ua = navigator.userAgent.toLowerCase();
+      var isInApp =
+        /line|instagram|tiktok|bytedance|trill|musical_ly|fbav|fban|twitter/.test(
+          ua,
+        );
 
-        // ブラウザの種類を判定
-        var ua = navigator.userAgent.toLowerCase();
-        var isInApp =
-          ua.indexOf("line/") > -1 || // LINE
-          ua.indexOf("instagram") > -1 || // Instagram
-          ua.indexOf("tiktok") > -1 || // TikTok
-          ua.indexOf("fbav") > -1 || // Facebook
-          ua.indexOf("fban") > -1;
+      if (isInApp) {
+        // ★アプリ内ブラウザの場合：グローバルフラグを立てる
+        window.__IN_APP_BROWSER__ = true;
 
-        // 条件: ローディングが表示されたまま、かつ「アプリ内ブラウザ」の場合のみ警告を出す
-        // (SafariやChromeの場合は、遅くてもそのまま待ち続ける)
-        if (
-          loader &&
-          window.getComputedStyle(loader).opacity !== "0" &&
-          isInApp
-        ) {
-          loader.innerHTML = `
-            <div style="text-align:center; padding:20px; color:white; max-width: 80%;">
-              <div style="font-size: 50px; margin-bottom: 20px;">⚠️</div>
-              <h1 style="font-size: 20px; margin-bottom: 10px;">ブラウザで開き直してください</h1>
-              <p style="font-size: 14px; line-height: 1.6; opacity: 0.8;">
-                TikTokやインスタのブラウザでは<br>
-                アプリを起動できません。
-              </p>
-              <div style="margin-top: 30px; background: #3b82f6; padding: 15px; border-radius: 12px; font-weight: bold; box-shadow: 0 4px 15px rgba(59,130,246,0.4);">
-                右上の「・・・」から<br>
-                「ブラウザで開く」を選択！
-              </div>
+        // 画面を即座に「ブラウザで開いてね」案内に書き換える
+        document.getElementById("loading-screen").innerHTML = `
+          <div style="background:#0f172a; color:white; height:100vh; width:100vw; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:20px; text-align:center; box-sizing: border-box;">
+            <div style="font-size:60px; margin-bottom:20px; animation: bounce 2s infinite;">↗️</div>
+            <h1 style="font-size:22px; margin-bottom:10px; font-weight:bold;">右上のメニューから<br>ブラウザで開いてね！</h1>
+            <p style="font-size:13px; opacity:0.8; margin-bottom:30px; line-height:1.6;">
+              TikTokなどのアプリ内では<br>セキュリティ制限により起動できません💦
+            </p>
+            <div style="background:#4f46e5; padding:20px; border-radius:16px; font-weight:bold; box-shadow: 0 10px 25px rgba(79,70,229,0.4); text-align:left; font-size: 14px; width: 100%; max-width: 300px;">
+              <div style="margin-bottom:12px;">① 右上の <span style="font-size:20px; margin: 0 5px;">⋯</span> または矢印をタップ</div>
+              <div style="margin-bottom:12px;">②「ブラウザで開く」を選択</div>
+              <div>③ Safariなどで自動起動します！</div>
             </div>
-          `;
-        }
-      }, 3000); // 3秒待機
+          </div>
+        `;
+      } else {
+        // ★普通のブラウザの場合のみ、5秒後にローダーを消す保険タイマーを動かす
+        setTimeout(function () {
+          var loader = document.getElementById("loading-screen");
+          if (loader && window.getComputedStyle(loader).opacity !== "0") {
+            loader.style.opacity = "0";
+            setTimeout(function () {
+              loader.remove();
+            }, 500);
+          }
+        }, 5000);
+      }
     </script>
+
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

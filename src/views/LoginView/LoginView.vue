@@ -4,99 +4,92 @@ import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore, doc, setDoc } from "firebase/firestore";
 import { useRouter } from "vue-router";
 
-// ルーター（画面遷移）と認証機能の準備
 const router = useRouter();
-const loading = ref(false); // ローディング中かどうか
-const auth = getAuth(); // Firebase Auth
-const db = getFirestore(); // Firestore Database
+const loading = ref(false);
+const auth = getAuth();
+const db = getFirestore();
 
-// アプリ内ブラウザ判定フラグ
+// アプリ内ブラウザ関連のフラグ
 const isInAppBrowser = ref(false);
+const showBrowserGuidance = ref(false); // ★ガイダンス画面を出すフラグ
 
 onMounted(() => {
-  // ★修正: 判定ロジックを index.html と合わせて厳密化 (誤検知防止)
   const ua = navigator.userAgent.toLowerCase();
   if (
-    ua.indexOf("line/") > -1 || // LINE (line/バージョンの形式を検知)
-    ua.indexOf("instagram") > -1 || // Instagram
-    ua.indexOf("tiktok") > -1 || // TikTok
-    ua.indexOf("fbav") > -1 || // Facebook App
-    ua.indexOf("fban") > -1 // Facebook App (別パターン)
+    ua.indexOf("line/") > -1 ||
+    ua.indexOf("instagram") > -1 ||
+    ua.indexOf("tiktok") > -1 ||
+    ua.indexOf("fbav") > -1 ||
+    ua.indexOf("fban") > -1
   ) {
     isInAppBrowser.value = true;
   }
 });
 
+const handleLoginSuccess = async (result: any) => {
+  const user = result.user;
+  const tokenResponse = result._tokenResponse;
+  const refreshToken =
+    tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  const accessToken = credential?.accessToken;
+  const expiresIn = tokenResponse?.expiresIn || 3600;
+
+  const tokenData: any = { updatedAt: new Date() };
+
+  if (accessToken) {
+    tokenData.accessToken = accessToken;
+    localStorage.setItem("google_calendar_token", accessToken);
+    const expiryTime = new Date().getTime() + (Number(expiresIn) - 300) * 1000;
+    localStorage.setItem("google_calendar_token_expiry", expiryTime.toString());
+  }
+  if (refreshToken) {
+    tokenData.refreshToken = refreshToken;
+  }
+  if (refreshToken || accessToken) {
+    try {
+      await setDoc(doc(db, "users", user.uid, "system", "tokens"), tokenData, {
+        merge: true,
+      });
+    } catch (e) {
+      console.error("Token save error:", e);
+    }
+  }
+
+  await setDoc(
+    doc(db, "users", user.uid),
+    {
+      email: user.email,
+      displayName: user.displayName,
+      photoURL: user.photoURL,
+      lastLogin: new Date(),
+    },
+    { merge: true },
+  );
+
+  router.push("/app");
+};
+
 const handleGoogleLogin = async () => {
-  // アプリ内ブラウザならアラートを出して中断
+  // ★TikTokなどであれば、ログイン処理はせず「ブラウザで開く案内」を出す！
   if (isInAppBrowser.value) {
-    alert("右上のメニューから「ブラウザで開く」を選択してください🙇‍♂️");
+    showBrowserGuidance.value = true;
     return;
   }
 
+  // 普通のブラウザなら通常通りログイン処理
   loading.value = true;
   try {
     const provider = new GoogleAuthProvider();
     provider.addScope("https://www.googleapis.com/auth/calendar.events");
     provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
-
     provider.setCustomParameters({
       prompt: "select_account consent",
       access_type: "offline",
     });
 
     const result = await signInWithPopup(auth, provider);
-    const user = result.user;
-
-    const tokenResponse = (result as any)._tokenResponse;
-    const refreshToken =
-      tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const accessToken = credential?.accessToken;
-    const expiresIn = tokenResponse?.expiresIn || 3600;
-
-    const tokenData: any = { updatedAt: new Date() };
-
-    if (accessToken) {
-      tokenData.accessToken = accessToken;
-      localStorage.setItem("google_calendar_token", accessToken);
-      const expiryTime =
-        new Date().getTime() + (Number(expiresIn) - 300) * 1000;
-      localStorage.setItem(
-        "google_calendar_token_expiry",
-        expiryTime.toString(),
-      );
-    }
-
-    if (refreshToken) {
-      tokenData.refreshToken = refreshToken;
-    }
-
-    if (refreshToken || accessToken) {
-      try {
-        await setDoc(
-          doc(db, "users", user.uid, "system", "tokens"),
-          tokenData,
-          { merge: true },
-        );
-        console.log("Tokens saved successfully.");
-      } catch (saveError: any) {
-        console.error("Token save error:", saveError);
-      }
-    }
-
-    await setDoc(
-      doc(db, "users", user.uid),
-      {
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        lastLogin: new Date(),
-      },
-      { merge: true },
-    );
-
-    router.push("/app");
+    await handleLoginSuccess(result);
   } catch (e: any) {
     console.error(e);
     alert("Googleログインに失敗しました: " + e.message);
@@ -118,7 +111,7 @@ const handleGoogleLogin = async () => {
     ></div>
 
     <div
-      class="w-full max-w-sm bg-white/5 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/10 flex flex-col items-center relative z-10"
+      class="w-full max-w-sm bg-white/5 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/10 flex flex-col items-center relative z-10 overflow-hidden"
     >
       <div class="mb-10 text-center">
         <div class="text-6xl mb-4">🧠</div>
@@ -131,23 +124,40 @@ const handleGoogleLogin = async () => {
       </div>
 
       <div
-        v-if="isInAppBrowser"
-        class="w-full bg-amber-600 rounded-xl p-6 text-white text-center shadow-lg animate-pulse mb-6 border-2 border-white"
+        v-if="showBrowserGuidance"
+        class="absolute inset-0 bg-slate-900/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center z-50 animate-fade-in border border-indigo-500/50"
       >
-        <div class="text-4xl mb-2">⚠️</div>
-        <h2 class="font-bold text-lg mb-2">ブラウザで開いてください</h2>
-        <p class="text-sm leading-relaxed opacity-90 font-bold">
-          TikTokやインスタのままでは<br />
-          Googleログインができません💦
+        <div class="text-5xl mb-4 animate-bounce">↗️</div>
+        <h2 class="text-lg font-bold text-white mb-2">ブラウザで開いてね！</h2>
+        <p class="text-[11px] text-slate-300 mb-6 leading-relaxed">
+          TikTok等のアプリ内では、<br />Googleのセキュリティ設定により<br />ログインがブロックされてしまいます💦
         </p>
         <div
-          class="mt-4 p-3 bg-black/30 rounded-lg text-xs font-bold text-left"
+          class="bg-indigo-600 text-white rounded-xl p-4 text-xs font-bold w-full mb-6 shadow-lg shadow-indigo-600/30 text-left"
         >
-          ① 右上の「・・・」や「矢印」を押す<br />
+          ① 右上の
+          <span class="text-xl inline-block mx-1">⋯</span> などをタップ<br />
           ②「ブラウザで開く」を選択<br />
-          ③ SafariやChromeで開けばOK！
+          ③ いつものブラウザでログイン！
         </div>
+        <button
+          @click="showBrowserGuidance = false"
+          class="text-xs text-slate-400 underline hover:text-white p-2"
+        >
+          戻る
+        </button>
       </div>
+
+      <div
+        v-else-if="loading"
+        class="w-full flex flex-col items-center justify-center py-6"
+      >
+        <div
+          class="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"
+        ></div>
+        <p class="text-slate-400 text-xs font-bold">Googleと通信中...</p>
+      </div>
+
       <div v-else class="w-full space-y-6">
         <p class="text-slate-300 text-sm text-center leading-relaxed mb-4">
           LINEで全てを完結させるために、<br />
@@ -205,3 +215,19 @@ const handleGoogleLogin = async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+</style>

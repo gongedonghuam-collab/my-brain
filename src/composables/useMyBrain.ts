@@ -51,18 +51,31 @@ const activeTag = ref<string | null>(null);
 
 const isCalendarConnected = ref(false);
 
+const safeGetItem = (key: string) => {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    return null;
+  }
+};
+
+// 安全に読み込む
 const lastReferencedMemoryId = ref<string | null>(
-  localStorage.getItem("last_memory_id"),
+  safeGetItem("last_memory_id"),
 );
 
 const setLastMemoryId = (id: string | null) => {
-  if (id) {
-    const clean = id.replace(/<<<|>>>|ID:/gi, "").trim();
-    lastReferencedMemoryId.value = clean;
-    localStorage.setItem("last_memory_id", clean);
-  } else {
-    lastReferencedMemoryId.value = null;
-    localStorage.removeItem("last_memory_id");
+  try {
+    if (id) {
+      const clean = id.replace(/<<<|>>>|ID:/gi, "").trim();
+      lastReferencedMemoryId.value = clean;
+      localStorage.setItem("last_memory_id", clean);
+    } else {
+      lastReferencedMemoryId.value = null;
+      localStorage.removeItem("last_memory_id");
+    }
+  } catch (e) {
+    // エラーが起きても無視してクラッシュを防ぐ
   }
 };
 
