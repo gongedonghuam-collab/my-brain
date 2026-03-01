@@ -298,9 +298,7 @@ onMounted(() => {
           ランチ1回分の課金で、AIの記憶力や提案力が劇的に進化します。
         </p>
 
-        <div class="badge-wrapper js-observe fade-in-up delay-300">
-          <div class="pulse-badge">🚀 ベータ版につき完全無料</div>
-        </div>
+        <div class="badge-wrapper js-observe fade-in-up delay-300"></div>
 
         <button
           @click="goToLogin"

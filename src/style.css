@@ -31,7 +31,6 @@ body {
     Roboto,
     sans-serif;
   -webkit-font-smoothing: antialiased;
-  overflow: hidden; /* アプリライクな挙動 */
 }
 
 /* スクロールバー隠し */

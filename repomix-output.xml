@@ -3135,42 +3135,6 @@ declare module "*.vue" {
 }
 </file>
 
-<file path="src/main.ts">
-/**
- * アプリケーションのエントリーポイント
- * Vue.jsを起動し、ルーターやプラグインを読み込んで画面に描画（マウント）します。
- */
-
-import { createApp } from "vue";
-import "./style.css"; // Tailwind CSSなどのスタイル読み込み
-import App from "./App.vue"; // ルートコンポーネント
-import router from "./router"; // 画面遷移の管理
-
-// Vueアプリのインスタンスを作成
-const app = createApp(App);
-
-// ルータープラグインを使用（これがないと画面遷移できない）
-app.use(router);
-
-// IDが "app" のHTML要素にVueアプリを描画
-app.mount("#app");
-
-// --- ローディング画面の消去処理 ---
-// index.htmlに書かれている初期ローディング画面（スピナー）を、
-// Vueアプリの準備が整ったタイミングでフェードアウトさせます。
-const loader = document.getElementById("loading-screen");
-if (loader) {
-  setTimeout(() => {
-    // CSSで透明にする
-    loader.style.opacity = "0";
-    // アニメーションが終わった頃にDOMから削除
-    setTimeout(() => {
-      loader.remove();
-    }, 500);
-  }, 500);
-}
-</file>
-
 <file path="package.json">
 {
   "name": "my-brain",
@@ -3380,75 +3344,63 @@ watch(currentUser, (newUser) => {
 </template>
 </file>
 
-<file path="src/firebase.ts">
+<file path="src/main.ts">
 /**
- * Firebase（バックエンドサービス）の初期化設定ファイル
- * アプリ全体で使う「認証」「データベース」「ストレージ」などの機能をここで準備します。
+ * アプリケーションのエントリーポイント
+ * Vue.jsを起動し、ルーターやプラグインを読み込んで画面に描画（マウント）します。
  */
 
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import {
-  getFirestore,
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
-  memoryLocalCache,
-} from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-import { getMessaging } from "firebase/messaging";
+import { createApp } from "vue";
+import "./style.css"; // Tailwind CSSなどのスタイル読み込み
+import App from "./App.vue"; // ルートコンポーネント
+import router from "./router"; // 画面遷移の管理
 
-// 環境変数 (.envファイル) から設定値を読み込み
-// これにより、本番環境と開発環境で接続先を切り替えられます
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
-};
+// ★ ここが最重要！ index.htmlで「アプリ内ブラウザ」と判定された場合は、
+// Firebase等が動いてクラッシュする前に、Vueアプリ自体の起動をストップさせます。
+if ((window as any).__IN_APP_BROWSER__) {
+  console.log("App blocked in in-app browser. Showing guidance screen.");
+} else {
+  // 普通のブラウザ（SafariやChrome）の場合は、通常通りアプリを起動
+  const app = createApp(App);
 
-// --- アプリの初期化 (Singletonパターン) ---
-// 既に初期化済みなら既存のアプリを取得し、まだなら新規に初期化します。
-// これにより、二重初期化によるエラーを防ぎます。
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+  // ★ 万が一の未知のエラーに備えたグローバルエラーハンドラー（真っ黒防止）
+  app.config.errorHandler = (err, instance, info) => {
+    console.error("Vue Global Error:", err, info);
+    document.body.innerHTML = `
+      <div style="background:#0f172a; color:white; height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:20px; text-align:center;">
+        <div style="font-size:50px; margin-bottom:20px;">⚠️</div>
+        <h1 style="font-size:20px; margin-bottom:10px;">アプリ内でエラーが発生しました</h1>
+        <p style="font-size:14px; opacity:0.8; margin-bottom:30px;">
+          TikTokやInstagramのブラウザの制限により<br>正常に動作していません💦
+        </p>
+        <div style="background:#3b82f6; padding:15px; border-radius:12px; font-weight:bold; box-shadow: 0 4px 15px rgba(59,130,246,0.4);">
+          右上の「･･･」や「矢印」から<br>「ブラウザで開く」を選択してください！
+        </div>
+      </div>
+    `;
+  };
 
-/** 認証機能 (ログイン/ログアウト) */
-export const auth = getAuth(app);
+  // ルータープラグインを使用（これがないと画面遷移できない）
+  app.use(router);
 
-// --- Firestore初期化 (極限まで安全なインアプリブラウザ対策) ---
-let dbInstance;
+  // IDが "app" のHTML要素にVueアプリを描画
+  app.mount("#app");
 
-try {
-  // 既に初期化されていないかチェック
-  dbInstance = getFirestore(app);
-} catch (e) {
-  // 初期化に失敗（IndexedDBエラーなど）した場合
-  console.error("Firestore init failed, using fallback:", e);
-
-  try {
-    // 【対策1】IndexedDBを一切使わず、メモリ(RAM)だけ使うモードで初期化
-    dbInstance = initializeFirestore(app, {
-      localCache: memoryLocalCache(),
-    });
-  } catch (err) {
-    // 【対策2】それすら失敗した場合は、最小構成のインスタンスを生成
-    console.error("Critical Firestore Error:", err);
-    dbInstance = getFirestore(app);
+  // --- ローディング画面の消去処理 ---
+  // index.htmlに書かれている初期ローディング画面（スピナー）を、
+  // Vueアプリの準備が整ったタイミングでフェードアウトさせます。
+  const loader = document.getElementById("loading-screen");
+  if (loader) {
+    setTimeout(() => {
+      // CSSで透明にする
+      loader.style.opacity = "0";
+      // アニメーションが終わった頃にDOMから削除
+      setTimeout(() => {
+        loader.remove();
+      }, 500);
+    }, 500); // ロードが早すぎる場合のチラつき防止で500ms待機
   }
 }
-export const db = dbInstance;
-
-/** ファイルストレージ (画像の保存先) */
-export const storage = getStorage(app);
-
-/** プッシュ通知機能 */
-export const messaging = getMessaging(app);
-
-/** Googleログイン用のプロバイダ設定 */
-export const googleProvider = new GoogleAuthProvider();
 </file>
 
 <file path="src/style.css">
@@ -3485,7 +3437,6 @@ body {
     Roboto,
     sans-serif;
   -webkit-font-smoothing: antialiased;
-  overflow: hidden; /* アプリライクな挙動 */
 }
 
 /* スクロールバー隠し */
@@ -3996,6 +3947,51 @@ router.beforeEach(async (to, from, next) => {
 export default router;
 </file>
 
+<file path="src/firebase.ts">
+/**
+ * Firebase（バックエンドサービス）の初期化設定ファイル
+ * アプリ全体で使う「認証」「データベース」「ストレージ」などの機能をここで準備します。
+ */
+
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { initializeFirestore, memoryLocalCache } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+import { getMessaging } from "firebase/messaging";
+
+// 環境変数 (.envファイル) から設定値を読み込み
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+};
+
+// --- アプリの初期化 (Singletonパターン) ---
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+/** 認証機能 (ログイン/ログアウト) */
+export const auth = getAuth(app);
+
+// ★超重要：TikTokやInstagramブラウザでクラッシュ(ブラックアウト)しないよう、
+// 強制的に「メモリキャッシュのみ(IndexedDBを一切使わない)」で動作させる
+export const db = initializeFirestore(app, {
+  localCache: memoryLocalCache(),
+});
+
+/** ファイルストレージ (画像の保存先) */
+export const storage = getStorage(app);
+
+/** プッシュ通知機能 */
+export const messaging = getMessaging(app);
+
+/** Googleログイン用のプロバイダ設定 */
+export const googleProvider = new GoogleAuthProvider();
+</file>
+
 <file path="firestore.rules">
 rules_version = '2';
 service cloud.firestore {
@@ -4042,123 +4038,6 @@ service cloud.firestore {
     }
   }
 }
-</file>
-
-<file path="index.html">
-<!doctype html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-
-    <meta
-      http-equiv="Cache-Control"
-      content="no-cache, no-store, must-revalidate"
-    />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-
-    <meta
-      name="google-site-verification"
-      content="qpuJVeg2XkDd1ieycUl-LOQkD3MDEH7wVKmlPE3NdEI"
-    />
-    <link rel="icon" href="/logo.png?v=3" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
-    <title>My Brain</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        background-color: #0f172a;
-        height: 100vh;
-        width: 100vw;
-        overflow: hidden;
-      }
-      #loading-screen {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background-color: #0f172a;
-        color: white;
-        z-index: 9999;
-        transition: opacity 0.5s ease;
-      }
-      .loader {
-        margin-top: 32px;
-        width: 32px;
-        height: 32px;
-        border: 3px solid rgba(255, 255, 255, 0.1);
-        border-radius: 50%;
-        border-top-color: #3b82f6;
-        animation: spin 1s linear infinite;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app"></div>
-
-    <div id="loading-screen">
-      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
-      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
-      <div class="loader"></div>
-    </div>
-
-    <script type="module" src="/src/main.ts"></script>
-
-    <script>
-      // 3秒後にチェックを実行
-      setTimeout(function () {
-        var loader = document.getElementById("loading-screen");
-
-        // ブラウザの種類を判定
-        var ua = navigator.userAgent.toLowerCase();
-        var isInApp =
-          ua.indexOf("line/") > -1 || // LINE
-          ua.indexOf("instagram") > -1 || // Instagram
-          ua.indexOf("tiktok") > -1 || // TikTok
-          ua.indexOf("fbav") > -1 || // Facebook
-          ua.indexOf("fban") > -1;
-
-        // 条件: ローディングが表示されたまま、かつ「アプリ内ブラウザ」の場合のみ警告を出す
-        // (SafariやChromeの場合は、遅くてもそのまま待ち続ける)
-        if (
-          loader &&
-          window.getComputedStyle(loader).opacity !== "0" &&
-          isInApp
-        ) {
-          loader.innerHTML = `
-            <div style="text-align:center; padding:20px; color:white; max-width: 80%;">
-              <div style="font-size: 50px; margin-bottom: 20px;">⚠️</div>
-              <h1 style="font-size: 20px; margin-bottom: 10px;">ブラウザで開き直してください</h1>
-              <p style="font-size: 14px; line-height: 1.6; opacity: 0.8;">
-                TikTokやインスタのブラウザでは<br>
-                アプリを起動できません。
-              </p>
-              <div style="margin-top: 30px; background: #3b82f6; padding: 15px; border-radius: 12px; font-weight: bold; box-shadow: 0 4px 15px rgba(59,130,246,0.4);">
-                右上の「・・・」から<br>
-                「ブラウザで開く」を選択！
-              </div>
-            </div>
-          `;
-        }
-      }, 3000); // 3秒待機
-    </script>
-  </body>
-</html>
 </file>
 
 <file path="src/types/index.ts">
@@ -4266,6 +4145,125 @@ export interface Reminder {
   isSent: boolean; // 送信済みフラグ
   createdAt: any;
 }
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <link rel="icon" href="/logo.png?v=3" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>My Brain</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0f172a;
+        font-family: sans-serif;
+      }
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #0f172a;
+        color: white;
+        z-index: 9999;
+        transition: opacity 0.5s ease;
+      }
+      .loader {
+        margin-top: 32px;
+        width: 32px;
+        height: 32px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        border-top-color: #3b82f6;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes bounce {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-15px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="loading-screen">
+      <h1 style="font-size: 2rem; font-weight: 900">My Brain</h1>
+      <p style="font-size: 0.8rem; opacity: 0.7">あなただけの第2の脳</p>
+      <div class="loader"></div>
+    </div>
+
+    <script>
+      // 1. TikTok等のアプリ内ブラウザを強力に判定する
+      var ua = navigator.userAgent.toLowerCase();
+      var isInApp =
+        /line|instagram|tiktok|bytedance|trill|musical_ly|fbav|fban|twitter/.test(
+          ua,
+        );
+
+      if (isInApp) {
+        // ★アプリ内ブラウザの場合：グローバルフラグを立てる
+        window.__IN_APP_BROWSER__ = true;
+
+        // 画面を即座に「ブラウザで開いてね」案内に書き換える
+        document.getElementById("loading-screen").innerHTML = `
+          <div style="background:#0f172a; color:white; height:100vh; width:100vw; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:20px; text-align:center; box-sizing: border-box;">
+            <div style="font-size:60px; margin-bottom:20px; animation: bounce 2s infinite;">↗️</div>
+            <h1 style="font-size:22px; margin-bottom:10px; font-weight:bold;">右上のメニューから<br>ブラウザで開いてね！</h1>
+            <p style="font-size:13px; opacity:0.8; margin-bottom:30px; line-height:1.6;">
+              TikTokなどのアプリ内では<br>セキュリティ制限により起動できません💦
+            </p>
+            <div style="background:#4f46e5; padding:20px; border-radius:16px; font-weight:bold; box-shadow: 0 10px 25px rgba(79,70,229,0.4); text-align:left; font-size: 14px; width: 100%; max-width: 300px;">
+              <div style="margin-bottom:12px;">① 右上の <span style="font-size:20px; margin: 0 5px;">⋯</span> または矢印をタップ</div>
+              <div style="margin-bottom:12px;">②「ブラウザで開く」を選択</div>
+              <div>③ Safariなどで自動起動します！</div>
+            </div>
+          </div>
+        `;
+      } else {
+        // ★普通のブラウザの場合のみ、5秒後にローダーを消す保険タイマーを動かす
+        setTimeout(function () {
+          var loader = document.getElementById("loading-screen");
+          if (loader && window.getComputedStyle(loader).opacity !== "0") {
+            loader.style.opacity = "0";
+            setTimeout(function () {
+              loader.remove();
+            }, 500);
+          }
+        }, 5000);
+      }
+    </script>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
 </file>
 
 <file path="src/components/InputFooter/InputFooter.vue">
@@ -4798,9 +4796,7 @@ onMounted(() => {
           ランチ1回分の課金で、AIの記憶力や提案力が劇的に進化します。
         </p>
 
-        <div class="badge-wrapper js-observe fade-in-up delay-300">
-          <div class="pulse-badge">🚀 ベータ版につき完全無料</div>
-        </div>
+        <div class="badge-wrapper js-observe fade-in-up delay-300"></div>
 
         <button
           @click="goToLogin"
@@ -6398,99 +6394,92 @@ import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore, doc, setDoc } from "firebase/firestore";
 import { useRouter } from "vue-router";
 
-// ルーター（画面遷移）と認証機能の準備
 const router = useRouter();
-const loading = ref(false); // ローディング中かどうか
-const auth = getAuth(); // Firebase Auth
-const db = getFirestore(); // Firestore Database
+const loading = ref(false);
+const auth = getAuth();
+const db = getFirestore();
 
-// アプリ内ブラウザ判定フラグ
+// アプリ内ブラウザ関連のフラグ
 const isInAppBrowser = ref(false);
+const showBrowserGuidance = ref(false); // ★ガイダンス画面を出すフラグ
 
 onMounted(() => {
-  // ★修正: 判定ロジックを index.html と合わせて厳密化 (誤検知防止)
   const ua = navigator.userAgent.toLowerCase();
   if (
-    ua.indexOf("line/") > -1 || // LINE (line/バージョンの形式を検知)
-    ua.indexOf("instagram") > -1 || // Instagram
-    ua.indexOf("tiktok") > -1 || // TikTok
-    ua.indexOf("fbav") > -1 || // Facebook App
-    ua.indexOf("fban") > -1 // Facebook App (別パターン)
+    ua.indexOf("line/") > -1 ||
+    ua.indexOf("instagram") > -1 ||
+    ua.indexOf("tiktok") > -1 ||
+    ua.indexOf("fbav") > -1 ||
+    ua.indexOf("fban") > -1
   ) {
     isInAppBrowser.value = true;
   }
 });
 
+const handleLoginSuccess = async (result: any) => {
+  const user = result.user;
+  const tokenResponse = result._tokenResponse;
+  const refreshToken =
+    tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  const accessToken = credential?.accessToken;
+  const expiresIn = tokenResponse?.expiresIn || 3600;
+
+  const tokenData: any = { updatedAt: new Date() };
+
+  if (accessToken) {
+    tokenData.accessToken = accessToken;
+    localStorage.setItem("google_calendar_token", accessToken);
+    const expiryTime = new Date().getTime() + (Number(expiresIn) - 300) * 1000;
+    localStorage.setItem("google_calendar_token_expiry", expiryTime.toString());
+  }
+  if (refreshToken) {
+    tokenData.refreshToken = refreshToken;
+  }
+  if (refreshToken || accessToken) {
+    try {
+      await setDoc(doc(db, "users", user.uid, "system", "tokens"), tokenData, {
+        merge: true,
+      });
+    } catch (e) {
+      console.error("Token save error:", e);
+    }
+  }
+
+  await setDoc(
+    doc(db, "users", user.uid),
+    {
+      email: user.email,
+      displayName: user.displayName,
+      photoURL: user.photoURL,
+      lastLogin: new Date(),
+    },
+    { merge: true },
+  );
+
+  router.push("/app");
+};
+
 const handleGoogleLogin = async () => {
-  // アプリ内ブラウザならアラートを出して中断
+  // ★TikTokなどであれば、ログイン処理はせず「ブラウザで開く案内」を出す！
   if (isInAppBrowser.value) {
-    alert("右上のメニューから「ブラウザで開く」を選択してください🙇‍♂️");
+    showBrowserGuidance.value = true;
     return;
   }
 
+  // 普通のブラウザなら通常通りログイン処理
   loading.value = true;
   try {
     const provider = new GoogleAuthProvider();
     provider.addScope("https://www.googleapis.com/auth/calendar.events");
     provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
-
     provider.setCustomParameters({
       prompt: "select_account consent",
       access_type: "offline",
     });
 
     const result = await signInWithPopup(auth, provider);
-    const user = result.user;
-
-    const tokenResponse = (result as any)._tokenResponse;
-    const refreshToken =
-      tokenResponse?.oauthRefreshToken || tokenResponse?.refreshToken;
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const accessToken = credential?.accessToken;
-    const expiresIn = tokenResponse?.expiresIn || 3600;
-
-    const tokenData: any = { updatedAt: new Date() };
-
-    if (accessToken) {
-      tokenData.accessToken = accessToken;
-      localStorage.setItem("google_calendar_token", accessToken);
-      const expiryTime =
-        new Date().getTime() + (Number(expiresIn) - 300) * 1000;
-      localStorage.setItem(
-        "google_calendar_token_expiry",
-        expiryTime.toString(),
-      );
-    }
-
-    if (refreshToken) {
-      tokenData.refreshToken = refreshToken;
-    }
-
-    if (refreshToken || accessToken) {
-      try {
-        await setDoc(
-          doc(db, "users", user.uid, "system", "tokens"),
-          tokenData,
-          { merge: true },
-        );
-        console.log("Tokens saved successfully.");
-      } catch (saveError: any) {
-        console.error("Token save error:", saveError);
-      }
-    }
-
-    await setDoc(
-      doc(db, "users", user.uid),
-      {
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        lastLogin: new Date(),
-      },
-      { merge: true },
-    );
-
-    router.push("/app");
+    await handleLoginSuccess(result);
   } catch (e: any) {
     console.error(e);
     alert("Googleログインに失敗しました: " + e.message);
@@ -6512,7 +6501,7 @@ const handleGoogleLogin = async () => {
     ></div>
 
     <div
-      class="w-full max-w-sm bg-white/5 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/10 flex flex-col items-center relative z-10"
+      class="w-full max-w-sm bg-white/5 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/10 flex flex-col items-center relative z-10 overflow-hidden"
     >
       <div class="mb-10 text-center">
         <div class="text-6xl mb-4">🧠</div>
@@ -6525,23 +6514,40 @@ const handleGoogleLogin = async () => {
       </div>
 
       <div
-        v-if="isInAppBrowser"
-        class="w-full bg-amber-600 rounded-xl p-6 text-white text-center shadow-lg animate-pulse mb-6 border-2 border-white"
+        v-if="showBrowserGuidance"
+        class="absolute inset-0 bg-slate-900/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center z-50 animate-fade-in border border-indigo-500/50"
       >
-        <div class="text-4xl mb-2">⚠️</div>
-        <h2 class="font-bold text-lg mb-2">ブラウザで開いてください</h2>
-        <p class="text-sm leading-relaxed opacity-90 font-bold">
-          TikTokやインスタのままでは<br />
-          Googleログインができません💦
+        <div class="text-5xl mb-4 animate-bounce">↗️</div>
+        <h2 class="text-lg font-bold text-white mb-2">ブラウザで開いてね！</h2>
+        <p class="text-[11px] text-slate-300 mb-6 leading-relaxed">
+          TikTok等のアプリ内では、<br />Googleのセキュリティ設定により<br />ログインがブロックされてしまいます💦
         </p>
         <div
-          class="mt-4 p-3 bg-black/30 rounded-lg text-xs font-bold text-left"
+          class="bg-indigo-600 text-white rounded-xl p-4 text-xs font-bold w-full mb-6 shadow-lg shadow-indigo-600/30 text-left"
         >
-          ① 右上の「・・・」や「矢印」を押す<br />
+          ① 右上の
+          <span class="text-xl inline-block mx-1">⋯</span> などをタップ<br />
           ②「ブラウザで開く」を選択<br />
-          ③ SafariやChromeで開けばOK！
+          ③ いつものブラウザでログイン！
         </div>
+        <button
+          @click="showBrowserGuidance = false"
+          class="text-xs text-slate-400 underline hover:text-white p-2"
+        >
+          戻る
+        </button>
       </div>
+
+      <div
+        v-else-if="loading"
+        class="w-full flex flex-col items-center justify-center py-6"
+      >
+        <div
+          class="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"
+        ></div>
+        <p class="text-slate-400 text-xs font-bold">Googleと通信中...</p>
+      </div>
+
       <div v-else class="w-full space-y-6">
         <p class="text-slate-300 text-sm text-center leading-relaxed mb-4">
           LINEで全てを完結させるために、<br />
@@ -6599,6 +6605,22 @@ const handleGoogleLogin = async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+</style>
 </file>
 
 <file path="src/composables/useMyBrain.ts">
@@ -6655,18 +6677,31 @@ const activeTag = ref<string | null>(null);
 
 const isCalendarConnected = ref(false);
 
+const safeGetItem = (key: string) => {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    return null;
+  }
+};
+
+// 安全に読み込む
 const lastReferencedMemoryId = ref<string | null>(
-  localStorage.getItem("last_memory_id"),
+  safeGetItem("last_memory_id"),
 );
 
 const setLastMemoryId = (id: string | null) => {
-  if (id) {
-    const clean = id.replace(/<<<|>>>|ID:/gi, "").trim();
-    lastReferencedMemoryId.value = clean;
-    localStorage.setItem("last_memory_id", clean);
-  } else {
-    lastReferencedMemoryId.value = null;
-    localStorage.removeItem("last_memory_id");
+  try {
+    if (id) {
+      const clean = id.replace(/<<<|>>>|ID:/gi, "").trim();
+      lastReferencedMemoryId.value = clean;
+      localStorage.setItem("last_memory_id", clean);
+    } else {
+      lastReferencedMemoryId.value = null;
+      localStorage.removeItem("last_memory_id");
+    }
+  } catch (e) {
+    // エラーが起きても無視してクラッシュを防ぐ
   }
 };
 
@@ -12218,68 +12253,68 @@ export const adminDashboard = onRequest(async (req, res) => {
 </file>
 
 <file path=".firebase/hosting.ZGlzdA.cache">
-manifest.webmanifest,1771817636432,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
-registerSW.js,1771817636432,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
-sw.js,1771817637137,bcc0b996e7f9a041b9185766f75e0190023ba789090165ce29263a309d8b3a1e
-workbox-8c29f6e4.js,1771817637138,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
-lp.html,1771817635997,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
-index.html,1771817636432,5a57d128ef98d76950dc867a3ea2eb0b8f8848c829d3a998c6de45e6773884b4
-firebase-messaging-sw.js,1771817635992,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
-assets/stateDiagram-v2-4FDKWEC3-qhFsPum4.js,1771817636431,af3c2f031eed2cad41f8a808d47841bcc48fed23c678b56b2dbde39c05401f9e
-assets/stateDiagram-FKZM4ZOC-tnwQqSxY.js,1771817636431,0f487c884c045e494f66232f49b81bd82013737ae70c98a4adc9dccceb62d463
-assets/xychartDiagram-PRI3JC2R-CltVMRL0.js,1771817636431,70ecdd230d23cf3f8ccd5edbd54bbfd267c0e941c4898650c0c271bc3b63e06c
-assets/timeline-definition-IT6M3QCI-DWUcqCRH.js,1771817636431,d37fbc2f6489c185c56db0c27339a01c7cea778676f71d079deda07398def068
-assets/sankeyDiagram-TZEHDZUN-kTTlCjkY.js,1771817636432,dc98c22bf33dde2673abff4e9b0fb4ef243865bfc262e6d04b8f8f6d2e48c638
-assets/ordinal-Cboi1Yqb.js,1771817636431,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
-assets/pieDiagram-ADFJNKIX-y1Cj3YIp.js,1771817636432,8c3bbc27b582ccf3955c61e5ae8d78f28c31ff32bf4acb2789caf37159fd76af
-assets/requirementDiagram-UZGBJVZJ-CVOl1-o_.js,1771817636431,8359f926babaae4a6a86294e1d1419ded1c9324a3bb087f1a47247fddcd50ae5
-assets/linear-BujD6ad1.js,1771817636432,e1cc0a99ec636f7f6bde63cacb5610f7555386057f22c1528c0ebb4fc121f089
-assets/mindmap-definition-VGOIOE7T-C4Op4xgs.js,1771817636432,3e381a3dd256150da09039b5d98fb43791cacdc597260d6d04538882f0004e31
-assets/min-BPJmB_O9.js,1771817636432,18a3bc9297f9b728cc266a37d31a2cc7a31af4d4bcf5a599c0fb2c33484d523c
-assets/quadrantDiagram-AYHSOK5B-TRLCVF27.js,1771817636431,0e22f815d5db2353247424874f32ab1a196207e92c2ec7fd82c1751ac1cccdee
-assets/infoDiagram-WHAUD3N6-Cz6MUbn1.js,1771817636431,4b4707346de0614e189060270244f4ebb20de602277119b3ac958440fc63a8eb
-assets/kanban-definition-3W4ZIXB7-CD3xG9BN.js,1771817636431,f97f34511730ee480af23492ec05d71acf47adfa56e107be0d670fdf956c2637
-assets/init-Gi6I4Gst.js,1771817636431,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
-assets/journeyDiagram-XKPGCS4Q-So0rgJ11.js,1771817636431,578a9799917cc07581af3a07238163b0942c1015b8c034d04cbdebfd484f232a
-assets/layout-CIjoOLMp.js,1771817636432,e776d60d853940c214aa3fb454d9ab86863e8a92d1ebe945eda3ac07499c3136
-assets/graph-BQHLGJ_k.js,1771817636432,7ed4c75d6d7d3b6e40180f0af126cdf8b8e34a38bd4d8cf2e18958aad516ff4c
-assets/gitGraphDiagram-NY62KEGX-CvbIjz8q.js,1771817636430,0ffa1f20afa43479f2f1acf06b0cff861439337769f167a4c1459d3cc6157baa
-assets/index-CGMRkDea.css,1771817636430,bd04a1ea96c7011ea4a316e4b8a684338f901ec020a73e243338817b7f9384db
-assets/diagram-S2PKOQOG-9s1KkOom.js,1771817636431,bf2be84bcf6f26df4263721c13769947805efa3dc0a4b50d1ac751fbff4a904c
-assets/erDiagram-Q2GNP2WA-LwhMzSdY.js,1771817636431,8e7199ca7b0cea4fa933d105140ba743b3b399e53f0ded6bcfdbe4638ab9c20b
-assets/diagram-QEK2KX5R-CTvgUX09.js,1771817636431,b8c0815917605c34a823853ea3d03ba162805ea47d840e9d32fd14f110547792
-assets/diagram-PSM6KHXK-BWj2LcW2.js,1771817636432,516e606a0c86ed20c3077fa8ca064cbb5c3a3b73031773047a02e53066b82054
-assets/defaultLocale-DX6XiGOO.js,1771817636432,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
-assets/dagre-6UL2VRFP-DJcf5UHa.js,1771817636431,1f60a93c5ac29aa5c3ebeb0873e6294bb555b8e56ac123fca5fd13decd96b5e0
-assets/clone-DvJrUhcS.js,1771817636431,b38977bb61cfc2ff725ce6e2cbe5d2b87d7a985d116e8444f77a0786aa77a803
-assets/classDiagram-v2-WZHVMYZB-OdqzHClU.js,1771817636431,3b61de73ba94eabf93eaa9ec285bac2ca6e1c3a9b35bda0d44c47ff40b831f7f
-assets/classDiagram-2ON5EDUG-OdqzHClU.js,1771817636431,3b61de73ba94eabf93eaa9ec285bac2ca6e1c3a9b35bda0d44c47ff40b831f7f
-assets/chunk-QZHKN3VN-DRdK-21W.js,1771817636431,b8e47ec659782589808a06686dc4e060fec4a5ac9ce560b73cbca53fd3a7cbae
-assets/chunk-TZMSLE5B-CliaK6EQ.js,1771817636431,3bcc0f11183ba4a7ede3a20eaf9e4b3d97215cc777f22082ffff075ff4c60b46
-assets/flowDiagram-NV44I4VS-BkOuawgq.js,1771817636431,faaf7ed1446a0d8cffef202c1d3c5eee36b472f30bd8c4fa414a47569b8ee910
-assets/sequenceDiagram-WL72ISMW-D4Nh1Cye.js,1771817636431,e026dd60b4395c301dd5d727b1e79ec311dc4d83edf66030eb1b66dd1ec0ac9f
-assets/ganttDiagram-JELNMOA3-BUCIDdCT.js,1771817636432,605dd77a7dfa40adb139b5d32ec8d23f0a2beda080e2ed6b75ce1619e8f76536
-assets/cose-bilkent-S5V4N54A-Bvu3BbfM.js,1771817636432,626aab0102b0070fa5b345fcb610429d5e0b8651897015410014981ed38dbade
-assets/chunk-QN33PNHL-CPr5AXHs.js,1771817636431,7d07be599a1aa02a2dbf1b1826c7a69b690a53911bf80c62dc859024c41a77d3
-assets/chunk-FMBD7UC4-D0vLVOo8.js,1771817636431,b5fc3be88d529d3702a77aeabe96bdcb53338bf97ab3ae9c49d55d4f409855fb
-assets/chunk-DI55MBZ5-wOPdS8H2.js,1771817636431,aa2c2a4aefc1c0b6987f449b4357952b234a40c04b9791aac2c9b2f38a678d1f
-assets/chunk-55IACEB6-DqADMN8l.js,1771817636431,815f5d75e262ac63b08a48c6b8ce94dffa0e7082b3ef885d8d1f88224c11c745
-assets/chunk-4BX2VUAB-CPIcvCgw.js,1771817636431,ed6da301703c2cbdf8e9bb88cfb11c5585e35e638a6ac7559046d4e7cb707c30
-assets/channel-CA5MLe1E.js,1771817636431,59287d4c6e1123ae7ad2a3471ed7fa09f3438a135c817aa0b1865793b46078c8
-assets/chunk-B4BG7PRW-BPI0kALy.js,1771817636431,51377ea9c0fe6aa982c4eb106209ef982089c80f7b4de95946cc9464c2d92be9
-assets/arc-B0fkuDyt.js,1771817636431,28d3534b86a23e96ff5f5acee6b0644e60aa1dbc5aa35f0510e2691ca5471284
-assets/_baseUniq-CVIueqxh.js,1771817636432,92f90b2e81c258f7a98bdee9de494d880c858a1be2b36e59323a63bf5b1e8d18
-assets/c4Diagram-YG6GDRKO-CszmxBoj.js,1771817636430,fa9348204d375e68bd6eef1da174da9ab02d6ba0d007b27abd252b02f3b15319
-assets/blockDiagram-VD42YOAC-DtbqjZ0e.js,1771817636431,7636b292ec719fe840a8aedf842447252df7b70df25810ccf2fcf4cf660b4491
-assets/architectureDiagram-VXUJARFQ-B1GdlcNe.js,1771817636432,a738cb363e478e11b4f255c21ce60caec1fcce593c29d8b369d8949ab998d211
-assets/katex-Cu_Erd72.js,1771817636432,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
-assets/treemap-KMMF4GRG-BY9J8Rwz.js,1771817636432,81fe92735bab5e222231a97a3b27b7a756a6771dc6fb45eb1d8167af51d71db5
-assets/cytoscape.esm-CyJtwmzi.js,1771817636431,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
-assets/index-CFrEKYyL.js,1771817636433,92e48aee6d70b0059f1fd3d490c0dd738926f20edcb8c9093705d4e67b4fea1f
-apple-touch-icon.png,1771817635992,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-512x512.png,1771817636021,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-pwa-192x192.png,1771817636014,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
-logo.png,1771817635995,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+sw.js,1772367089628,1ecb5b4b0f17acc2cc95850272d77371941c8daae0b61f16e08387c0529b6926
+registerSW.js,1772367088871,5b6445b5215737c53ef0d379c151d57de165a056de2d1c5812ed614f158ebcbd
+manifest.webmanifest,1772367088871,803d0b0d188953c69ba4abf2f2e72f464dffc8fbc049fbc4f8ac788bc39f2856
+workbox-8c29f6e4.js,1772367089629,c1360d97831a7585ba8f5c2631c0b3b78258637b50e1329c8f7fc0837604e59a
+firebase-messaging-sw.js,1772367088383,0a7162b5368dfa24ac900da66358809046c5db09596f8190ec0e2e3787366380
+index.html,1772367088871,1b3b0ad2448949bea19ece99f672d7de119bf2f5dbba098d9540a489c17722f0
+assets/stateDiagram-v2-4FDKWEC3-CEoMeCGo.js,1772367088869,83de01f02b5d77f6ce52db3aa79e5a83d3ddd8835239b0190849d25e08d0d2e9
+assets/stateDiagram-FKZM4ZOC-DCteXlGp.js,1772367088869,193f0ccdb207eff535c9f1b3a7790637720437ccf37366942637bb6651608b26
+assets/xychartDiagram-PRI3JC2R-CZvdwyOI.js,1772367088870,a91f2c7ee1a50de057c39a8463d092034e8aecda5effdabbb7305cc4a10a3a1c
+assets/timeline-definition-IT6M3QCI-CnZtwIAo.js,1772367088869,60a40eb2d098586fd52f4c14d1e6e503ba52ec87c8ea00b79e6cd885da541aed
+lp.html,1772367088386,8c8fe530d7fd846fcb2e9671b61f35613204aa4c60b5df9b7295a0997365d50e
+assets/ordinal-Cboi1Yqb.js,1772367088870,7d1819f376a85208eb51522f90bb818d295ce4e9a259a7b44f083d0d2a9efa01
+assets/min-DfefhRd2.js,1772367088870,d8cb3d1d6f3623ad26a908e5da66e901d07664fa1be2660deaec44b99c8679b0
+assets/requirementDiagram-UZGBJVZJ--4TGd08-.js,1772367088869,e90ddfa40a1a7837d32a7a8a0bb2ef1b241d8b32053af1820198624d0ed16dce
+assets/sankeyDiagram-TZEHDZUN-BPW5dV9Q.js,1772367088870,9a344464687c4752b6e4ae5003fde7382af9ef1dbf163fe98cd2a6b7ac9a8687
+assets/pieDiagram-ADFJNKIX-BqE1MEX8.js,1772367088870,d7d4896b1fc15492972bdfdd7f5520e19fa82a36371e147e7054b8f827a6b354
+assets/linear-DqPf6XNp.js,1772367088870,1cc4d8e6f0946df7af706a24ac6dc499a5b9998811914aa05ecc8eca818e21f7
+assets/mindmap-definition-VGOIOE7T-C0dlV-mZ.js,1772367088870,dce5c95db231cea6eae0c30f87e86fe172a4a265cbe0873a0233cc985bb2aeb0
+assets/quadrantDiagram-AYHSOK5B-Bwdehf3l.js,1772367088869,931da4e0928a69a8551716b1bfda5ee830dbd1e2ada55f8f01a2c19187aa7bca
+assets/init-Gi6I4Gst.js,1772367088870,40e0c35144855b3110ee5daa0d503a5a49e9798749a2b342238349dd96092888
+assets/kanban-definition-3W4ZIXB7-BOh02pUH.js,1772367088870,0dc507aaa22e56a4bf3231c55e56a279cffe8667d1627c16511c13f11202d140
+assets/infoDiagram-WHAUD3N6-D1rqwfVH.js,1772367088869,18670375506f89d5b24fcdee76f77accb48f20d64b10a5cfc551c9764ef99851
+assets/layout-lsBA3VX4.js,1772367088870,1deeb7b676205abbcdbedfc37651ed6dc6c0b328de3889d21680a0deeff5f8b0
+assets/journeyDiagram-XKPGCS4Q-B27k7jGr.js,1772367088869,1f863bd179e7238e257bbb32d35c307406d6c13a3d87abe2e675fc9758ab6141
+assets/graph-Dnqw1v8a.js,1772367088870,097bd3c9534b01523542c79d7858ed98b60a9694c005b0b0a1e7ac7b01adfa84
+assets/diagram-QEK2KX5R-BsFiv9pT.js,1772367088870,5273f9233767809f7e68e6c72a8b0afd5657358128cd25fe6bf58c9d5979f6fa
+assets/index-CX9Jd8EE.css,1772367088869,e30abd37a482724c4d742703e88f722345f6b433c0b93e9a857763bb1a86e0d9
+assets/gitGraphDiagram-NY62KEGX-DFwsFEy4.js,1772367088869,1db3879a27728a7180d96d8bb86c6ead4b6d0e8b65c9b999657336701d2f5337
+assets/diagram-S2PKOQOG-B-WxZBRf.js,1772367088870,d217a5f46fcc634c2e4710192dc9d7c04376156a66ac8b57fa80eefb0fc60a6d
+assets/defaultLocale-DX6XiGOO.js,1772367088870,0fcaec47994fdbb5d8219d6350698ab22779b9e227b3798a50daeb2625910346
+assets/diagram-PSM6KHXK-cTBtjcj8.js,1772367088870,edd3092ce1450e9acff9529310a680a17fda1e30ae786e13265a2c5b746e95bb
+assets/erDiagram-Q2GNP2WA-8QWaQ_Gz.js,1772367088870,3b463dc5e6dc993b8f5602a43aeca563aa741a66186a083391a8a74cd6e587d2
+assets/clone-DtlM56RL.js,1772367088870,1c02ee9a565dc7c2c399f11ef544b3fff3fd26fefc3e1de96f0e51c099fcf7de
+assets/classDiagram-2ON5EDUG-Btipc3EG.js,1772367088869,ab1a84e24c65b5b979f5b06cfd7a3b2ea2bd1149c64bd0a505ec1a5e79080c2a
+assets/classDiagram-v2-WZHVMYZB-Btipc3EG.js,1772367088869,ab1a84e24c65b5b979f5b06cfd7a3b2ea2bd1149c64bd0a505ec1a5e79080c2a
+assets/chunk-QZHKN3VN-C9-HJBhU.js,1772367088869,3cade803e83754061476ce8c04f10112acd9ec5ad7b6cf11544aecb691b952ee
+assets/dagre-6UL2VRFP-OxLr5T6d.js,1772367088870,f9b39df61325f83c8a4ad9033fb03e9223c95a96aa6e1c9531a54432ad77fab8
+assets/chunk-TZMSLE5B-BkdLKHf-.js,1772367088870,ac5e8a7ce00405034106b16b7e09a8ee33b131d18d18d4cbeaf789d2d6c7e345
+assets/flowDiagram-NV44I4VS-DG-30bOb.js,1772367088869,55ca88622ab3a75fb6429b0be52f957981a8723ee57ae223d066a94a8f51832f
+assets/ganttDiagram-JELNMOA3-KqLeYPsC.js,1772367088870,e4bdbe4869c74555bdb5ba04f28fe2cf0671fabf0e2b5b73bc032581c0e66b38
+assets/sequenceDiagram-WL72ISMW-gbOQZzNJ.js,1772367088869,6b160fafaa2769e19dba8a41928de7efffe49fb15e72338ca352d197d39a7cb7
+assets/cose-bilkent-S5V4N54A-CqlYWbFY.js,1772367088870,251943ea59c96c4542d9b8c9ccd21ce7f313114eb9cd65dd34d1005c31835b2d
+assets/chunk-FMBD7UC4-DpRCwcd4.js,1772367088870,0f65c3eb76bdd793c1ec451ea9c1f8f69010636fe6ad49ceca0e21b451164730
+assets/chunk-QN33PNHL-9OUe1yVW.js,1772367088870,9fa0a1cb41725a6464a64763b8e35fdc9327aa4830a2ce6aa128e443370a7cd3
+assets/chunk-B4BG7PRW-DJIRW23y.js,1772367088869,c3c0d68f647618e45d7b1697a7b5e107a5da8bc8241d5ac0496403566ce88d67
+assets/chunk-55IACEB6-DjfYzCNC.js,1772367088870,cdedbbe46d6e35f37b080d180f241bc9cbd2043857beb5e2621015618ffe0b9c
+assets/chunk-4BX2VUAB-ByzX9HOS.js,1772367088870,2a9a37727fb7f2b47a4bf576538db1311b09364b06ad6211048922d4a23e3b35
+assets/channel-Dt_RyMy6.js,1772367088870,184032c9ba31e684a840fda3297ac9e47953d170e435f0a17a5016071bc1c3ca
+assets/chunk-DI55MBZ5-D-YQ2shu.js,1772367088870,c22eb13c3534edf96272ed11513d1afb99ca98f225b79e727ea8742f7f546a0e
+assets/arc-BHr0xQni.js,1772367088870,cb7e00ad3ec92d718092ee41c5aedf95d6061a26849cc33a6de8b748e9a9e4c6
+assets/_baseUniq-DabVTrSD.js,1772367088870,92cb378eb01b4f2aa29ee79fae5925131a43b5efb0b31fe06ced1459a8e889e3
+assets/c4Diagram-YG6GDRKO-C_Edo0hM.js,1772367088869,3708c00e2ec851c464d98fad26f0dd8fdf65b1862c599e36fe2fc6d06d2dd806
+assets/blockDiagram-VD42YOAC-NPLpZLjS.js,1772367088870,b0ca412c30eb10e9fc32f7f099d911ef6b32311906e6fb4f3ddca1c2172d37ca
+assets/architectureDiagram-VXUJARFQ-DDba6Ts6.js,1772367088870,da3bfa24be8a0b96e1cefba65529f6f55e455cfad270444a67e25cddec315255
+assets/katex-Cu_Erd72.js,1772367088870,7dccf26469b14c0520a0d1b3f0bbf6f52d74eebb5beb87c0686082008b232aaa
+assets/treemap-KMMF4GRG-CHG2e9Fl.js,1772367088871,f725c539f6f25f963aa3d995d323356539d7d428567f13278d97d3aedebc99c8
+assets/cytoscape.esm-CyJtwmzi.js,1772367088870,a293c0ea22685922c2d1470de40edabcb76d3ee41ce8c51275bdd6b129a90624
+assets/index-BuP4KgoT.js,1772367088871,21f5d53fe20150b7cf919b49c1a6ff755b68a423d805cb7e548ab3da261fd817
+pwa-192x192.png,1772367088393,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+pwa-512x512.png,1772367088411,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+apple-touch-icon.png,1772367088382,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
+logo.png,1772367088385,a8c876689660e2094cda6114db1435093a26ed7fad2e2c3032be4d9de099bfbf
 </file>
 
 </files>
